@@ -8,7 +8,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming,
+  withTiming
 } from "react-native-reanimated";
 
 type Intent = "UNDECIDED" | "SCROLL" | "SWIPE_NEXT" | "SWIPE_PREV";
@@ -132,9 +132,9 @@ export default function SwipeLabScreen() {
   const posToCard = (p: Pos | null) => (p ? decks[p.d]?.cards[p.c] ?? null : null);
 
   // ---- Stop at the last card of the CURRENT deck (no wrapping to next deck) ----
-  const hasPrev = pos.c > 0;              // optional: only within deck
+  const hasPrev = pos.c > 0;
   const hasNext = pos.c < CARDS_PER_DECK - 1;
-
+ 
   const getPrevPos = (): Pos | null => {
     if (!hasPrev) return null;
     if (pos.c > 0) return { d: pos.d, c: pos.c - 1 };
@@ -146,18 +146,38 @@ export default function SwipeLabScreen() {
     return null;
   };
 
+
+  // Next positions for background stack (next1 is closest behind current)
+  const getNextPosOffset = (k: number): Pos | null => {
+    const c = pos.c + k;
+    if (c < 0 || c > CARDS_PER_DECK - 1) return null;
+    return { d: pos.d, c };
+  };
+  const next1 = posToCard(getNextPosOffset(1));
+  const next2 = posToCard(getNextPosOffset(2));
+  const next3 = posToCard(getNextPosOffset(3));
+
   const current = currentCards[pos.c] ?? currentCards[0];
-  const prev = hasPrev ? posToCard(getPrevPos()) : null;
   const next = hasNext ? posToCard(getNextPos()) : null;
 
   // If we're on the last card, show no back stack at all (true "end card")
   const isLastCard = pos.c === CARDS_PER_DECK - 1;
 
-  // Running-out visual (when remaining hits 3/2/1, reduce stack)
-  const remainingInDeck = Math.max(0, CARDS_PER_DECK - pos.c);
-  const backCount = remainingInDeck >= 4 ? 3 : Math.max(0, remainingInDeck - 1); // 3->2, 2->1, 1->0
-  const runoutK = remainingInDeck >= 4 ? 1 : 0.25 + 0.25 * remainingInDeck; // 3->1.0, 2->0.75, 1->0.5
-  const stackNow = STACK.map((s) => ({ ...s, borderA: s.borderA * runoutK }));
+  /**
+   * Runout v2 (what you asked):
+   * - Decrement happens from the *remaining cards behind* the current one.
+   * - The TOP card border/alpha must NOT decrease at 8/9/10.
+   * - Only background layers reduce (and optionally fade a bit).
+   */
+  const remainingBehind = Math.max(0, (CARDS_PER_DECK - 1) - pos.c); // 3,2,1,0 when current is 7,8,9,10
+  const backCount = Math.min(3, remainingBehind); // render 3/2/1/0 back layers
+  const runoutFade =
+    remainingBehind >= 3 ? 1 : remainingBehind === 2 ? 0.85 : remainingBehind === 1 ? 0.65 : 0; // only for back layers
+  const stackNow = STACK.map((s, i) => ({
+    ...s,
+    // keep TOP layer stable; only fade the background layers
+    borderA: i === 3 ? STACK[3].borderA : s.borderA * runoutFade,
+  }));
 
   // Force no background layers on the very last card
   const backCountFinal = isLastCard ? 0 : backCount;
@@ -167,6 +187,11 @@ export default function SwipeLabScreen() {
   const ty = useSharedValue(0);
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
+
+  // Stack "conveyor" polish: back cards move forward on NEXT and backward on PREV.
+  // t in [0..1], dir in {-1, +1}
+  const stackShiftT = useSharedValue(0);
+  const stackShiftDir = useSharedValue<1 | -1>(1);
 
   // PREV "incoming ghost" (mirror of NEXT ghost-out):
   // It moves from top-left -> center, and ONLY after it lands we swap index.
@@ -230,6 +255,11 @@ export default function SwipeLabScreen() {
   const STAGE_W = CARD_SIZE + (maxDx - minDx);
   const STAGE_H = CARD_SIZE + (maxDy - minDy);
 
+  const snapStackShiftToZero = () => {
+    "worklet";
+    stackShiftT.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) });
+  };
+
   const resetTopVisuals = () => {
     "worklet";
     scale.value = withSpring(1, { damping: 18, stiffness: 240 });
@@ -241,6 +271,7 @@ export default function SwipeLabScreen() {
     tx.value = withSpring(0, { damping: 18, stiffness: 240 });
     ty.value = withSpring(0, { damping: 18, stiffness: 240 });
     resetTopVisuals();
+    snapStackShiftToZero();
     intent.value = "UNDECIDED";
   };
 
@@ -250,6 +281,7 @@ export default function SwipeLabScreen() {
 
     ghostPrevOpacity.value = 1;
     ghostPrevScale.value = 1;
+    snapStackShiftToZero();
 
     ghostPrevX.value = withTiming(PREV_START_X, { duration: 140, easing: Easing.out(Easing.cubic) });
     ghostPrevY.value = withTiming(PREV_START_Y, { duration: 140, easing: Easing.out(Easing.cubic) }, (fin) => {
@@ -272,6 +304,7 @@ export default function SwipeLabScreen() {
     ghostPrevX.value = PREV_START_X;
     ghostPrevY.value = PREV_START_Y;
     runOnJS(clearGhostPrevJS)();
+    snapStackShiftToZero();
 
     ghostX.value = tx.value;
     ghostY.value = ty.value;
@@ -299,6 +332,7 @@ export default function SwipeLabScreen() {
     // THEN swap index so content changes exactly when it lands.
     ghostPrevOpacity.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
     ghostPrevScale.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
+    snapStackShiftToZero();
     ghostPrevX.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
     ghostPrevY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, (fin) => {
       if (fin) {
@@ -356,8 +390,8 @@ export default function SwipeLabScreen() {
       // 2) Horizontal-ish => swipe
       if (angle < ANGLE_SWIPE_DEG) {
         const wantPrev = dx > 0;
-        const hasPrevNow = deckSV.value > 0 || cardSV.value > 0;
-        const hasNextNow = deckSV.value < DECK_COUNT - 1 || cardSV.value < CARDS_PER_DECK - 1;
+        const hasPrevNow = cardSV.value > 0;
+        const hasNextNow = cardSV.value < CARDS_PER_DECK - 1;
 
         if (wantPrev && !hasPrevNow) {
           intent.value = "SCROLL";
@@ -378,8 +412,8 @@ export default function SwipeLabScreen() {
       // 3) Mid-angle band: "\" = swipe, "/" = scroll
       if (angle <= ANGLE_SCROLL_DEG) {
         const wantPrev = dx > 0;
-        const hasPrevNow = deckSV.value > 0 || cardSV.value > 0;
-        const hasNextNow = deckSV.value < DECK_COUNT - 1 || cardSV.value < CARDS_PER_DECK - 1;
+        const hasPrevNow = cardSV.value > 0;
+        const hasNextNow = cardSV.value < CARDS_PER_DECK - 1;
 
         if (isBackslashDiagonal(dx, dy)) {
           if (wantPrev && !hasPrevNow) {
@@ -426,8 +460,13 @@ export default function SwipeLabScreen() {
         // NEXT only to top-left
         if (!(cardSV.value < CARDS_PER_DECK - 1)) return;
 
+        // stack conveyor (NEXT): background cards advance forward
+        stackShiftDir.value = 1;
+
         const x = Math.min(dx, 0);
         tx.value = x;
+
+        stackShiftT.value = clamp(Math.abs(x) / NEXT_DISMISS_X, 0, 1);
 
         const railY = -Math.abs(x) * RAIL_K;
         const dyUpOnly = Math.min(dy, 0);
@@ -441,6 +480,9 @@ export default function SwipeLabScreen() {
 
       if (intent.value === "SWIPE_PREV") {
         if (!(cardSV.value > 0)) return;
+
+        // stack conveyor (PREV): background cards shift backward
+        stackShiftDir.value = -1;
 
         // pin current
         tx.value = 0;
@@ -456,7 +498,7 @@ export default function SwipeLabScreen() {
           ghostPrevOpacity.value = 1;
           ghostPrevScale.value = 1;
           // incoming is the logical prev position
-          const d = Math.floor(deckSV.value);
+          const d = pos.d; // fixed deck for this screen
           const c = Math.floor(cardSV.value);
           const p: Pos = { d, c: Math.max(0, c - 1) };
           runOnJS(setGhostPrevPos)(p);
@@ -464,6 +506,10 @@ export default function SwipeLabScreen() {
 
         const pull = clamp(dx, 0, PREV_PULL_X);
         const t = pull / PREV_PULL_X;
+
+        stackShiftT.value = clamp(t, 0, 1);
+       
+        
 
         // Follow diagonal from top-left into deck (to center at 0,0)
         ghostPrevX.value = PREV_START_X + (0 - PREV_START_X) * t;
@@ -535,13 +581,8 @@ export default function SwipeLabScreen() {
     };
   });
 
-  const prevCardStyle = useAnimatedStyle(() => {
-    return {
-      zIndex: mid.z,
-      // Prev card stays in-stack (no animated offsets). Incoming motion is handled by ghostPrev.
-      transform: [{ translateX: mid.dx }, { translateY: mid.dy }],
-    };
-  });
+  // NOTE: We no longer render "prev" as a background layer.
+  // Prev only appears as ghostPrev during SWIPE_PREV.
 
   const ghostPrevCardStyle = useAnimatedStyle(() => {
     return {
@@ -621,6 +662,47 @@ export default function SwipeLabScreen() {
   const ghostPrev = posToCard(ghostPrevPos);
   const ghost = posToCard(ghostPos);
 
+  // ----- Animated back-layer transforms (stack conveyor polish) -----
+  const back0Style = useAnimatedStyle(() => {
+    const t = stackShiftT.value;
+    const dir = stackShiftDir.value;
+    const a = STACK[0];
+    const b = dir > 0 ? STACK[1] : STACK[0];
+    return {
+      zIndex: a.z,
+      transform: [
+        { translateX: a.dx + (b.dx - a.dx) * t },
+        { translateY: a.dy + (b.dy - a.dy) * t },
+      ],
+    };
+  });
+  const back1Style = useAnimatedStyle(() => {
+    const t = stackShiftT.value;
+    const dir = stackShiftDir.value;
+    const a = STACK[1];
+    const b = dir > 0 ? STACK[2] : STACK[0];
+    return {
+      zIndex: a.z,
+      transform: [
+        { translateX: a.dx + (b.dx - a.dx) * t },
+        { translateY: a.dy + (b.dy - a.dy) * t },
+      ],
+    };
+  });
+  const back2Style = useAnimatedStyle(() => {
+    const t = stackShiftT.value;
+    const dir = stackShiftDir.value;
+    const a = STACK[2];
+    const b = dir > 0 ? STACK[3] : STACK[1];
+    return {
+      zIndex: a.z,
+      transform: [
+        { translateX: a.dx + (b.dx - a.dx) * t },
+        { translateY: a.dy + (b.dy - a.dy) * t },
+      ],
+    };
+  });
+
   return (
       <Animated.ScrollView
         style={{ flex: 1, backgroundColor: surface }}
@@ -641,16 +723,26 @@ export default function SwipeLabScreen() {
 
         <View style={{ width: STAGE_W, height: STAGE_H, position: "relative", marginTop: 10 }}>
           <View style={{ position: "absolute", left: ORIGIN_X, top: ORIGIN_Y, width: CARD_SIZE, height: CARD_SIZE }}>
-            {/* Running-out effect: reduce visible back layers at remaining=3/2/1 */}
-            {backCountFinal >= 1 ? <CardShell borderAlpha={stackNow[0].borderA} style={backStyle(STACK[0])} /> : null}
-            {backCountFinal >= 2 ? <CardShell borderAlpha={stackNow[1].borderA} style={backStyle(STACK[1])} /> : null}
+            {/* Background stack shows UPCOMING cards (next1/next2/next3).
+                This removes the "gap" (Card 10 sits directly behind Card 9). */}
+            {backCountFinal >= 3 ? (
+              next3 ? (
+                <CardShell borderAlpha={stackNow[0].borderA} style={back0Style} title={next3.title} body={next3.body} />
+              ) : null
+            ) : null}
 
-            {prev && backCountFinal >= 3 ? (
-              <CardShell borderAlpha={stackNow[2].borderA} style={prevCardStyle} title={prev.title} body={prev.body} />
-            ) : (
-              // If no prev (start of all decks), show third layer only when we still have enough remaining
-              backCountFinal >= 3 ? <CardShell borderAlpha={stackNow[2].borderA} style={backStyle(STACK[2])} /> : null
-            )}
+            {backCountFinal >= 2 ? (
+              next2 ? (
+                <CardShell borderAlpha={stackNow[1].borderA} style={back1Style} title={next2.title} body={next2.body} />
+              ) : null
+            ) : null}
+
+            {backCountFinal >= 1 ? (
+              next1 ? (
+                <CardShell borderAlpha={stackNow[2].borderA} style={back2Style} title={next1.title} body={next1.body} />
+              ) : null
+            ) : null}
+
 
             <CardShell
               borderAlpha={stackNow[3].borderA}
