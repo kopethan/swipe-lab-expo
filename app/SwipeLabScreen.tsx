@@ -15,6 +15,10 @@ type Intent = "UNDECIDED" | "SCROLL" | "SWIPE_NEXT" | "SWIPE_PREV";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
+// ---- Multi-deck model ----
+const DECK_COUNT = 3;
+const CARDS_PER_DECK = 10;
+
 // ---- Intent tuning ----
 const LOCK_DISTANCE = 10; // px before we lock intent
 const ANGLE_SWIPE_DEG = 40; // swipe is easier to win
@@ -32,6 +36,10 @@ const STACK = [
   { dx: 6, dy: 6, z: 3, borderA: 0.55 },
   { dx: 0, dy: 0, z: 4, borderA: 0.95 },
 ];
+
+type Card = { id: string; title: string; body: string };
+type Deck = { id: string; title: string; cards: Card[] };
+type Pos = { d: number; c: number };
 
 function rgbaTeal(alpha: number) {
   return `rgba(44,229,255,${alpha})`;
@@ -72,33 +80,80 @@ export default function SwipeLabScreen() {
 
   const DISMISS_MS = 160;
 
-  const cards = useMemo(
-    () => [
-      { id: "1", title: "Card 1", body: 'Diagonal rail NEXT → top-left only.' },
-      { id: "2", title: "Card 2", body: "Scroll rules still apply." },
-      { id: "3", title: "Card 3", body: "Prev comes from top-left diagonally." },
-      { id: "4", title: "Card 4", body: "No stuck top-left artifacts." },
-      { id: "5", title: "Card 5", body: 'Tier-2 arbitration: / scrolls, "\\\\ swipes.' },
-    ],
-    []
-  );
+  const decks: Deck[] = useMemo(() => {
+    const makeCard = (deckId: string, n: number): Card => {
+      const id = `${deckId}-${n + 1}`; // keep route compatible: /card/[id]
+      return {
+        id,
+        title: `Deck ${deckId.toUpperCase()} · Card ${n + 1}`,
+        body:
+          n === 0
+            ? 'Diagonal rail NEXT → top-left only. Tap to open.'
+            : n === 1
+            ? 'Tier-2 arbitration: "/" scrolls, "\\\\ swipes.'
+            : n === 2
+            ? "Prev comes from top-left diagonally."
+            : n === 8
+            ? "Deck is running low… (9/10)"
+            : n === 9
+            ? "Last card of this deck (10/10)."
+            : "Scroll rules still apply.",
+      };
+    };
+    return Array.from({ length: DECK_COUNT }).map((_, di) => {
+      const deckId = String.fromCharCode("a".charCodeAt(0) + di); // a, b, c...
+      return {
+        id: deckId,
+        title: `Deck ${deckId.toUpperCase()}`,
+        cards: Array.from({ length: CARDS_PER_DECK }).map((__, ci) => makeCard(deckId, ci)),
+      };
+    });
+  }, []);
 
-  const [index, setIndex] = useState(0);
-  const [ghostIndex, setGhostIndex] = useState<number | null>(null);
-  const [ghostPrevIndex, setGhostPrevIndex] = useState<number | null>(null);
+  // ---- Atomic position (prevents deck/card desync) ----
+  const [pos, setPos] = useState<Pos>({ d: 0, c: 0 });
+
+  const [ghostPos, setGhostPos] = useState<Pos | null>(null); // NEXT ghost-out (old current)
+  const [ghostPrevPos, setGhostPrevPos] = useState<Pos | null>(null); // PREV ghost-in (incoming)
 
   // worklet-visible index + current id for tap navigation
-  const indexSV = useSharedValue(index);
-  const currentIdSV = useSharedValue(cards[0]?.id ?? "");
+  const deckSV = useSharedValue(pos.d);
+  const cardSV = useSharedValue(pos.c);
+  const currentIdSV = useSharedValue(decks[0]?.cards[0]?.id ?? "");
   useEffect(() => {
-    indexSV.value = index;
-    currentIdSV.value = cards[index]?.id ?? "";
-  }, [index, indexSV, currentIdSV, cards]);
+    deckSV.value = pos.d;
+    cardSV.value = pos.c;
+    currentIdSV.value = decks[pos.d]?.cards[pos.c]?.id ?? "";
+  }, [pos, deckSV, cardSV, currentIdSV, decks]);
 
-  const hasPrev = index > 0;
-  const current = cards[index] ?? cards[0];
-  const prev = hasPrev ? cards[index - 1] : null;
-  const next = index + 1 < cards.length ? cards[index + 1] : null;
+  const currentDeck = decks[pos.d] ?? decks[0];
+  const currentCards = currentDeck?.cards ?? [];
+
+  const posToCard = (p: Pos | null) => (p ? decks[p.d]?.cards[p.c] ?? null : null);
+
+  const hasPrev = pos.d > 0 || pos.c > 0;
+  const hasNext = pos.d < DECK_COUNT - 1 || pos.c < CARDS_PER_DECK - 1;
+
+  const getPrevPos = (): Pos | null => {
+    if (!hasPrev) return null;
+    if (pos.c > 0) return { d: pos.d, c: pos.c - 1 };
+    return { d: pos.d - 1, c: CARDS_PER_DECK - 1 };
+  };
+  const getNextPos = (): Pos | null => {
+    if (!hasNext) return null;
+    if (pos.c < CARDS_PER_DECK - 1) return { d: pos.d, c: pos.c + 1 };
+    return { d: pos.d + 1, c: 0 };
+  };
+
+  const current = currentCards[pos.c] ?? currentCards[0];
+  const prev = hasPrev ? posToCard(getPrevPos()) : null;
+  const next = hasNext ? posToCard(getNextPos()) : null;
+
+  // Running-out visual (when remaining hits 3/2/1, reduce stack)
+  const remainingInDeck = Math.max(0, CARDS_PER_DECK - pos.c);
+  const backCount = remainingInDeck >= 4 ? 3 : Math.max(0, remainingInDeck - 1); // 3->2, 2->1, 1->0
+  const runoutK = remainingInDeck >= 4 ? 1 : 0.25 + 0.25 * remainingInDeck; // 3->1.0, 2->0.75, 1->0.5
+  const stackNow = STACK.map((s) => ({ ...s, borderA: s.borderA * runoutK }));
 
   // Top card motion while dragging (NEXT only)
   const tx = useSharedValue(0);
@@ -128,14 +183,29 @@ export default function SwipeLabScreen() {
   const startAbsX = useSharedValue(0);
   const startAbsY = useSharedValue(0);
 
-  const goPrev = () => setIndex((i) => Math.max(i - 1, 0));
+  // ---- Atomic next/prev (no stale closure / no desync) ----
+  const goPrevJS = () => {
+    setPos((p) => {
+      if (p.c > 0) return { d: p.d, c: p.c - 1 };
+      if (p.d > 0) return { d: p.d - 1, c: CARDS_PER_DECK - 1 };
+      return p;
+    });
+  };
+
+  const goNextJS = () => {
+    setPos((p) => {
+      if (p.c < CARDS_PER_DECK - 1) return { d: p.d, c: p.c + 1 };
+      if (p.d < DECK_COUNT - 1) return { d: p.d + 1, c: 0 };
+      return p;
+    });
+  };
 
   const navigateToCard = (id: string) => {
     if (!id) return;
     router.push(`/card/${id}`);
   };
   
-  const clearGhostPrevJS = () => setGhostPrevIndex(null);
+  const clearGhostPrevJS = () => setGhostPrevPos(null);
 
   // Tap should open details, not swipe/scroll
   const tapGesture = Gesture.Tap()
@@ -184,11 +254,11 @@ export default function SwipeLabScreen() {
   };
 
   // JS: accept NEXT immediately
-  const acceptNextJS = (i: number) => {
-    setGhostIndex(i);
-    setIndex((cur) => Math.min(cur + 1, cards.length - 1));
+  const acceptNextJS = (p: Pos) => {
+    setGhostPos(p);
+    goNextJS();
   };
-  const clearGhostJS = () => setGhostIndex(null);
+  const clearGhostJS = () => setGhostPos(null);
 
   const startGhostDismiss = () => {
     "worklet";
@@ -227,7 +297,7 @@ export default function SwipeLabScreen() {
     ghostPrevX.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
     ghostPrevY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, (fin) => {
       if (fin) {
-        runOnJS(goPrev)();
+        runOnJS(goPrevJS)();
         prevMode.value = false;
         runOnJS(clearGhostPrevJS)();
         intent.value = "UNDECIDED";
@@ -281,8 +351,8 @@ export default function SwipeLabScreen() {
       // 2) Horizontal-ish => swipe
       if (angle < ANGLE_SWIPE_DEG) {
         const wantPrev = dx > 0;
-        const hasPrevNow = indexSV.value > 0;
-        const hasNextNow = indexSV.value < cards.length - 1;
+        const hasPrevNow = deckSV.value > 0 || cardSV.value > 0;
+        const hasNextNow = deckSV.value < DECK_COUNT - 1 || cardSV.value < CARDS_PER_DECK - 1;
 
         if (wantPrev && !hasPrevNow) {
           intent.value = "SCROLL";
@@ -303,8 +373,8 @@ export default function SwipeLabScreen() {
       // 3) Mid-angle band: "\" = swipe, "/" = scroll
       if (angle <= ANGLE_SCROLL_DEG) {
         const wantPrev = dx > 0;
-        const hasPrevNow = indexSV.value > 0;
-        const hasNextNow = indexSV.value < cards.length - 1;
+        const hasPrevNow = deckSV.value > 0 || cardSV.value > 0;
+        const hasNextNow = deckSV.value < DECK_COUNT - 1 || cardSV.value < CARDS_PER_DECK - 1;
 
         if (isBackslashDiagonal(dx, dy)) {
           if (wantPrev && !hasPrevNow) {
@@ -349,7 +419,7 @@ export default function SwipeLabScreen() {
 
       if (intent.value === "SWIPE_NEXT") {
         // NEXT only to top-left
-        if (!(indexSV.value < cards.length - 1)) return;
+        if (!(deckSV.value < DECK_COUNT - 1 || cardSV.value < CARDS_PER_DECK - 1)) return;
 
         const x = Math.min(dx, 0);
         tx.value = x;
@@ -365,7 +435,7 @@ export default function SwipeLabScreen() {
       }
 
       if (intent.value === "SWIPE_PREV") {
-        if (!(indexSV.value > 0)) return;
+        if (!(deckSV.value > 0 || cardSV.value > 0)) return;
 
         // pin current
         tx.value = 0;
@@ -380,7 +450,13 @@ export default function SwipeLabScreen() {
           ghostPrevY.value = PREV_START_Y;
           ghostPrevOpacity.value = 1;
           ghostPrevScale.value = 1;
-          runOnJS(setGhostPrevIndex)(Math.max(0, indexSV.value - 1));
+          // incoming is the logical prev position
+          const d = Math.floor(deckSV.value);
+          const c = Math.floor(cardSV.value);
+          const p: Pos = c > 0
+            ? { d, c: c - 1 }
+            : { d: Math.max(0, d - 1), c: CARDS_PER_DECK - 1 };
+          runOnJS(setGhostPrevPos)(p);
         }
 
         const pull = clamp(dx, 0, PREV_PULL_X);
@@ -406,7 +482,7 @@ export default function SwipeLabScreen() {
       }
 
       if (intent.value === "SWIPE_NEXT") {
-        const canNext = indexSV.value < cards.length - 1;
+        const canNext = deckSV.value < DECK_COUNT - 1 || cardSV.value < CARDS_PER_DECK - 1;
         if (!canNext) {
           resetDragCard();
           return;
@@ -416,7 +492,9 @@ export default function SwipeLabScreen() {
         const fastLeft = vx < -900;
 
         if (leftEnough || fastLeft) {
-          runOnJS(acceptNextJS)(indexSV.value);
+          const d = Math.floor(deckSV.value);
+          const c = Math.floor(cardSV.value);
+          runOnJS(acceptNextJS)({ d, c });
           startGhostDismiss();
           intent.value = "UNDECIDED";
         } else {
@@ -426,7 +504,7 @@ export default function SwipeLabScreen() {
       }
 
       if (intent.value === "SWIPE_PREV") {
-        const canPrev = indexSV.value > 0;
+        const canPrev = deckSV.value > 0 || cardSV.value > 0;
         if (!canPrev) {
           resetPrevCard();
           return;
@@ -537,8 +615,8 @@ export default function SwipeLabScreen() {
     return gesture ? <GestureDetector gesture={gesture}>{node}</GestureDetector> : node;
   };
 
-  const ghostPrev = ghostPrevIndex !== null ? cards[ghostPrevIndex] : null;
-  const ghost = ghostIndex !== null ? cards[ghostIndex] : null;
+  const ghostPrev = posToCard(ghostPrevPos);
+  const ghost = posToCard(ghostPos);
 
   return (
       <Animated.ScrollView
@@ -546,7 +624,9 @@ export default function SwipeLabScreen() {
         contentContainerStyle={{ padding: 24, paddingBottom: 80, alignItems: "center" }}
         scrollEventThrottle={16}
       >
-        <Text style={{ color: text, fontSize: 20, fontWeight: "700" }}>Swipe Controls Lab</Text>
+        <Text style={{ color: text, fontSize: 20, fontWeight: "700" }}>
+          Swipe Controls Lab · {currentDeck?.title ?? "Deck"}
+        </Text>
         <Text style={{ color: muted, marginTop: 6, lineHeight: 20 }}>
           • Left-ish / horizontal / "\" diagonal → NEXT (top-left only){"\n"}
           • Pull right → PREV (diagonal from top-left){"\n"}
@@ -558,17 +638,19 @@ export default function SwipeLabScreen() {
 
         <View style={{ width: STAGE_W, height: STAGE_H, position: "relative", marginTop: 10 }}>
           <View style={{ position: "absolute", left: ORIGIN_X, top: ORIGIN_Y, width: CARD_SIZE, height: CARD_SIZE }}>
-            <CardShell borderAlpha={STACK[0].borderA} style={backStyle(STACK[0])} />
-            <CardShell borderAlpha={STACK[1].borderA} style={backStyle(STACK[1])} />
+            {/* Running-out effect: reduce visible back layers at remaining=3/2/1 */}
+            {backCount >= 1 ? <CardShell borderAlpha={stackNow[0].borderA} style={backStyle(STACK[0])} /> : null}
+            {backCount >= 2 ? <CardShell borderAlpha={stackNow[1].borderA} style={backStyle(STACK[1])} /> : null}
 
             {prev ? (
-              <CardShell borderAlpha={STACK[2].borderA} style={prevCardStyle} title={prev.title} body={prev.body} />
+              <CardShell borderAlpha={stackNow[2].borderA} style={prevCardStyle} title={prev.title} body={prev.body} />
             ) : (
-              <CardShell borderAlpha={STACK[2].borderA} style={backStyle(STACK[2])} />
+              // If no prev (start of all decks), show third layer only when we still have enough remaining
+              backCount >= 3 ? <CardShell borderAlpha={stackNow[2].borderA} style={backStyle(STACK[2])} /> : null
             )}
 
             <CardShell
-              borderAlpha={STACK[3].borderA}
+              borderAlpha={stackNow[3].borderA}
               style={currentCardStyle}
               gesture={cardGesture}
               title={current.title}
@@ -576,11 +658,11 @@ export default function SwipeLabScreen() {
             />
 
             {ghostPrev ? (
-              <CardShell borderAlpha={STACK[3].borderA} style={ghostPrevCardStyle} title={ghostPrev.title} body={ghostPrev.body} />
+              <CardShell borderAlpha={stackNow[3].borderA} style={ghostPrevCardStyle} title={ghostPrev.title} body={ghostPrev.body} />
             ) : null}
 
             {ghost ? (
-              <CardShell borderAlpha={STACK[3].borderA} style={ghostCardStyle} title={ghost.title} body={ghost.body} />
+              <CardShell borderAlpha={stackNow[3].borderA} style={ghostCardStyle} title={ghost.title} body={ghost.body} />
             ) : null}
           </View>
         </View>
