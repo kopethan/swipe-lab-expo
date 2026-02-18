@@ -85,6 +85,7 @@ export default function SwipeLabScreen() {
 
   const [index, setIndex] = useState(0);
   const [ghostIndex, setGhostIndex] = useState<number | null>(null);
+  const [ghostPrevIndex, setGhostPrevIndex] = useState<number | null>(null);
 
   // worklet-visible index + current id for tap navigation
   const indexSV = useSharedValue(index);
@@ -105,9 +106,14 @@ export default function SwipeLabScreen() {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
-  // PREV pull-in offsets (dormant = 0,0 to prevent top-left artifact)
-  const prevX = useSharedValue(0);
-  const prevY = useSharedValue(0);
+  // PREV "incoming ghost" (mirror of NEXT ghost-out):
+  // It moves from top-left -> center, and ONLY after it lands we swap index.
+  const ghostPrevX = useSharedValue(PREV_START_X);
+  const ghostPrevY = useSharedValue(PREV_START_Y);
+  const ghostPrevOpacity = useSharedValue(1);
+  const ghostPrevScale = useSharedValue(1);
+
+  // PREV mode flag (also prevents stuck visuals)
   const prevMode = useSharedValue(false);
 
   // Ghost dismissal (NEXT accepted)
@@ -129,6 +135,8 @@ export default function SwipeLabScreen() {
     router.push(`/card/${id}`);
   };
   
+  const clearGhostPrevJS = () => setGhostPrevIndex(null);
+
   // Tap should open details, not swipe/scroll
   const tapGesture = Gesture.Tap()
     .maxDistance(6)      // stricter so tiny drift doesn’t count as tap
@@ -164,8 +172,14 @@ export default function SwipeLabScreen() {
   const resetPrevCard = () => {
     "worklet";
     prevMode.value = false;
-    prevX.value = withSpring(0, { damping: 18, stiffness: 240 });
-    prevY.value = withSpring(0, { damping: 18, stiffness: 240 });
+
+    ghostPrevOpacity.value = 1;
+    ghostPrevScale.value = 1;
+
+    ghostPrevX.value = withTiming(PREV_START_X, { duration: 140, easing: Easing.out(Easing.cubic) });
+    ghostPrevY.value = withTiming(PREV_START_Y, { duration: 140, easing: Easing.out(Easing.cubic) }, (fin) => {
+      if (fin) runOnJS(clearGhostPrevJS)();
+    });
     intent.value = "UNDECIDED";
   };
 
@@ -180,8 +194,9 @@ export default function SwipeLabScreen() {
     "worklet";
     // Ensure PREV is dormant after NEXT (prevents top-left layer leak)
     prevMode.value = false;
-    prevX.value = 0;
-    prevY.value = 0;
+    ghostPrevX.value = PREV_START_X;
+    ghostPrevY.value = PREV_START_Y;
+    runOnJS(clearGhostPrevJS)();
 
     ghostX.value = tx.value;
     ghostY.value = ty.value;
@@ -205,13 +220,16 @@ export default function SwipeLabScreen() {
 
   const commitPrevCard = () => {
     "worklet";
-    prevX.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
-    prevY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, (fin) => {
+    // Bring incoming ghost to CENTER first (mirror of NEXT dismiss),
+    // THEN swap index so content changes exactly when it lands.
+    ghostPrevOpacity.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
+    ghostPrevScale.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
+    ghostPrevX.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
+    ghostPrevY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, (fin) => {
       if (fin) {
         runOnJS(goPrev)();
         prevMode.value = false;
-        prevX.value = 0;
-        prevY.value = 0;
+        runOnJS(clearGhostPrevJS)();
         intent.value = "UNDECIDED";
       }
     });
@@ -222,6 +240,7 @@ export default function SwipeLabScreen() {
     .onTouchesDown((e) => {
       "worklet";
       const t0 = e.allTouches[0];
+      if (!t0) return;
       startAbsX.value = t0.absoluteX;
       startAbsY.value = t0.absoluteY;
 
@@ -229,14 +248,16 @@ export default function SwipeLabScreen() {
 
       // Keep PREV dormant unless we explicitly enter SWIPE_PREV
       prevMode.value = false;
-      prevX.value = 0;
-      prevY.value = 0;
+      ghostPrevX.value = PREV_START_X;
+      ghostPrevY.value = PREV_START_Y;
+      runOnJS(clearGhostPrevJS)();
     })
     .onTouchesMove((e, state) => {
       "worklet";
       if (intent.value !== "UNDECIDED") return;
 
       const t0 = e.allTouches[0];
+      if (!t0) return;
       const dx = t0.absoluteX - startAbsX.value;
       const dy = t0.absoluteY - startAbsY.value;
       const ax = Math.abs(dx);
@@ -352,18 +373,26 @@ export default function SwipeLabScreen() {
         opacity.value = 1;
         scale.value = 1;
 
-        // Arm PREV only when actively swiping PREV
+        // Arm PREV incoming ghost only when actively swiping PREV
         if (!prevMode.value) {
           prevMode.value = true;
-          prevX.value = PREV_START_X;
-          prevY.value = PREV_START_Y;
+          ghostPrevX.value = PREV_START_X;
+          ghostPrevY.value = PREV_START_Y;
+          ghostPrevOpacity.value = 1;
+          ghostPrevScale.value = 1;
+          runOnJS(setGhostPrevIndex)(Math.max(0, indexSV.value - 1));
         }
 
         const pull = clamp(dx, 0, PREV_PULL_X);
         const t = pull / PREV_PULL_X;
 
-        prevX.value = PREV_START_X + (0 - PREV_START_X) * t;
-        prevY.value = PREV_START_Y + (0 - PREV_START_Y) * t;
+        // Follow diagonal from top-left into deck (to center at 0,0)
+        ghostPrevX.value = PREV_START_X + (0 - PREV_START_X) * t;
+        ghostPrevY.value = PREV_START_Y + (0 - PREV_START_Y) * t;
+
+        // Optional "approach" feel (subtle)
+        ghostPrevScale.value = 0.985 + 0.015 * t;
+        ghostPrevOpacity.value = 0.9 + 0.1 * t;
       }
     })
     .onEnd((e) => {
@@ -428,7 +457,20 @@ export default function SwipeLabScreen() {
   const prevCardStyle = useAnimatedStyle(() => {
     return {
       zIndex: mid.z,
-      transform: [{ translateX: mid.dx + prevX.value }, { translateY: mid.dy + prevY.value }],
+      // Prev card stays in-stack (no animated offsets). Incoming motion is handled by ghostPrev.
+      transform: [{ translateX: mid.dx }, { translateY: mid.dy }],
+    };
+  });
+
+  const ghostPrevCardStyle = useAnimatedStyle(() => {
+    return {
+      zIndex: 1200,
+      opacity: ghostPrevOpacity.value,
+      transform: [
+        { translateX: ghostPrevX.value },
+        { translateY: ghostPrevY.value },
+        { scale: ghostPrevScale.value },
+      ],
     };
   });
 
@@ -495,6 +537,7 @@ export default function SwipeLabScreen() {
     return gesture ? <GestureDetector gesture={gesture}>{node}</GestureDetector> : node;
   };
 
+  const ghostPrev = ghostPrevIndex !== null ? cards[ghostPrevIndex] : null;
   const ghost = ghostIndex !== null ? cards[ghostIndex] : null;
 
   return (
@@ -531,6 +574,10 @@ export default function SwipeLabScreen() {
               title={current.title}
               body={`${current.body}${next ? `\n\nNext: ${next.title}` : "\n\nNo next card."}`}
             />
+
+            {ghostPrev ? (
+              <CardShell borderAlpha={STACK[3].borderA} style={ghostPrevCardStyle} title={ghostPrev.title} body={ghostPrev.body} />
+            ) : null}
 
             {ghost ? (
               <CardShell borderAlpha={STACK[3].borderA} style={ghostCardStyle} title={ghost.title} body={ghost.body} />
