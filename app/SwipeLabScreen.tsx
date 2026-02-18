@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Dimensions, Text, useColorScheme, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -16,9 +17,9 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 // ---- Intent tuning ----
 const LOCK_DISTANCE = 10; // px before we lock intent
-const ANGLE_SWIPE_DEG = 40; // <= this => swipe (horizontal-ish)
-const ANGLE_SCROLL_DEG = 72; // >= this => scroll (vertical-ish)
-const VERTICAL_DOMINANCE = 1.6; // if |dy| > |dx|*this => scroll (early guard)
+const ANGLE_SWIPE_DEG = 40; // swipe is easier to win
+const ANGLE_SCROLL_DEG = 72; // scroll requires stricter vertical
+const VERTICAL_DOMINANCE = 1.6; // must be much more vertical to force scroll
 
 // ---- Deck look ----
 const BORDER_W = 4;
@@ -42,18 +43,14 @@ function isBackslashDiagonal(dx: number, dy: number) {
   return dx * dy > 0;
 }
 
-// "/" diagonal: top-right -> bottom-left (dx and dy opposite sign)
-function isSlashDiagonal(dx: number, dy: number) {
-  "worklet";
-  return dx * dy < 0;
-}
-
 function clamp(v: number, min: number, max: number) {
   "worklet";
   return Math.max(min, Math.min(max, v));
 }
 
 export default function SwipeLabScreen() {
+  const router = useRouter();
+
   const scheme = useColorScheme();
   const isDark = scheme !== "light";
   const surface = isDark ? "#0b0d10" : "#ffffff";
@@ -81,7 +78,7 @@ export default function SwipeLabScreen() {
       { id: "2", title: "Card 2", body: "Scroll rules still apply." },
       { id: "3", title: "Card 3", body: "Prev comes from top-left diagonally." },
       { id: "4", title: "Card 4", body: "No stuck top-left artifacts." },
-      { id: "5", title: "Card 5", body: "Tier-2 arbitration: / scrolls, \\ swipes." },
+      { id: "5", title: "Card 5", body: 'Tier-2 arbitration: / scrolls, "\\\\ swipes.' },
     ],
     []
   );
@@ -89,15 +86,15 @@ export default function SwipeLabScreen() {
   const [index, setIndex] = useState(0);
   const [ghostIndex, setGhostIndex] = useState<number | null>(null);
 
-  // worklet-visible index
+  // worklet-visible index + current id for tap navigation
   const indexSV = useSharedValue(index);
+  const currentIdSV = useSharedValue(cards[0]?.id ?? "");
   useEffect(() => {
     indexSV.value = index;
-  }, [index, indexSV]);
+    currentIdSV.value = cards[index]?.id ?? "";
+  }, [index, indexSV, currentIdSV, cards]);
 
   const hasPrev = index > 0;
-  const hasNext = index < cards.length - 1;
-
   const current = cards[index] ?? cards[0];
   const prev = hasPrev ? cards[index - 1] : null;
   const next = index + 1 < cards.length ? cards[index + 1] : null;
@@ -108,7 +105,7 @@ export default function SwipeLabScreen() {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
-  // PREV pull-in offsets (IMPORTANT: dormant = 0,0 to prevent top-left artifact)
+  // PREV pull-in offsets (dormant = 0,0 to prevent top-left artifact)
   const prevX = useSharedValue(0);
   const prevY = useSharedValue(0);
   const prevMode = useSharedValue(false);
@@ -127,9 +124,20 @@ export default function SwipeLabScreen() {
 
   const goPrev = () => setIndex((i) => Math.max(i - 1, 0));
 
-  const scrollGesture = Gesture.Native();
+  const navigateToCard = (id: string) => {
+    if (!id) return;
+    router.push(`/card/${id}`);
+  };
+  
+  // Tap should open details, not swipe/scroll
+  const tapGesture = Gesture.Tap()
+    .maxDistance(6)      // stricter so tiny drift doesn’t count as tap
+    .maxDuration(220)    // optional
+    .onEnd(() => {
+      runOnJS(navigateToCard)(currentIdSV.value);
+    });
 
-  // --- Deck stage bounds (keeps any offsets inside stage, prevents visual "leaks") ---
+  // --- Deck stage bounds (keeps offsets inside stage) ---
   const minDx = Math.min(...STACK.map((s) => s.dx));
   const maxDx = Math.max(...STACK.map((s) => s.dx));
   const minDy = Math.min(...STACK.map((s) => s.dy));
@@ -170,7 +178,7 @@ export default function SwipeLabScreen() {
 
   const startGhostDismiss = () => {
     "worklet";
-    // Ensure PREV is dormant after NEXT (prevents "stuck top-left" layer)
+    // Ensure PREV is dormant after NEXT (prevents top-left layer leak)
     prevMode.value = false;
     prevX.value = 0;
     prevY.value = 0;
@@ -201,7 +209,6 @@ export default function SwipeLabScreen() {
     prevY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, (fin) => {
       if (fin) {
         runOnJS(goPrev)();
-        // Back to dormant (no spawn offset)
         prevMode.value = false;
         prevX.value = 0;
         prevY.value = 0;
@@ -210,77 +217,52 @@ export default function SwipeLabScreen() {
     });
   };
 
-const pan = Gesture.Pan()
-  // Tier-2 arbitration: decide early, then hard-commit with manual activation.
-  .manualActivation(true)
-  .onTouchesDown((e) => {
-    "worklet";
-    const t0 = e.allTouches[0];
-    startAbsX.value = t0.absoluteX;
-    startAbsY.value = t0.absoluteY;
+  const pan = Gesture.Pan()
+    .manualActivation(true)
+    .onTouchesDown((e) => {
+      "worklet";
+      const t0 = e.allTouches[0];
+      startAbsX.value = t0.absoluteX;
+      startAbsY.value = t0.absoluteY;
 
-    intent.value = "UNDECIDED";
+      intent.value = "UNDECIDED";
 
-    // Keep PREV dormant unless we explicitly enter SWIPE_PREV
-    prevMode.value = false;
-    prevX.value = 0;
-    prevY.value = 0;
-  })
-  .onTouchesMove((e, state) => {
-    "worklet";
-    if (intent.value !== "UNDECIDED") return;
+      // Keep PREV dormant unless we explicitly enter SWIPE_PREV
+      prevMode.value = false;
+      prevX.value = 0;
+      prevY.value = 0;
+    })
+    .onTouchesMove((e, state) => {
+      "worklet";
+      if (intent.value !== "UNDECIDED") return;
 
-    const t0 = e.allTouches[0];
-    const dx = t0.absoluteX - startAbsX.value;
-    const dy = t0.absoluteY - startAbsY.value;
-    const ax = Math.abs(dx);
-    const ay = Math.abs(dy);
+      const t0 = e.allTouches[0];
+      const dx = t0.absoluteX - startAbsX.value;
+      const dy = t0.absoluteY - startAbsY.value;
+      const ax = Math.abs(dx);
+      const ay = Math.abs(dy);
 
-    if (Math.hypot(ax, ay) < LOCK_DISTANCE) return;
+      if (Math.hypot(ax, ay) < LOCK_DISTANCE) return;
 
-    // 1) SUPER vertical dominance => always scroll (hard reservation, but now stricter via constants)
-    if (ay > ax * VERTICAL_DOMINANCE) {
-      intent.value = "SCROLL";
-      tx.value = 0;
-      ty.value = 0;
-      opacity.value = 1;
-      scale.value = 1;
-      state.fail();
-      return;
-    }
-
-    const angle = (Math.atan2(ay, ax) * 180) / Math.PI;
-
-    // 2) Horizontal-ish => swipe
-    if (angle < ANGLE_SWIPE_DEG) {
-      const wantPrev = dx > 0;
-      const hasPrevNow = indexSV.value > 0;
-      const hasNextNow = indexSV.value < cards.length - 1;
-
-      if (wantPrev && !hasPrevNow) {
+      // 1) SUPER vertical dominance => always scroll
+      if (ay > ax * VERTICAL_DOMINANCE) {
         intent.value = "SCROLL";
-        state.fail();
-        return;
-      }
-      if (!wantPrev && !hasNextNow) {
-        intent.value = "SCROLL";
+        tx.value = 0;
+        ty.value = 0;
+        opacity.value = 1;
+        scale.value = 1;
         state.fail();
         return;
       }
 
-      intent.value = wantPrev ? "SWIPE_PREV" : "SWIPE_NEXT";
-      state.activate();
-      return;
-    }
+      const angle = (Math.atan2(ay, ax) * 180) / Math.PI;
 
-    // 3) Mid-angle band: "\" = swipe, "/" = scroll
-    // We give this rule priority up until the strict vertical threshold.
-    if (angle <= ANGLE_SCROLL_DEG) {
-      const wantPrev = dx > 0;
-      const hasPrevNow = indexSV.value > 0;
-      const hasNextNow = indexSV.value < cards.length - 1;
+      // 2) Horizontal-ish => swipe
+      if (angle < ANGLE_SWIPE_DEG) {
+        const wantPrev = dx > 0;
+        const hasPrevNow = indexSV.value > 0;
+        const hasNextNow = indexSV.value < cards.length - 1;
 
-      if (isBackslashDiagonal(dx, dy)) {
         if (wantPrev && !hasPrevNow) {
           intent.value = "SCROLL";
           state.fail();
@@ -295,126 +277,144 @@ const pan = Gesture.Pan()
         intent.value = wantPrev ? "SWIPE_PREV" : "SWIPE_NEXT";
         state.activate();
         return;
-      } else {
-        // Slash diagonal → scroll
-        intent.value = "SCROLL";
-        tx.value = 0;
-        ty.value = 0;
-        opacity.value = 1;
-        scale.value = 1;
-        state.fail();
-        return;
       }
-    }
 
-    // 4) Strict vertical-ish => scroll
-    intent.value = "SCROLL";
-    tx.value = 0;
-    ty.value = 0;
-    opacity.value = 1;
-    scale.value = 1;
-    state.fail();
-  })
-  .onUpdate((e) => {
-    "worklet";
-    const dx = e.translationX;
-    const dy = e.translationY;
+      // 3) Mid-angle band: "\" = swipe, "/" = scroll
+      if (angle <= ANGLE_SCROLL_DEG) {
+        const wantPrev = dx > 0;
+        const hasPrevNow = indexSV.value > 0;
+        const hasNextNow = indexSV.value < cards.length - 1;
 
-    if (intent.value === "SCROLL") return;
+        if (isBackslashDiagonal(dx, dy)) {
+          if (wantPrev && !hasPrevNow) {
+            intent.value = "SCROLL";
+            state.fail();
+            return;
+          }
+          if (!wantPrev && !hasNextNow) {
+            intent.value = "SCROLL";
+            state.fail();
+            return;
+          }
 
-    if (intent.value === "SWIPE_NEXT") {
-      // NEXT only to top-left
-      if (!(indexSV.value < cards.length - 1)) return;
+          intent.value = wantPrev ? "SWIPE_PREV" : "SWIPE_NEXT";
+          state.activate();
+          return;
+        } else {
+          intent.value = "SCROLL";
+          tx.value = 0;
+          ty.value = 0;
+          opacity.value = 1;
+          scale.value = 1;
+          state.fail();
+          return;
+        }
+      }
 
-      const x = Math.min(dx, 0);
-      tx.value = x;
-
-      // Stay on the top-left rail; allow slight extra up drift.
-      const railY = -Math.abs(x) * RAIL_K;
-      const dyUpOnly = Math.min(dy, 0);
-      ty.value = railY + dyUpOnly * 0.12;
-
-      const p = clamp(Math.abs(x) / NEXT_DISMISS_X, 0, 1);
-      opacity.value = 1 - 0.35 * p;
-      scale.value = 1 - 0.03 * p;
-      return;
-    }
-
-    if (intent.value === "SWIPE_PREV") {
-      if (!(indexSV.value > 0)) return;
-
-      // pin current
+      // 4) Strict vertical-ish => scroll
+      intent.value = "SCROLL";
       tx.value = 0;
       ty.value = 0;
       opacity.value = 1;
       scale.value = 1;
+      state.fail();
+    })
+    .onUpdate((e) => {
+      "worklet";
+      const dx = e.translationX;
+      const dy = e.translationY;
 
-      // Arm PREV only when actively swiping PREV (prevents stuck top-left layer)
-      if (!prevMode.value) {
-        prevMode.value = true;
-        prevX.value = PREV_START_X;
-        prevY.value = PREV_START_Y;
-      }
+      if (intent.value === "SCROLL") return;
 
-      const pull = clamp(dx, 0, PREV_PULL_X);
-      const t = pull / PREV_PULL_X;
+      if (intent.value === "SWIPE_NEXT") {
+        // NEXT only to top-left
+        if (!(indexSV.value < cards.length - 1)) return;
 
-      // Follow diagonal from top-left into deck
-      prevX.value = PREV_START_X + (0 - PREV_START_X) * t;
-      prevY.value = PREV_START_Y + (0 - PREV_START_Y) * t;
-    }
-  })
-  .onEnd((e) => {
-    "worklet";
-    const vx = e.velocityX;
-    const vy = e.velocityY;
+        const x = Math.min(dx, 0);
+        tx.value = x;
 
-    if (intent.value === "SCROLL" || intent.value === "UNDECIDED") {
-      intent.value = "UNDECIDED";
-      return;
-    }
+        const railY = -Math.abs(x) * RAIL_K;
+        const dyUpOnly = Math.min(dy, 0);
+        ty.value = railY + dyUpOnly * 0.12;
 
-    if (intent.value === "SWIPE_NEXT") {
-      const canNext = indexSV.value < cards.length - 1;
-      if (!canNext) {
-        resetDragCard();
+        const p = clamp(Math.abs(x) / NEXT_DISMISS_X, 0, 1);
+        opacity.value = 1 - 0.35 * p;
+        scale.value = 1 - 0.03 * p;
         return;
       }
 
-      const leftEnough = tx.value < -NEXT_DISMISS_X;
-      const fastLeft = vx < -900;
+      if (intent.value === "SWIPE_PREV") {
+        if (!(indexSV.value > 0)) return;
 
-      if (leftEnough || fastLeft) {
-        runOnJS(acceptNextJS)(indexSV.value);
-        startGhostDismiss();
+        // pin current
+        tx.value = 0;
+        ty.value = 0;
+        opacity.value = 1;
+        scale.value = 1;
+
+        // Arm PREV only when actively swiping PREV
+        if (!prevMode.value) {
+          prevMode.value = true;
+          prevX.value = PREV_START_X;
+          prevY.value = PREV_START_Y;
+        }
+
+        const pull = clamp(dx, 0, PREV_PULL_X);
+        const t = pull / PREV_PULL_X;
+
+        prevX.value = PREV_START_X + (0 - PREV_START_X) * t;
+        prevY.value = PREV_START_Y + (0 - PREV_START_Y) * t;
+      }
+    })
+    .onEnd((e) => {
+      "worklet";
+      const vx = e.velocityX;
+      const vy = e.velocityY;
+
+      if (intent.value === "SCROLL" || intent.value === "UNDECIDED") {
         intent.value = "UNDECIDED";
-      } else {
-        resetDragCard();
-      }
-      return;
-    }
-
-    if (intent.value === "SWIPE_PREV") {
-      const canPrev = indexSV.value > 0;
-      if (!canPrev) {
-        resetPrevCard();
         return;
       }
 
-      const pulledEnough = e.translationX > PREV_PULL_X * 0.25;
-      const fastRight = vx > 750 && Math.abs(vy) < 1200;
+      if (intent.value === "SWIPE_NEXT") {
+        const canNext = indexSV.value < cards.length - 1;
+        if (!canNext) {
+          resetDragCard();
+          return;
+        }
 
-      if (pulledEnough || fastRight) commitPrevCard();
-      else resetPrevCard();
-    }
-  });
+        const leftEnough = tx.value < -NEXT_DISMISS_X;
+        const fastLeft = vx < -900;
 
+        if (leftEnough || fastLeft) {
+          runOnJS(acceptNextJS)(indexSV.value);
+          startGhostDismiss();
+          intent.value = "UNDECIDED";
+        } else {
+          resetDragCard();
+        }
+        return;
+      }
+
+      if (intent.value === "SWIPE_PREV") {
+        const canPrev = indexSV.value > 0;
+        if (!canPrev) {
+          resetPrevCard();
+          return;
+        }
+
+        const pulledEnough = e.translationX > PREV_PULL_X * 0.25;
+        const fastRight = vx > 750 && Math.abs(vy) < 1200;
+
+        if (pulledEnough || fastRight) commitPrevCard();
+        else resetPrevCard();
+      }
+    });
 
   const front = STACK[3];
   const mid = STACK[2];
 
-  // Keep scroll and pan coordinated; pan will explicitly fail when SCROLL is chosen.
-  const panWithScroll = pan.simultaneousWithExternalGesture(scrollGesture);
+  const cardGesture = Gesture.Simultaneous(tapGesture, pan);
 
   const currentCardStyle = useAnimatedStyle(() => {
     const rotate = (tx.value / SCREEN_W) * 6;
@@ -426,7 +426,6 @@ const pan = Gesture.Pan()
   });
 
   const prevCardStyle = useAnimatedStyle(() => {
-    // When dormant: prevX/Y are 0 so the card stays cleanly in-stack.
     return {
       zIndex: mid.z,
       transform: [{ translateX: mid.dx + prevX.value }, { translateY: mid.dy + prevY.value }],
@@ -457,13 +456,13 @@ const pan = Gesture.Pan()
     body,
     borderAlpha,
     style,
-    gestureWrap,
+    gesture,
   }: {
     title?: string;
     body?: string;
     borderAlpha: number;
     style?: any;
-    gestureWrap?: boolean;
+    gesture?: any;
   }) => {
     const node = (
       <Animated.View
@@ -493,13 +492,12 @@ const pan = Gesture.Pan()
       </Animated.View>
     );
 
-    return gestureWrap ? <GestureDetector gesture={panWithScroll}>{node}</GestureDetector> : node;
+    return gesture ? <GestureDetector gesture={gesture}>{node}</GestureDetector> : node;
   };
 
   const ghost = ghostIndex !== null ? cards[ghostIndex] : null;
 
   return (
-    <GestureDetector gesture={scrollGesture}>
       <Animated.ScrollView
         style={{ flex: 1, backgroundColor: surface }}
         contentContainerStyle={{ padding: 24, paddingBottom: 80, alignItems: "center" }}
@@ -509,13 +507,13 @@ const pan = Gesture.Pan()
         <Text style={{ color: muted, marginTop: 6, lineHeight: 20 }}>
           • Left-ish / horizontal / "\" diagonal → NEXT (top-left only){"\n"}
           • Pull right → PREV (diagonal from top-left){"\n"}
-          • Vertical-ish or "/" diagonal → SCROLL
+          • Vertical-ish or "/" diagonal → SCROLL{"\n"}
+          • Tap card → open page
         </Text>
 
         <View style={{ height: 16 }} />
 
         <View style={{ width: STAGE_W, height: STAGE_H, position: "relative", marginTop: 10 }}>
-          {/* Deck origin (bounded) */}
           <View style={{ position: "absolute", left: ORIGIN_X, top: ORIGIN_Y, width: CARD_SIZE, height: CARD_SIZE }}>
             <CardShell borderAlpha={STACK[0].borderA} style={backStyle(STACK[0])} />
             <CardShell borderAlpha={STACK[1].borderA} style={backStyle(STACK[1])} />
@@ -529,7 +527,7 @@ const pan = Gesture.Pan()
             <CardShell
               borderAlpha={STACK[3].borderA}
               style={currentCardStyle}
-              gestureWrap
+              gesture={cardGesture}
               title={current.title}
               body={`${current.body}${next ? `\n\nNext: ${next.title}` : "\n\nNo next card."}`}
             />
@@ -561,6 +559,5 @@ const pan = Gesture.Pan()
           </View>
         ))}
       </Animated.ScrollView>
-    </GestureDetector>
   );
 }
