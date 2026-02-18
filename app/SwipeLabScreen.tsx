@@ -16,9 +16,9 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 // ---- Intent tuning ----
 const LOCK_DISTANCE = 10; // px before we lock intent
-const ANGLE_SWIPE_DEG = 35; // <= this => swipe (horizontal-ish)
-const ANGLE_SCROLL_DEG = 60; // >= this => scroll (vertical-ish)
-const VERTICAL_DOMINANCE = 1.25; // if |dy| > |dx|*this => scroll (early guard)
+const ANGLE_SWIPE_DEG = 40; // <= this => swipe (horizontal-ish)
+const ANGLE_SCROLL_DEG = 72; // >= this => scroll (vertical-ish)
+const VERTICAL_DOMINANCE = 1.6; // if |dy| > |dx|*this => scroll (early guard)
 
 // ---- Deck look ----
 const BORDER_W = 4;
@@ -210,86 +210,77 @@ export default function SwipeLabScreen() {
     });
   };
 
-  const pan = Gesture.Pan()
-    // Tier-2 arbitration: decide early, then hard-commit with manual activation.
-    .manualActivation(true)
-    .onTouchesDown((e) => {
-      "worklet";
-      const t0 = e.allTouches[0];
-      startAbsX.value = t0.absoluteX;
-      startAbsY.value = t0.absoluteY;
+const pan = Gesture.Pan()
+  // Tier-2 arbitration: decide early, then hard-commit with manual activation.
+  .manualActivation(true)
+  .onTouchesDown((e) => {
+    "worklet";
+    const t0 = e.allTouches[0];
+    startAbsX.value = t0.absoluteX;
+    startAbsY.value = t0.absoluteY;
 
-      intent.value = "UNDECIDED";
+    intent.value = "UNDECIDED";
 
-      // Keep PREV dormant unless we explicitly enter SWIPE_PREV
-      prevMode.value = false;
-      prevX.value = 0;
-      prevY.value = 0;
-    })
-    .onTouchesMove((e, state) => {
-      "worklet";
-      if (intent.value !== "UNDECIDED") return;
+    // Keep PREV dormant unless we explicitly enter SWIPE_PREV
+    prevMode.value = false;
+    prevX.value = 0;
+    prevY.value = 0;
+  })
+  .onTouchesMove((e, state) => {
+    "worklet";
+    if (intent.value !== "UNDECIDED") return;
 
-      const t0 = e.allTouches[0];
-      const dx = t0.absoluteX - startAbsX.value;
-      const dy = t0.absoluteY - startAbsY.value;
-      const ax = Math.abs(dx);
-      const ay = Math.abs(dy);
+    const t0 = e.allTouches[0];
+    const dx = t0.absoluteX - startAbsX.value;
+    const dy = t0.absoluteY - startAbsY.value;
+    const ax = Math.abs(dx);
+    const ay = Math.abs(dy);
 
-      if (Math.hypot(ax, ay) < LOCK_DISTANCE) return;
+    if (Math.hypot(ax, ay) < LOCK_DISTANCE) return;
 
-      // Strong vertical dominance => scroll
-      if (ay > ax * VERTICAL_DOMINANCE) {
+    // 1) SUPER vertical dominance => always scroll (hard reservation, but now stricter via constants)
+    if (ay > ax * VERTICAL_DOMINANCE) {
+      intent.value = "SCROLL";
+      tx.value = 0;
+      ty.value = 0;
+      opacity.value = 1;
+      scale.value = 1;
+      state.fail();
+      return;
+    }
+
+    const angle = (Math.atan2(ay, ax) * 180) / Math.PI;
+
+    // 2) Horizontal-ish => swipe
+    if (angle < ANGLE_SWIPE_DEG) {
+      const wantPrev = dx > 0;
+      const hasPrevNow = indexSV.value > 0;
+      const hasNextNow = indexSV.value < cards.length - 1;
+
+      if (wantPrev && !hasPrevNow) {
         intent.value = "SCROLL";
-        tx.value = 0;
-        ty.value = 0;
-        opacity.value = 1;
-        scale.value = 1;
+        state.fail();
+        return;
+      }
+      if (!wantPrev && !hasNextNow) {
+        intent.value = "SCROLL";
         state.fail();
         return;
       }
 
-      const angle = (Math.atan2(ay, ax) * 180) / Math.PI;
+      intent.value = wantPrev ? "SWIPE_PREV" : "SWIPE_NEXT";
+      state.activate();
+      return;
+    }
 
-      // Vertical-ish => scroll
-      if (angle > ANGLE_SCROLL_DEG) {
-        intent.value = "SCROLL";
-        tx.value = 0;
-        ty.value = 0;
-        opacity.value = 1;
-        scale.value = 1;
-        state.fail();
-        return;
-      }
+    // 3) Mid-angle band: "\" = swipe, "/" = scroll
+    // We give this rule priority up until the strict vertical threshold.
+    if (angle <= ANGLE_SCROLL_DEG) {
+      const wantPrev = dx > 0;
+      const hasPrevNow = indexSV.value > 0;
+      const hasNextNow = indexSV.value < cards.length - 1;
 
-      // Horizontal-ish => swipe
-      if (angle < ANGLE_SWIPE_DEG) {
-        const wantPrev = dx > 0;
-        const hasPrevNow = indexSV.value > 0;
-        const hasNextNow = indexSV.value < cards.length - 1;
-
-        if (wantPrev && !hasPrevNow) {
-          intent.value = "SCROLL";
-          state.fail();
-          return;
-        }
-        if (!wantPrev && !hasNextNow) {
-          intent.value = "SCROLL";
-          state.fail();
-          return;
-        }
-
-        intent.value = wantPrev ? "SWIPE_PREV" : "SWIPE_NEXT";
-        state.activate();
-        return;
-      }
-
-      // Diagonal band: "\" swipes, "/" scrolls
       if (isBackslashDiagonal(dx, dy)) {
-        const wantPrev = dx > 0;
-        const hasPrevNow = indexSV.value > 0;
-        const hasNextNow = indexSV.value < cards.length - 1;
-
         if (wantPrev && !hasPrevNow) {
           intent.value = "SCROLL";
           state.fail();
@@ -303,108 +294,121 @@ export default function SwipeLabScreen() {
 
         intent.value = wantPrev ? "SWIPE_PREV" : "SWIPE_NEXT";
         state.activate();
+        return;
       } else {
+        // Slash diagonal → scroll
         intent.value = "SCROLL";
         tx.value = 0;
         ty.value = 0;
         opacity.value = 1;
         scale.value = 1;
         state.fail();
+        return;
       }
-    })
-    .onUpdate((e) => {
-      "worklet";
-      const dx = e.translationX;
-      const dy = e.translationY;
+    }
 
-      if (intent.value === "SCROLL") return;
+    // 4) Strict vertical-ish => scroll
+    intent.value = "SCROLL";
+    tx.value = 0;
+    ty.value = 0;
+    opacity.value = 1;
+    scale.value = 1;
+    state.fail();
+  })
+  .onUpdate((e) => {
+    "worklet";
+    const dx = e.translationX;
+    const dy = e.translationY;
 
-      if (intent.value === "SWIPE_NEXT") {
-        // NEXT only to top-left
-        if (!(indexSV.value < cards.length - 1)) return;
+    if (intent.value === "SCROLL") return;
 
-        const x = Math.min(dx, 0);
-        tx.value = x;
+    if (intent.value === "SWIPE_NEXT") {
+      // NEXT only to top-left
+      if (!(indexSV.value < cards.length - 1)) return;
 
-        // Stay on the top-left rail; allow slight extra up drift.
-        const railY = -Math.abs(x) * RAIL_K;
-        const dyUpOnly = Math.min(dy, 0);
-        ty.value = railY + dyUpOnly * 0.12;
+      const x = Math.min(dx, 0);
+      tx.value = x;
 
-        const p = clamp(Math.abs(x) / NEXT_DISMISS_X, 0, 1);
-        opacity.value = 1 - 0.35 * p;
-        scale.value = 1 - 0.03 * p;
+      // Stay on the top-left rail; allow slight extra up drift.
+      const railY = -Math.abs(x) * RAIL_K;
+      const dyUpOnly = Math.min(dy, 0);
+      ty.value = railY + dyUpOnly * 0.12;
+
+      const p = clamp(Math.abs(x) / NEXT_DISMISS_X, 0, 1);
+      opacity.value = 1 - 0.35 * p;
+      scale.value = 1 - 0.03 * p;
+      return;
+    }
+
+    if (intent.value === "SWIPE_PREV") {
+      if (!(indexSV.value > 0)) return;
+
+      // pin current
+      tx.value = 0;
+      ty.value = 0;
+      opacity.value = 1;
+      scale.value = 1;
+
+      // Arm PREV only when actively swiping PREV (prevents stuck top-left layer)
+      if (!prevMode.value) {
+        prevMode.value = true;
+        prevX.value = PREV_START_X;
+        prevY.value = PREV_START_Y;
+      }
+
+      const pull = clamp(dx, 0, PREV_PULL_X);
+      const t = pull / PREV_PULL_X;
+
+      // Follow diagonal from top-left into deck
+      prevX.value = PREV_START_X + (0 - PREV_START_X) * t;
+      prevY.value = PREV_START_Y + (0 - PREV_START_Y) * t;
+    }
+  })
+  .onEnd((e) => {
+    "worklet";
+    const vx = e.velocityX;
+    const vy = e.velocityY;
+
+    if (intent.value === "SCROLL" || intent.value === "UNDECIDED") {
+      intent.value = "UNDECIDED";
+      return;
+    }
+
+    if (intent.value === "SWIPE_NEXT") {
+      const canNext = indexSV.value < cards.length - 1;
+      if (!canNext) {
+        resetDragCard();
         return;
       }
 
-      if (intent.value === "SWIPE_PREV") {
-        if (!(indexSV.value > 0)) return;
+      const leftEnough = tx.value < -NEXT_DISMISS_X;
+      const fastLeft = vx < -900;
 
-        // pin current
-        tx.value = 0;
-        ty.value = 0;
-        opacity.value = 1;
-        scale.value = 1;
-
-        // Arm PREV only when actively swiping PREV (prevents stuck top-left layer)
-        if (!prevMode.value) {
-          prevMode.value = true;
-          prevX.value = PREV_START_X;
-          prevY.value = PREV_START_Y;
-        }
-
-        const pull = clamp(dx, 0, PREV_PULL_X);
-        const t = pull / PREV_PULL_X;
-
-        // Follow diagonal from top-left into deck
-        prevX.value = PREV_START_X + (0 - PREV_START_X) * t;
-        prevY.value = PREV_START_Y + (0 - PREV_START_Y) * t;
-      }
-    })
-    .onEnd((e) => {
-      "worklet";
-      const vx = e.velocityX;
-      const vy = e.velocityY;
-
-      if (intent.value === "SCROLL" || intent.value === "UNDECIDED") {
+      if (leftEnough || fastLeft) {
+        runOnJS(acceptNextJS)(indexSV.value);
+        startGhostDismiss();
         intent.value = "UNDECIDED";
+      } else {
+        resetDragCard();
+      }
+      return;
+    }
+
+    if (intent.value === "SWIPE_PREV") {
+      const canPrev = indexSV.value > 0;
+      if (!canPrev) {
+        resetPrevCard();
         return;
       }
 
-      if (intent.value === "SWIPE_NEXT") {
-        const canNext = indexSV.value < cards.length - 1;
-        if (!canNext) {
-          resetDragCard();
-          return;
-        }
+      const pulledEnough = e.translationX > PREV_PULL_X * 0.25;
+      const fastRight = vx > 750 && Math.abs(vy) < 1200;
 
-        const leftEnough = tx.value < -NEXT_DISMISS_X;
-        const fastLeft = vx < -900;
+      if (pulledEnough || fastRight) commitPrevCard();
+      else resetPrevCard();
+    }
+  });
 
-        if (leftEnough || fastLeft) {
-          runOnJS(acceptNextJS)(indexSV.value);
-          startGhostDismiss();
-          intent.value = "UNDECIDED";
-        } else {
-          resetDragCard();
-        }
-        return;
-      }
-
-      if (intent.value === "SWIPE_PREV") {
-        const canPrev = indexSV.value > 0;
-        if (!canPrev) {
-          resetPrevCard();
-          return;
-        }
-
-        const pulledEnough = e.translationX > PREV_PULL_X * 0.25;
-        const fastRight = vx > 750 && Math.abs(vy) < 1200;
-
-        if (pulledEnough || fastRight) commitPrevCard();
-        else resetPrevCard();
-      }
-    });
 
   const front = STACK[3];
   const mid = STACK[2];
