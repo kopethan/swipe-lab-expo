@@ -24,7 +24,10 @@ const LOCK_DISTANCE = 10; // px before we lock intent
 const ANGLE_SWIPE_DEG = 40; // swipe is easier to win
 const ANGLE_SCROLL_DEG = 72; // scroll requires stricter vertical
 const VERTICAL_DOMINANCE = 1.6; // must be much more vertical to force scroll
-
+// Increase "swing area" from the left edge: starting a gesture here biases toward SWIPE_NEXT
+const LEFT_SWIPE_ZONE_PX = 72;
+const LEFT_ZONE_LOCK_DISTANCE = 6;   // lock earlier in the zone
+const LEFT_ZONE_ANGLE_SWIPE_DEG = 55; // allow more vertical drift and still count as swipe
 // ---- Deck look ----
 const BORDER_W = 4;
 const RADIUS = 22;
@@ -41,8 +44,9 @@ type Card = { id: string; title: string; body: string };
 type Deck = { id: string; title: string; cards: Card[] };
 type Pos = { d: number; c: number };
 
-function rgbaTeal(alpha: number) {
-  return `rgba(44,229,255,${alpha})`;
+// Border color: half-transparent white (we keep per-layer alpha feel by scaling into 0..0.5)
+function rgbaBorder(alpha: number) {
+  return `rgba(255,255,255,${Math.max(0, Math.min(0.5, alpha * 0.5))})`;
 }
 
 // "\" diagonal: top-left -> bottom-right (dx and dy same sign)
@@ -372,10 +376,14 @@ export default function SwipeLabScreen() {
       const ax = Math.abs(dx);
       const ay = Math.abs(dy);
 
-      if (Math.hypot(ax, ay) < LOCK_DISTANCE) return;
+      const inLeftZone = startAbsX.value <= LEFT_SWIPE_ZONE_PX;
+      const lockDist = inLeftZone ? LEFT_ZONE_LOCK_DISTANCE : LOCK_DISTANCE;
+      if (Math.hypot(ax, ay) < lockDist) return;
 
       // 1) SUPER vertical dominance => always scroll
-      if (ay > ax * VERTICAL_DOMINANCE) {
+      // In left swipe zone, we don't immediately hand off to scroll unless it's VERY vertical.
+      const verticalDominance = inLeftZone ? VERTICAL_DOMINANCE * 1.35 : VERTICAL_DOMINANCE;
+      if (ay > ax * verticalDominance) {
         intent.value = "SCROLL";
         tx.value = 0;
         ty.value = 0;
@@ -385,10 +393,13 @@ export default function SwipeLabScreen() {
         return;
       }
 
+      // You use `angle` below, so it must be defined.
       const angle = (Math.atan2(ay, ax) * 180) / Math.PI;
 
+      const angleSwipeDeg = inLeftZone ? LEFT_ZONE_ANGLE_SWIPE_DEG : ANGLE_SWIPE_DEG;
+
       // 2) Horizontal-ish => swipe
-      if (angle < ANGLE_SWIPE_DEG) {
+      if (angle < angleSwipeDeg) {
         const wantPrev = dx > 0;
         const hasPrevNow = cardSV.value > 0;
         const hasNextNow = cardSV.value < CARDS_PER_DECK - 1;
@@ -640,7 +651,7 @@ export default function SwipeLabScreen() {
             borderRadius: RADIUS,
             backgroundColor: surface,
             borderWidth: BORDER_W,
-            borderColor: rgbaTeal(borderAlpha),
+            borderColor: rgbaBorder(borderAlpha),
             padding: 18,
             justifyContent: "center",
           },
