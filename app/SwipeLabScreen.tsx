@@ -28,6 +28,9 @@ const VERTICAL_DOMINANCE = 1.6; // must be much more vertical to force scroll
 const LEFT_SWIPE_ZONE_PX = 72;
 const LEFT_ZONE_LOCK_DISTANCE = 6;   // lock earlier in the zone
 const LEFT_ZONE_ANGLE_SWIPE_DEG = 55; // allow more vertical drift and still count as swipe
+// Allow "\" diagonal swipes closer to vertical (while keeping true vertical scroll)
+const ANGLE_BACKSLASH_SWIPE_DEG = 86;
+const BACKSLASH_VERTICAL_DOMINANCE = 2.25;
 // ---- Deck look ----
 const BORDER_W = 4;
 const RADIUS = 22;
@@ -383,7 +386,13 @@ export default function SwipeLabScreen() {
       // 1) SUPER vertical dominance => always scroll
       // In left swipe zone, we don't immediately hand off to scroll unless it's VERY vertical.
       const verticalDominance = inLeftZone ? VERTICAL_DOMINANCE * 1.35 : VERTICAL_DOMINANCE;
-      if (ay > ax * verticalDominance) {
+
+      // If "\" diagonal, allow more vertical drift before forcing scroll
+      // (still protects true vertical scroll)
+      const isBackslash = isBackslashDiagonal(dx, dy);
+      const vd = isBackslash ? BACKSLASH_VERTICAL_DOMINANCE : verticalDominance;
+
+      if (ay > ax * vd) {
         intent.value = "SCROLL";
         tx.value = 0;
         ty.value = 0;
@@ -393,7 +402,6 @@ export default function SwipeLabScreen() {
         return;
       }
 
-      // You use `angle` below, so it must be defined.
       const angle = (Math.atan2(ay, ax) * 180) / Math.PI;
 
       const angleSwipeDeg = inLeftZone ? LEFT_ZONE_ANGLE_SWIPE_DEG : ANGLE_SWIPE_DEG;
@@ -421,12 +429,16 @@ export default function SwipeLabScreen() {
       }
 
       // 3) Mid-angle band: "\" = swipe, "/" = scroll
-      if (angle <= ANGLE_SCROLL_DEG) {
+      // For "\" we allow up to ANGLE_BACKSLASH_SWIPE_DEG (near vertical).
+      // For "/" we keep the stricter ANGLE_SCROLL_DEG.
+      const diagMax = isBackslash ? ANGLE_BACKSLASH_SWIPE_DEG : ANGLE_SCROLL_DEG;
+
+      if (angle <= diagMax) {
         const wantPrev = dx > 0;
         const hasPrevNow = cardSV.value > 0;
         const hasNextNow = cardSV.value < CARDS_PER_DECK - 1;
 
-        if (isBackslashDiagonal(dx, dy)) {
+        if (isBackslash) {
           if (wantPrev && !hasPrevNow) {
             intent.value = "SCROLL";
             state.fail();
@@ -552,7 +564,7 @@ export default function SwipeLabScreen() {
         const fastLeft = vx < -900;
 
         if (leftEnough || fastLeft) {
-          const d = Math.floor(deckSV.value);
+          const d = pos.d;
           const c = Math.floor(cardSV.value);
           runOnJS(acceptNextJS)({ d, c });
           startGhostDismiss();
@@ -678,7 +690,10 @@ export default function SwipeLabScreen() {
     const t = stackShiftT.value;
     const dir = stackShiftDir.value;
     const a = STACK[0];
-    const b = dir > 0 ? STACK[1] : STACK[0];
+    // When pulling PREV, the farthest card should move "further back"
+    // to create the feel that a last card disappears.
+    const STACK_FAR = { dx: STACK[0].dx + 8, dy: STACK[0].dy + 8 };
+    const b = dir > 0 ? STACK[1] : STACK_FAR;
     return {
       zIndex: a.z,
       transform: [
