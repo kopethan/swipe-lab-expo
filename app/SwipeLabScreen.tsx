@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Dimensions, Text, useColorScheme, View } from "react-native";
+import { Dimensions, FlatList, Text, useColorScheme, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -8,7 +8,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming
+  withTiming,
 } from "react-native-reanimated";
 
 type Intent = "UNDECIDED" | "SCROLL" | "SWIPE_NEXT" | "SWIPE_PREV";
@@ -26,11 +26,12 @@ const ANGLE_SCROLL_DEG = 72; // scroll requires stricter vertical
 const VERTICAL_DOMINANCE = 1.6; // must be much more vertical to force scroll
 // Increase "swing area" from the left edge: starting a gesture here biases toward SWIPE_NEXT
 const LEFT_SWIPE_ZONE_PX = 72;
-const LEFT_ZONE_LOCK_DISTANCE = 6;   // lock earlier in the zone
+const LEFT_ZONE_LOCK_DISTANCE = 6; // lock earlier in the zone
 const LEFT_ZONE_ANGLE_SWIPE_DEG = 55; // allow more vertical drift and still count as swipe
-// Allow "\" diagonal swipes closer to vertical (while keeping true vertical scroll)
+// Allow "\\" diagonal swipes closer to vertical (while keeping true vertical scroll)
 const ANGLE_BACKSLASH_SWIPE_DEG = 86;
 const BACKSLASH_VERTICAL_DOMINANCE = 2.25;
+
 // ---- Deck look ----
 const BORDER_W = 4;
 const RADIUS = 22;
@@ -52,7 +53,7 @@ function rgbaBorder(alpha: number) {
   return `rgba(255,255,255,${Math.max(0, Math.min(0.5, alpha * 0.5))})`;
 }
 
-// "\" diagonal: top-left -> bottom-right (dx and dy same sign)
+// "\\" diagonal: top-left -> bottom-right (dx and dy same sign)
 function isBackslashDiagonal(dx: number, dy: number) {
   "worklet";
   return dx * dy > 0;
@@ -63,15 +64,23 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
-export default function SwipeLabScreen() {
-  const router = useRouter();
-
-  const scheme = useColorScheme();
-  const isDark = scheme !== "light";
-  const surface = isDark ? "#0b0d10" : "#ffffff";
-  const text = isDark ? "#ffffff" : "#0a0a0a";
-  const muted = isDark ? "rgba(255,255,255,0.68)" : "rgba(0,0,0,0.62)";
-
+function SwipeDeckInstance({
+  decks,
+  deckIndex,
+  header,
+  surface,
+  text,
+  muted,
+  onOpenCard,
+}: {
+  decks: Deck[];
+  deckIndex: number;
+  header: string;
+  surface: string;
+  text: string;
+  muted: string;
+  onOpenCard: (id: string) => void;
+}) {
   const CARD_SIZE = Math.min(330, Math.floor(SCREEN_W * 0.88));
 
   // thresholds (px)
@@ -87,38 +96,8 @@ export default function SwipeLabScreen() {
 
   const DISMISS_MS = 160;
 
-  const decks: Deck[] = useMemo(() => {
-    const makeCard = (deckId: string, n: number): Card => {
-      const id = `${deckId}-${n + 1}`; // keep route compatible: /card/[id]
-      return {
-        id,
-        title: `Deck ${deckId.toUpperCase()} · Card ${n + 1}`,
-        body:
-          n === 0
-            ? 'Diagonal rail NEXT → top-left only. Tap to open.'
-            : n === 1
-            ? 'Tier-2 arbitration: "/" scrolls, "\\\\ swipes.'
-            : n === 2
-            ? "Prev comes from top-left diagonally."
-            : n === 8
-            ? "Deck is running low… (9/10)"
-            : n === 9
-            ? "Last card of this deck (10/10)."
-            : "Scroll rules still apply.",
-      };
-    };
-    return Array.from({ length: DECK_COUNT }).map((_, di) => {
-      const deckId = String.fromCharCode("a".charCodeAt(0) + di); // a, b, c...
-      return {
-        id: deckId,
-        title: `Deck ${deckId.toUpperCase()}`,
-        cards: Array.from({ length: CARDS_PER_DECK }).map((__, ci) => makeCard(deckId, ci)),
-      };
-    });
-  }, []);
-
   // ---- Atomic position (prevents deck/card desync) ----
-  const [pos, setPos] = useState<Pos>({ d: 0, c: 0 });
+  const [pos, setPos] = useState<Pos>({ d: deckIndex, c: 0 });
 
   const [ghostPos, setGhostPos] = useState<Pos | null>(null); // NEXT ghost-out (old current)
   const [ghostPrevPos, setGhostPrevPos] = useState<Pos | null>(null); // PREV ghost-in (incoming)
@@ -126,7 +105,7 @@ export default function SwipeLabScreen() {
   // worklet-visible index + current id for tap navigation
   const deckSV = useSharedValue(pos.d);
   const cardSV = useSharedValue(pos.c);
-  const currentIdSV = useSharedValue(decks[0]?.cards[0]?.id ?? "");
+  const currentIdSV = useSharedValue(decks[deckIndex]?.cards[0]?.id ?? "");
   useEffect(() => {
     deckSV.value = pos.d;
     cardSV.value = pos.c;
@@ -138,23 +117,10 @@ export default function SwipeLabScreen() {
 
   const posToCard = (p: Pos | null) => (p ? decks[p.d]?.cards[p.c] ?? null : null);
 
-  // ---- Stop at the last card of the CURRENT deck (no wrapping to next deck) ----
+  // ---- Stop at the last card of the CURRENT deck ----
   const hasPrev = pos.c > 0;
   const hasNext = pos.c < CARDS_PER_DECK - 1;
- 
-  const getPrevPos = (): Pos | null => {
-    if (!hasPrev) return null;
-    if (pos.c > 0) return { d: pos.d, c: pos.c - 1 };
-    return null;
-  };
-  const getNextPos = (): Pos | null => {
-    if (!hasNext) return null;
-    if (pos.c < CARDS_PER_DECK - 1) return { d: pos.d, c: pos.c + 1 };
-    return null;
-  };
 
-
-  // Next positions for background stack (next1 is closest behind current)
   const getNextPosOffset = (k: number): Pos | null => {
     const c = pos.c + k;
     if (c < 0 || c > CARDS_PER_DECK - 1) return null;
@@ -165,28 +131,32 @@ export default function SwipeLabScreen() {
   const next3 = posToCard(getNextPosOffset(3));
 
   const current = currentCards[pos.c] ?? currentCards[0];
-  const next = hasNext ? posToCard(getNextPos()) : null;
+  const next = hasNext ? posToCard({ d: pos.d, c: pos.c + 1 }) : null;
 
   // If we're on the last card, show no back stack at all (true "end card")
   const isLastCard = pos.c === CARDS_PER_DECK - 1;
 
   /**
-   * Runout v2 (what you asked):
-   * - Decrement happens from the *remaining cards behind* the current one.
-   * - The TOP card border/alpha must NOT decrease at 8/9/10.
-   * - Only background layers reduce (and optionally fade a bit).
+   * Runout v2:
+   * - Only background layers decrease at 8/9/10.
+   * - Top layer border stays constant.
    */
-  const remainingBehind = Math.max(0, (CARDS_PER_DECK - 1) - pos.c); // 3,2,1,0 when current is 7,8,9,10
-  const backCount = Math.min(3, remainingBehind); // render 3/2/1/0 back layers
+  const remainingBehind = Math.max(0, (CARDS_PER_DECK - 1) - pos.c);
+  const backCount = Math.min(3, remainingBehind);
   const runoutFade =
-    remainingBehind >= 3 ? 1 : remainingBehind === 2 ? 0.85 : remainingBehind === 1 ? 0.65 : 0; // only for back layers
+    remainingBehind >= 3
+      ? 1
+      : remainingBehind === 2
+        ? 0.85
+        : remainingBehind === 1
+          ? 0.65
+          : 0;
+
   const stackNow = STACK.map((s, i) => ({
     ...s,
-    // keep TOP layer stable; only fade the background layers
     borderA: i === 3 ? STACK[3].borderA : s.borderA * runoutFade,
   }));
 
-  // Force no background layers on the very last card
   const backCountFinal = isLastCard ? 0 : backCount;
 
   // Top card motion while dragging (NEXT only)
@@ -195,19 +165,17 @@ export default function SwipeLabScreen() {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
-  // Stack "conveyor" polish: back cards move forward on NEXT and backward on PREV.
-  // t in [0..1], dir in {-1, +1}
+  // Stack conveyor polish: back cards move forward on NEXT and backward on PREV.
   const stackShiftT = useSharedValue(0);
   const stackShiftDir = useSharedValue<1 | -1>(1);
 
-  // PREV "incoming ghost" (mirror of NEXT ghost-out):
-  // It moves from top-left -> center, and ONLY after it lands we swap index.
+  // PREV "incoming ghost"
   const ghostPrevX = useSharedValue(PREV_START_X);
   const ghostPrevY = useSharedValue(PREV_START_Y);
   const ghostPrevOpacity = useSharedValue(1);
   const ghostPrevScale = useSharedValue(1);
 
-  // PREV mode flag (also prevents stuck visuals)
+  // PREV mode flag
   const prevMode = useSharedValue(false);
 
   // Ghost dismissal (NEXT accepted)
@@ -222,7 +190,6 @@ export default function SwipeLabScreen() {
   const startAbsX = useSharedValue(0);
   const startAbsY = useSharedValue(0);
 
-  // ---- Atomic next/prev (no stale closure / no desync) ----
   const goPrevJS = () => {
     setPos((p) => {
       if (p.c > 0) return { d: p.d, c: p.c - 1 };
@@ -237,19 +204,14 @@ export default function SwipeLabScreen() {
     });
   };
 
-  const navigateToCard = (id: string) => {
-    if (!id) return;
-    router.push(`/card/${id}`);
-  };
-  
   const clearGhostPrevJS = () => setGhostPrevPos(null);
 
   // Tap should open details, not swipe/scroll
   const tapGesture = Gesture.Tap()
-    .maxDistance(6)      // stricter so tiny drift doesn’t count as tap
-    .maxDuration(220)    // optional
+    .maxDistance(6)
+    .maxDuration(220)
     .onEnd(() => {
-      runOnJS(navigateToCard)(currentIdSV.value);
+      runOnJS(onOpenCard)(currentIdSV.value);
     });
 
   // --- Deck stage bounds (keeps offsets inside stage) ---
@@ -306,7 +268,6 @@ export default function SwipeLabScreen() {
 
   const startGhostDismiss = () => {
     "worklet";
-    // Ensure PREV is dormant after NEXT (prevents top-left layer leak)
     prevMode.value = false;
     ghostPrevX.value = PREV_START_X;
     ghostPrevY.value = PREV_START_Y;
@@ -318,7 +279,7 @@ export default function SwipeLabScreen() {
     ghostOpacity.value = opacity.value;
     ghostScale.value = scale.value;
 
-    // Reset draggable card immediately (new current is already shown)
+    // Reset draggable card immediately
     tx.value = 0;
     ty.value = 0;
     opacity.value = 1;
@@ -335,10 +296,7 @@ export default function SwipeLabScreen() {
 
   const commitPrevCard = () => {
     "worklet";
-    // Bring incoming ghost to CENTER first (mirror of NEXT dismiss),
-    // THEN swap index so content changes exactly when it lands.
-    // While doing so, drive the stack conveyor BACKWARD so the background shifts "deeper"
-    // and the far card can fall off.
+    // Bring incoming ghost to CENTER first, THEN swap index so content changes exactly when it lands.
     ghostPrevOpacity.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
     ghostPrevScale.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
 
@@ -348,10 +306,7 @@ export default function SwipeLabScreen() {
     ghostPrevX.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
     ghostPrevY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, (fin) => {
       if (fin) {
-        // ✅ Persist PREV: update state so the new top card becomes the previous one.
         runOnJS(goPrevJS)();
-
-        // Reset conveyor after index swap so the new stack settles without popping.
         stackShiftT.value = 0;
         prevMode.value = false;
         runOnJS(clearGhostPrevJS)();
@@ -371,7 +326,6 @@ export default function SwipeLabScreen() {
 
       intent.value = "UNDECIDED";
 
-      // Keep PREV dormant unless we explicitly enter SWIPE_PREV
       prevMode.value = false;
       ghostPrevX.value = PREV_START_X;
       ghostPrevY.value = PREV_START_Y;
@@ -392,12 +346,7 @@ export default function SwipeLabScreen() {
       const lockDist = inLeftZone ? LEFT_ZONE_LOCK_DISTANCE : LOCK_DISTANCE;
       if (Math.hypot(ax, ay) < lockDist) return;
 
-      // 1) SUPER vertical dominance => always scroll
-      // In left swipe zone, we don't immediately hand off to scroll unless it's VERY vertical.
       const verticalDominance = inLeftZone ? VERTICAL_DOMINANCE * 1.35 : VERTICAL_DOMINANCE;
-
-      // If "\" diagonal, allow more vertical drift before forcing scroll
-      // (still protects true vertical scroll)
       const isBackslash = isBackslashDiagonal(dx, dy);
       const vd = isBackslash ? BACKSLASH_VERTICAL_DOMINANCE : verticalDominance;
 
@@ -412,10 +361,8 @@ export default function SwipeLabScreen() {
       }
 
       const angle = (Math.atan2(ay, ax) * 180) / Math.PI;
-
       const angleSwipeDeg = inLeftZone ? LEFT_ZONE_ANGLE_SWIPE_DEG : ANGLE_SWIPE_DEG;
 
-      // 2) Horizontal-ish => swipe
       if (angle < angleSwipeDeg) {
         const wantPrev = dx > 0;
         const hasPrevNow = cardSV.value > 0;
@@ -437,9 +384,6 @@ export default function SwipeLabScreen() {
         return;
       }
 
-      // 3) Mid-angle band: "\" = swipe, "/" = scroll
-      // For "\" we allow up to ANGLE_BACKSLASH_SWIPE_DEG (near vertical).
-      // For "/" we keep the stricter ANGLE_SCROLL_DEG.
       const diagMax = isBackslash ? ANGLE_BACKSLASH_SWIPE_DEG : ANGLE_SCROLL_DEG;
 
       if (angle <= diagMax) {
@@ -473,7 +417,6 @@ export default function SwipeLabScreen() {
         }
       }
 
-      // 4) Strict vertical-ish => scroll
       intent.value = "SCROLL";
       tx.value = 0;
       ty.value = 0;
@@ -489,12 +432,9 @@ export default function SwipeLabScreen() {
       if (intent.value === "SCROLL") return;
 
       if (intent.value === "SWIPE_NEXT") {
-        // NEXT only to top-left
         if (!(cardSV.value < CARDS_PER_DECK - 1)) return;
 
-        // stack conveyor (NEXT): background cards advance forward
         stackShiftDir.value = 1;
-
         const x = Math.min(dx, 0);
         tx.value = x;
 
@@ -513,24 +453,20 @@ export default function SwipeLabScreen() {
       if (intent.value === "SWIPE_PREV") {
         if (!(cardSV.value > 0)) return;
 
-        // stack conveyor (PREV): background cards shift backward
         stackShiftDir.value = -1;
 
-        // pin current
         tx.value = 0;
         ty.value = 0;
         opacity.value = 1;
         scale.value = 1;
 
-        // Arm PREV incoming ghost only when actively swiping PREV
         if (!prevMode.value) {
           prevMode.value = true;
           ghostPrevX.value = PREV_START_X;
           ghostPrevY.value = PREV_START_Y;
           ghostPrevOpacity.value = 1;
           ghostPrevScale.value = 1;
-          // incoming is the logical prev position
-          const d = pos.d; // fixed deck for this screen
+          const d = pos.d;
           const c = Math.floor(cardSV.value);
           const p: Pos = { d, c: Math.max(0, c - 1) };
           runOnJS(setGhostPrevPos)(p);
@@ -540,14 +476,10 @@ export default function SwipeLabScreen() {
         const t = pull / PREV_PULL_X;
 
         stackShiftT.value = clamp(t, 0, 1);
-       
-        
 
-        // Follow diagonal from top-left into deck (to center at 0,0)
         ghostPrevX.value = PREV_START_X + (0 - PREV_START_X) * t;
         ghostPrevY.value = PREV_START_Y + (0 - PREV_START_Y) * t;
 
-        // Optional "approach" feel (subtle)
         ghostPrevScale.value = 0.985 + 0.015 * t;
         ghostPrevOpacity.value = 0.9 + 0.1 * t;
       }
@@ -600,18 +532,17 @@ export default function SwipeLabScreen() {
     });
 
   const front = STACK[3];
-  const mid = STACK[2];
 
   const cardGesture = Gesture.Simultaneous(tapGesture, pan);
 
   const currentCardStyle = useAnimatedStyle(() => {
     const rotate = (tx.value / SCREEN_W) * 6;
-    // When doing PREV, the current card must join the "backward conveyor":
-    // it slides from the front slot (STACK[3]) toward the next1 slot (STACK[2]).
+    // PREV conveyor: current card slides behind (toward STACK[2]) while PREV progresses.
     const t = stackShiftT.value;
     const isPrev = stackShiftDir.value < 0;
     const prevShiftX = isPrev ? STACK[2].dx * t : 0;
     const prevShiftY = isPrev ? STACK[2].dy * t : 0;
+
     return {
       zIndex: front.z,
       opacity: opacity.value,
@@ -623,9 +554,6 @@ export default function SwipeLabScreen() {
       ],
     };
   });
-
-  // NOTE: We no longer render "prev" as a background layer.
-  // Prev only appears as ghostPrev during SWIPE_PREV.
 
   const ghostPrevCardStyle = useAnimatedStyle(() => {
     return {
@@ -651,11 +579,6 @@ export default function SwipeLabScreen() {
         { scale: ghostScale.value },
       ],
     };
-  });
-
-  const backStyle = (layer: typeof STACK[number]) => ({
-    zIndex: layer.z,
-    transform: [{ translateX: layer.dx }, { translateY: layer.dy }],
   });
 
   const CardShell = ({
@@ -711,8 +634,7 @@ export default function SwipeLabScreen() {
     const dir = stackShiftDir.value;
     const a = STACK[0];
 
-    // When pulling/committing PREV, push the farthest card "deeper" and fade it out
-    // so it feels like it falls off the back of the stack.
+    // PREV: farthest card fades/scales out to feel like it falls off.
     const STACK_FAR = { dx: STACK[0].dx + 4, dy: STACK[0].dy + 4 };
     const b = dir > 0 ? STACK[1] : STACK_FAR;
 
@@ -730,6 +652,7 @@ export default function SwipeLabScreen() {
       ],
     };
   });
+
   const back1Style = useAnimatedStyle(() => {
     const t = stackShiftT.value;
     const dir = stackShiftDir.value;
@@ -743,6 +666,7 @@ export default function SwipeLabScreen() {
       ],
     };
   });
+
   const back2Style = useAnimatedStyle(() => {
     const t = stackShiftT.value;
     const dir = stackShiftDir.value;
@@ -758,84 +682,144 @@ export default function SwipeLabScreen() {
   });
 
   return (
-      <Animated.ScrollView
-        style={{ flex: 1, backgroundColor: surface }}
-        contentContainerStyle={{ padding: 24, paddingBottom: 80, alignItems: "center" }}
-        scrollEventThrottle={16}
-      >
-        <Text style={{ color: text, fontSize: 20, fontWeight: "700" }}>
-          Swipe Controls Lab · {currentDeck?.title ?? "Deck"}
-        </Text>
-        <Text style={{ color: muted, marginTop: 6, lineHeight: 20 }}>
-          • Left-ish / horizontal / "\" diagonal → NEXT (top-left only){"\n"}
-          • Pull right → PREV (diagonal from top-left){"\n"}
-          • Vertical-ish or "/" diagonal → SCROLL{"\n"}
-          • Tap card → open page
-        </Text>
+    <View style={{ alignItems: "center" }}>
+      <Text style={{ color: text, fontSize: 18, fontWeight: "800" }}>{header}</Text>
+      <Text style={{ color: muted, marginTop: 6, lineHeight: 20, textAlign: "center" }}>
+        • Left-ish / horizontal / "\\" diagonal → NEXT (top-left only){"\n"}
+        • Pull right → PREV (diagonal from top-left){"\n"}
+        • Vertical-ish or "/" diagonal → SCROLL{"\n"}
+        • Tap card → open page
+      </Text>
 
-        <View style={{ height: 16 }} />
+      <View style={{ height: 14 }} />
 
-        <View style={{ width: STAGE_W, height: STAGE_H, position: "relative", marginTop: 10 }}>
-          <View style={{ position: "absolute", left: ORIGIN_X, top: ORIGIN_Y, width: CARD_SIZE, height: CARD_SIZE }}>
-            {/* Background stack shows UPCOMING cards (next1/next2/next3).
-                This removes the "gap" (Card 10 sits directly behind Card 9). */}
-            {backCountFinal >= 3 ? (
-              next3 ? (
-                <CardShell borderAlpha={stackNow[0].borderA} style={back0Style} title={next3.title} body={next3.body} />
-              ) : null
-            ) : null}
+      <View style={{ width: STAGE_W, height: STAGE_H, position: "relative", marginTop: 10 }}>
+        <View style={{ position: "absolute", left: ORIGIN_X, top: ORIGIN_Y, width: CARD_SIZE, height: CARD_SIZE }}>
+          {/* Background stack shows UPCOMING cards (next1/next2/next3). */}
+          {backCountFinal >= 3 && next3 ? (
+            <CardShell borderAlpha={stackNow[0].borderA} style={back0Style} title={next3.title} body={next3.body} />
+          ) : null}
 
-            {backCountFinal >= 2 ? (
-              next2 ? (
-                <CardShell borderAlpha={stackNow[1].borderA} style={back1Style} title={next2.title} body={next2.body} />
-              ) : null
-            ) : null}
+          {backCountFinal >= 2 && next2 ? (
+            <CardShell borderAlpha={stackNow[1].borderA} style={back1Style} title={next2.title} body={next2.body} />
+          ) : null}
 
-            {backCountFinal >= 1 ? (
-              next1 ? (
-                <CardShell borderAlpha={stackNow[2].borderA} style={back2Style} title={next1.title} body={next1.body} />
-              ) : null
-            ) : null}
+          {backCountFinal >= 1 && next1 ? (
+            <CardShell borderAlpha={stackNow[2].borderA} style={back2Style} title={next1.title} body={next1.body} />
+          ) : null}
 
+          <CardShell
+            borderAlpha={stackNow[3].borderA}
+            style={currentCardStyle}
+            gesture={cardGesture}
+            title={current.title}
+            body={`${current.body}${next ? `\n\nNext: ${next.title}` : "\n\nNo next card."}`}
+          />
 
+          {ghostPrev ? (
             <CardShell
               borderAlpha={stackNow[3].borderA}
-              style={currentCardStyle}
-              gesture={cardGesture}
-              title={current.title}
-              body={`${current.body}${next ? `\n\nNext: ${next.title}` : "\n\nNo next card."}`}
+              style={ghostPrevCardStyle}
+              title={ghostPrev.title}
+              body={ghostPrev.body}
             />
+          ) : null}
 
-            {ghostPrev ? (
-              <CardShell borderAlpha={stackNow[3].borderA} style={ghostPrevCardStyle} title={ghostPrev.title} body={ghostPrev.body} />
-            ) : null}
-
-            {ghost ? (
-              <CardShell borderAlpha={stackNow[3].borderA} style={ghostCardStyle} title={ghost.title} body={ghost.body} />
-            ) : null}
-          </View>
+          {ghost ? (
+            <CardShell
+              borderAlpha={stackNow[3].borderA}
+              style={ghostCardStyle}
+              title={ghost.title}
+              body={ghost.body}
+            />
+          ) : null}
         </View>
+      </View>
+    </View>
+  );
+}
 
-        <View style={{ height: 24 }} />
+export default function SwipeLabScreen() {
+  const router = useRouter();
+  const scheme = useColorScheme();
+  const isDark = scheme !== "light";
+  const surface = isDark ? "#0b0d10" : "#ffffff";
+  const text = isDark ? "#ffffff" : "#0a0a0a";
+  const muted = isDark ? "rgba(255,255,255,0.68)" : "rgba(0,0,0,0.62)";
 
-        <Text style={{ color: text, fontSize: 16, fontWeight: "700" }}>Scroll content below</Text>
-        {Array.from({ length: 10 }).map((_, idx) => (
+  const decks: Deck[] = useMemo(() => {
+    const makeCard = (deckId: string, n: number): Card => {
+      const id = `${deckId}-${n + 1}`;
+      return {
+        id,
+        title: `Deck ${deckId.toUpperCase()} · Card ${n + 1}`,
+        body:
+          n === 0
+            ? "Diagonal rail NEXT → top-left only. Tap to open."
+            : n === 1
+              ? 'Tier-2 arbitration: "/" scrolls, "\\\\" swipes.'
+              : n === 2
+                ? "Prev comes from top-left diagonally."
+                : n === 8
+                  ? "Deck is running low… (9/10)"
+                  : n === 9
+                    ? "Last card of this deck (10/10)."
+                    : "Scroll rules still apply.",
+      };
+    };
+
+    return Array.from({ length: DECK_COUNT }).map((_, di) => {
+      const deckId = String.fromCharCode("a".charCodeAt(0) + di);
+      return {
+        id: deckId,
+        title: `Deck ${deckId.toUpperCase()}`,
+        cards: Array.from({ length: CARDS_PER_DECK }).map((__, ci) => makeCard(deckId, ci)),
+      };
+    });
+  }, []);
+
+  const feed = useMemo(
+    () =>
+      Array.from({ length: 10 }).map((_, i) => ({
+        key: `feed-${i}`,
+        deckIndex: i % DECK_COUNT,
+        header: `Swipe Controls Lab · Deck ${String.fromCharCode("A".charCodeAt(0) + (i % DECK_COUNT))} · #${i + 1}`,
+      })),
+    []
+  );
+
+  const onOpenCard = (id: string) => {
+    if (!id) return;
+    router.push(`/card/${id}`);
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: surface }}>
+      <FlatList
+        data={feed}
+        keyExtractor={(it) => it.key}
+        contentContainerStyle={{ padding: 18, paddingBottom: 80, gap: 26 }}
+        renderItem={({ item }) => (
+          <SwipeDeckInstance
+            decks={decks}
+            deckIndex={item.deckIndex}
+            header={item.header}
+            surface={surface}
+            text={text}
+            muted={muted}
+            onOpenCard={onOpenCard}
+          />
+        )}
+        ItemSeparatorComponent={() => (
           <View
-            key={idx}
             style={{
-              width: "100%",
-              maxWidth: 480,
-              height: 56,
-              borderRadius: 14,
-              backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
-              marginTop: 10,
-              justifyContent: "center",
-              paddingHorizontal: 14,
+              height: 1,
+              marginVertical: 22,
+              backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
             }}
-          >
-            <Text style={{ color: muted }}>Row #{idx + 1}</Text>
-          </View>
-        ))}
-      </Animated.ScrollView>
+          />
+        )}
+      />
+    </View>
   );
 }
