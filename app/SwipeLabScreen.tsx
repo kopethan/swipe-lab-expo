@@ -337,13 +337,22 @@ export default function SwipeLabScreen() {
     "worklet";
     // Bring incoming ghost to CENTER first (mirror of NEXT dismiss),
     // THEN swap index so content changes exactly when it lands.
+    // While doing so, drive the stack conveyor BACKWARD so the background shifts "deeper"
+    // and the far card can fall off.
     ghostPrevOpacity.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
     ghostPrevScale.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
-    snapStackShiftToZero();
+
+    stackShiftDir.value = -1;
+    stackShiftT.value = withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic) });
+
     ghostPrevX.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
     ghostPrevY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, (fin) => {
       if (fin) {
+        // ✅ Persist PREV: update state so the new top card becomes the previous one.
         runOnJS(goPrevJS)();
+
+        // Reset conveyor after index swap so the new stack settles without popping.
+        stackShiftT.value = 0;
         prevMode.value = false;
         runOnJS(clearGhostPrevJS)();
         intent.value = "UNDECIDED";
@@ -597,10 +606,21 @@ export default function SwipeLabScreen() {
 
   const currentCardStyle = useAnimatedStyle(() => {
     const rotate = (tx.value / SCREEN_W) * 6;
+    // When doing PREV, the current card must join the "backward conveyor":
+    // it slides from the front slot (STACK[3]) toward the next1 slot (STACK[2]).
+    const t = stackShiftT.value;
+    const isPrev = stackShiftDir.value < 0;
+    const prevShiftX = isPrev ? STACK[2].dx * t : 0;
+    const prevShiftY = isPrev ? STACK[2].dy * t : 0;
     return {
       zIndex: front.z,
       opacity: opacity.value,
-      transform: [{ translateX: tx.value }, { translateY: ty.value }, { rotateZ: `${rotate}deg` }, { scale: scale.value }],
+      transform: [
+        { translateX: tx.value + prevShiftX },
+        { translateY: ty.value + prevShiftY },
+        { rotateZ: `${rotate}deg` },
+        { scale: scale.value },
+      ],
     };
   });
 
@@ -690,15 +710,23 @@ export default function SwipeLabScreen() {
     const t = stackShiftT.value;
     const dir = stackShiftDir.value;
     const a = STACK[0];
-    // When pulling PREV, the farthest card should move "further back"
-    // to create the feel that a last card disappears.
-    const STACK_FAR = { dx: STACK[0].dx + 8, dy: STACK[0].dy + 8 };
+
+    // When pulling/committing PREV, push the farthest card "deeper" and fade it out
+    // so it feels like it falls off the back of the stack.
+    const STACK_FAR = { dx: STACK[0].dx + 4, dy: STACK[0].dy + 4 };
     const b = dir > 0 ? STACK[1] : STACK_FAR;
+
+    const isPrev = dir < 0;
+    const farOpacity = isPrev ? 1 - 0.85 * t : 1;
+    const farScale = isPrev ? 1 - 0.03 * t : 1;
+
     return {
       zIndex: a.z,
+      opacity: farOpacity,
       transform: [
         { translateX: a.dx + (b.dx - a.dx) * t },
         { translateY: a.dy + (b.dy - a.dy) * t },
+        { scale: farScale },
       ],
     };
   });
