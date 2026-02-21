@@ -94,14 +94,13 @@ function SwipeDeckInstance({
   const PREV_START_X = -CARD_SIZE * 0.55;
   const PREV_START_Y = -Math.abs(PREV_START_X) * RAIL_K;
 
-  const DISMISS_MS = 160;
+  const DISMISS_MS = 240;
 
   // ---- Atomic position (prevents deck/card desync) ----
   const [pos, setPos] = useState<Pos>({ d: deckIndex, c: 0 });
 
   const [ghostPos, setGhostPos] = useState<Pos | null>(null); // NEXT ghost-out (old current)
-  const [ghostPrevPos, setGhostPrevPos] = useState<Pos | null>(null); // PREV ghost-in (incoming)
-
+  
   // worklet-visible index + current id for tap navigation
   const deckSV = useSharedValue(pos.d);
   const cardSV = useSharedValue(pos.c);
@@ -172,7 +171,7 @@ function SwipeDeckInstance({
   // PREV "incoming ghost"
   const ghostPrevX = useSharedValue(PREV_START_X);
   const ghostPrevY = useSharedValue(PREV_START_Y);
-  const ghostPrevOpacity = useSharedValue(1);
+  const ghostPrevOpacity = useSharedValue(0);
   const ghostPrevScale = useSharedValue(1);
 
   // PREV mode flag
@@ -204,8 +203,7 @@ function SwipeDeckInstance({
     });
   };
 
-  const clearGhostPrevJS = () => setGhostPrevPos(null);
-
+  
   // Tap should open details, not swipe/scroll
   const tapGesture = Gesture.Tap()
     .maxDistance(6)
@@ -226,19 +224,19 @@ function SwipeDeckInstance({
 
   const snapStackShiftToZero = () => {
     "worklet";
-    stackShiftT.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad) });
+    stackShiftT.value = withTiming(0, { duration: 160, easing: Easing.out(Easing.cubic) });
   };
 
   const resetTopVisuals = () => {
     "worklet";
-    scale.value = withSpring(1, { damping: 18, stiffness: 240 });
-    opacity.value = withSpring(1, { damping: 18, stiffness: 240 });
+    scale.value = withSpring(1, { damping: 22, stiffness: 180, mass: 0.9 });
+    opacity.value = withSpring(1, { damping: 22, stiffness: 180, mass: 0.9 });
   };
 
   const resetDragCard = () => {
     "worklet";
-    tx.value = withSpring(0, { damping: 18, stiffness: 240 });
-    ty.value = withSpring(0, { damping: 18, stiffness: 240 });
+    tx.value = withSpring(0, { damping: 22, stiffness: 180, mass: 0.9 });
+    ty.value = withSpring(0, { damping: 22, stiffness: 180, mass: 0.9 });
     resetTopVisuals();
     snapStackShiftToZero();
     intent.value = "UNDECIDED";
@@ -248,14 +246,12 @@ function SwipeDeckInstance({
     "worklet";
     prevMode.value = false;
 
-    ghostPrevOpacity.value = 1;
-    ghostPrevScale.value = 1;
+    ghostPrevOpacity.value = withTiming(0, { duration: 140, easing: Easing.out(Easing.cubic) });
+    ghostPrevScale.value = withTiming(0.99, { duration: 140, easing: Easing.out(Easing.cubic) });
     snapStackShiftToZero();
 
     ghostPrevX.value = withTiming(PREV_START_X, { duration: 140, easing: Easing.out(Easing.cubic) });
-    ghostPrevY.value = withTiming(PREV_START_Y, { duration: 140, easing: Easing.out(Easing.cubic) }, (fin) => {
-      if (fin) runOnJS(clearGhostPrevJS)();
-    });
+    ghostPrevY.value = withTiming(PREV_START_Y, { duration: 140, easing: Easing.out(Easing.cubic) });
     intent.value = "UNDECIDED";
   };
 
@@ -271,7 +267,7 @@ function SwipeDeckInstance({
     prevMode.value = false;
     ghostPrevX.value = PREV_START_X;
     ghostPrevY.value = PREV_START_Y;
-    runOnJS(clearGhostPrevJS)();
+    
     snapStackShiftToZero();
 
     ghostX.value = tx.value;
@@ -285,8 +281,8 @@ function SwipeDeckInstance({
     opacity.value = 1;
     scale.value = 1;
 
-    ghostOpacity.value = withTiming(0, { duration: DISMISS_MS, easing: Easing.out(Easing.quad) });
-    ghostScale.value = withTiming(0.96, { duration: DISMISS_MS, easing: Easing.out(Easing.quad) });
+    ghostOpacity.value = withTiming(0, { duration: DISMISS_MS, easing: Easing.out(Easing.cubic) });
+    ghostScale.value = withTiming(0.985, { duration: DISMISS_MS, easing: Easing.out(Easing.cubic) });
 
     ghostX.value = withTiming(-SCREEN_W * 1.2, { duration: DISMISS_MS, easing: Easing.out(Easing.cubic) });
     ghostY.value = withTiming(-SCREEN_H * 0.45, { duration: DISMISS_MS, easing: Easing.out(Easing.cubic) }, (fin) => {
@@ -297,19 +293,21 @@ function SwipeDeckInstance({
   const commitPrevCard = () => {
     "worklet";
     // Bring incoming ghost to CENTER first, THEN swap index so content changes exactly when it lands.
-    ghostPrevOpacity.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
-    ghostPrevScale.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) });
+    ghostPrevOpacity.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) });
+    ghostPrevScale.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) });
 
     stackShiftDir.value = -1;
-    stackShiftT.value = withTiming(1, { duration: 150, easing: Easing.out(Easing.cubic) });
+    stackShiftT.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) });
 
-    ghostPrevX.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) });
-    ghostPrevY.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, (fin) => {
+    ghostPrevX.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.cubic) });
+    ghostPrevY.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.cubic) }, (fin) => {
       if (fin) {
         runOnJS(goPrevJS)();
         stackShiftT.value = 0;
         prevMode.value = false;
-        runOnJS(clearGhostPrevJS)();
+        ghostPrevOpacity.value = 0;
+        ghostPrevX.value = PREV_START_X;
+        ghostPrevY.value = PREV_START_Y;
         intent.value = "UNDECIDED";
       }
     });
@@ -329,7 +327,7 @@ function SwipeDeckInstance({
       prevMode.value = false;
       ghostPrevX.value = PREV_START_X;
       ghostPrevY.value = PREV_START_Y;
-      runOnJS(clearGhostPrevJS)();
+      
     })
     .onTouchesMove((e, state) => {
       "worklet";
@@ -445,8 +443,10 @@ function SwipeDeckInstance({
         ty.value = railY + dyUpOnly * 0.12;
 
         const p = clamp(Math.abs(x) / NEXT_DISMISS_X, 0, 1);
-        opacity.value = 1 - 0.35 * p;
-        scale.value = 1 - 0.03 * p;
+        const p2 = p * p;
+        // Keep the card "solid" (Wallet-like): avoid early fade; let motion do the work.
+        opacity.value = 1 - 0.10 * p2;
+        scale.value = 1 - 0.02 * p;
         return;
       }
 
@@ -466,10 +466,6 @@ function SwipeDeckInstance({
           ghostPrevY.value = PREV_START_Y;
           ghostPrevOpacity.value = 1;
           ghostPrevScale.value = 1;
-          const d = pos.d;
-          const c = Math.floor(cardSV.value);
-          const p: Pos = { d, c: Math.max(0, c - 1) };
-          runOnJS(setGhostPrevPos)(p);
         }
 
         const pull = clamp(dx, 0, PREV_PULL_X);
@@ -536,7 +532,7 @@ function SwipeDeckInstance({
   const cardGesture = Gesture.Simultaneous(tapGesture, pan);
 
   const currentCardStyle = useAnimatedStyle(() => {
-    const rotate = (tx.value / SCREEN_W) * 6;
+    const rotate = (tx.value / SCREEN_W) * 4;
     // PREV conveyor: current card slides behind (toward STACK[2]) while PREV progresses.
     const t = stackShiftT.value;
     const isPrev = stackShiftDir.value < 0;
@@ -568,7 +564,7 @@ function SwipeDeckInstance({
   });
 
   const ghostCardStyle = useAnimatedStyle(() => {
-    const rotate = (ghostX.value / SCREEN_W) * 6;
+    const rotate = (ghostX.value / SCREEN_W) * 4;
     return {
       zIndex: 999,
       opacity: ghostOpacity.value,
@@ -625,7 +621,7 @@ function SwipeDeckInstance({
     return gesture ? <GestureDetector gesture={gesture}>{node}</GestureDetector> : node;
   };
 
-  const ghostPrev = posToCard(ghostPrevPos);
+  const prevCard = hasPrev ? posToCard({ d: pos.d, c: pos.c - 1 }) : null;
   const ghost = posToCard(ghostPos);
 
   // ----- Animated back-layer transforms (stack conveyor polish) -----
@@ -716,12 +712,12 @@ function SwipeDeckInstance({
             body={`${current.body}${next ? `\n\nNext: ${next.title}` : "\n\nNo next card."}`}
           />
 
-          {ghostPrev ? (
+          {prevCard ? (
             <CardShell
               borderAlpha={stackNow[3].borderA}
               style={ghostPrevCardStyle}
-              title={ghostPrev.title}
-              body={ghostPrev.body}
+              title={prevCard.title}
+              body={prevCard.body}
             />
           ) : null}
 

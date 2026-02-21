@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, useColorScheme, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
   runOnJS,
@@ -40,193 +41,274 @@ export function WalletStack({ cards, cardHeight = 520, maxVisible = 4 }: Props) 
   const scheme = useColorScheme();
   const isDark = scheme !== "light";
   const n = Math.max(1, cards.length);
-  const [order, setOrder] = useState<number[]>(() => cards.map((_, i) => i));
+  const [activeIndex, setActiveIndex] = useState(0);
 
   // Prevent rapid re-entrancy (wheel + drag, etc.).
-  const animatingRef = useRef(false);
+  // Use a shared value so worklets can read it without runOnJS.
+  const animLock = useSharedValue(0);
 
+  // A single progress value drives the whole deck.
+  // 0 = resting (current card on top)
+  // +1 = fully advanced to next card
+  // -1 = fully pulled back to previous card
+  const progress = useSharedValue(0);
+
+  // Tuning knobs (feel free to tweak).
   const PEEK = 18;
-  const THRESH = 84;
-  const EXIT = Math.min(cardHeight * 0.35, 220);
+  const LIFT = 42;
+  const EXIT = Math.min(cardHeight * 0.55, 330);
 
-  const dragY = useSharedValue(0);
+  // Hitbox height: let the TOP card capture wheel/drag even when the cursor is
+  // over the exposed "peeking" area of background cards.
+  // This fixes the feeling that the back card is being swiped.
+  const hitboxHeight = cardHeight + maxVisible * PEEK + 36;
 
-  const visible = useMemo(() => {
-    const top = order.slice(0, maxVisible);
-    const last = order[order.length - 1];
-    if (last != null && !top.includes(last)) return [...top, last];
-    return top;
-  }, [order, maxVisible]);
+  // How far a vertical swipe must travel (in px) to reach a full +/-1 progress.
+  // Lower = more sensitive.
+  const DRAG_TO_PROGRESS = 210;
+  const COMMIT_THRESH = 0.35;
+  const WHEEL_TO_PROGRESS = 0.0018; // deltaY -> progress
 
-  const rotateNext = () => {
-    setOrder((prev) => {
-      if (prev.length <= 1) return prev;
-      return prev.slice(1).concat(prev[0]);
+  // We always render a small window around the active card:
+  // prev (-1), active (0), and a few cards behind it (+1..).
+  // Important: keep indices unique (avoid duplicate React keys when n is small).
+  const offsets = useMemo(() => {
+    if (n <= 1) return [0];
+    const out: number[] = [-1, 0];
+    const maxBehind = Math.min(maxVisible - 1, n - 2);
+    for (let i = 1; i <= maxBehind; i++) out.push(i);
+    return out;
+  }, [maxVisible, n]);
+
+  const rotate = (dir: "next" | "prev") => {
+    setActiveIndex((prev) => {
+      if (n <= 1) return prev;
+      return dir === "next" ? (prev + 1) % n : (prev - 1 + n) % n;
     });
   };
-  const rotatePrev = () => {
-    setOrder((prev) => {
-      if (prev.length <= 1) return prev;
-      const last = prev[prev.length - 1];
-      return [last, ...prev.slice(0, -1)];
-    });
+
+  const unlockJS = () => {
+    animLock.value = 0;
   };
 
-  const commit = (dir: "next" | "prev") => {
-    if (animatingRef.current) return;
-    animatingRef.current = true;
-
-    const target = dir === "next" ? -EXIT : EXIT;
-    dragY.value = withTiming(
+  const commitTo = (target: -1 | 0 | 1) => {
+    // JS entry-point for wheel snapping.
+    if (animLock.value) return;
+    animLock.value = 1;
+    cancelAnimation(progress);
+    progress.value = withTiming(
       target,
       { duration: 240, easing: Easing.out(Easing.cubic) },
       (finished) => {
-        if (finished) {
-          runOnJS(dir === "next" ? rotateNext : rotatePrev)();
+        if (finished && target !== 0) {
+          runOnJS(rotate)(target === 1 ? "next" : "prev");
         }
-        dragY.value = 0;
-        runOnJS(() => {
-          animatingRef.current = false;
-        })();
+        // Re-index instantly after commit (no visible jump because cards are keyed).
+        progress.value = 0;
+        runOnJS(unlockJS)();
       }
     );
   };
 
-  // Web wheel -> next/prev (discrete).
-  const wheelAcc = useRef(0);
-  const onWheel = (e: any) => {
-    // RN-web uses a synthetic event; prevent page scroll when interacting with the deck.
-    e?.preventDefault?.();
-    e?.stopPropagation?.();
-    const dy = Number(e?.deltaY ?? 0);
-    wheelAcc.current += dy;
-
-    if (Math.abs(wheelAcc.current) > 70) {
-      const dir = wheelAcc.current > 0 ? "next" : "prev";
-      wheelAcc.current = 0;
-      commit(dir);
+  const snapFromCurrent = () => {
+    const p = progress.value;
+    if (Math.abs(p) >= COMMIT_THRESH) {
+      commitTo(p > 0 ? 1 : -1);
+    } else {
+      commitTo(0);
     }
   };
 
-  // Drag handle -> next/prev (smooth threshold).
+  // Web wheel -> continuous progress with smoothing + snap on idle.
+  const wheelIdleTimer = useRef<any>(null);
+  const onWheel = (e: any) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    if (animLock.value) return;
+    const dy = Number(e?.deltaY ?? 0);
+    cancelAnimation(progress);
+    const nextTarget = clamp(progress.value + dy * WHEEL_TO_PROGRESS, -1, 1);
+    progress.value = withTiming(nextTarget, { duration: 140, easing: Easing.out(Easing.cubic) });
+
+    if (wheelIdleTimer.current) clearTimeout(wheelIdleTimer.current);
+    wheelIdleTimer.current = setTimeout(() => {
+      snapFromCurrent();
+    }, 120);
+  };
+
+  // Vertical swipe anywhere on the top card.
+  // (No handle. Works for mouse-drag and touch on web/mobile-web.)
   const pan = useMemo(() => {
     return Gesture.Pan()
+      .activeOffsetY([-8, 8])
+      .failOffsetX([-30, 30])
+      .minDistance(4)
       .onUpdate((ev) => {
-        if (animatingRef.current) return;
-        // Clamp to avoid absurd drags.
-        dragY.value = clamp(ev.translationY, -EXIT, EXIT);
+        if (animLock.value) return;
+        const p = clamp(-ev.translationY / DRAG_TO_PROGRESS, -1, 1);
+        progress.value = p;
       })
       .onEnd(() => {
-        if (animatingRef.current) return;
-        const y = dragY.value;
-        if (y < -THRESH) {
-          commit("next");
-          return;
-        }
-        if (y > THRESH) {
-          commit("prev");
-          return;
-        }
-        dragY.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) });
+        if (animLock.value) return;
+        const p = progress.value;
+        const target: -1 | 0 | 1 = Math.abs(p) >= COMMIT_THRESH ? (p > 0 ? 1 : -1) : 0;
+        animLock.value = 1;
+        cancelAnimation(progress);
+        progress.value = withTiming(
+          target,
+          { duration: 240, easing: Easing.out(Easing.cubic) },
+          (finished) => {
+            if (finished && target !== 0) {
+              runOnJS(rotate)(target === 1 ? "next" : "prev");
+            }
+            progress.value = 0;
+            animLock.value = 0;
+          }
+        );
       });
-  }, [EXIT, THRESH]);
+  }, [DRAG_TO_PROGRESS, COMMIT_THRESH]);
 
   return (
     <View
       style={[
         styles.stage,
         {
-          height: cardHeight + (maxVisible - 1) * PEEK,
+          height: hitboxHeight,
         },
+        Platform.OS === "web" ? (styles as any).webStage : null,
       ]}
       // @ts-expect-error RN-web supports onWheel on View
       onWheel={Platform.OS === "web" ? onWheel : undefined}
     >
-      {visible.map((cardIndex, renderPos) => {
-        // renderPos is *visual* stack position for what we render.
-        const stackPos = Math.min(renderPos, maxVisible - 1);
-        const isTop = renderPos === 0;
-        const spec = cards[cardIndex];
+      {offsets
+        // Render from back to front for nicer stacking (deep cards first).
+        .slice()
+        .sort((a, b) => b - a)
+        .map((offset) => {
+        const idx = (activeIndex + offset + n) % n;
+        const spec = cards[idx];
+        const isTop = offset === 0;
 
         const cardStyle = useAnimatedStyle(() => {
-          const y = dragY.value;
-          const tNext = clamp(-y / THRESH, 0, 1);
-          const tPrev = clamp(y / THRESH, 0, 1);
-          const t = y < 0 ? tNext : tPrev;
+          const raw = progress.value;
+          const p = clamp(raw, 0, 1);
+          const q = clamp(-raw, 0, 1);
 
-          // Default “peeking” base.
-          const baseY = stackPos * PEEK;
-          const baseScale = 1 - stackPos * 0.035;
-          const baseOpacity = 1 - stackPos * 0.12;
+          const posY = (pos: number) => {
+            "worklet";
+            if (pos === -1) return -Math.min(PEEK * 2.2, 44);
+            return clamp(pos, 0, maxVisible - 1) * PEEK;
+          };
 
-          // During drag, shift stack slightly to preview next/prev.
-          // Top follows finger/wheel impulse.
-          let ty = baseY;
-          if (isTop) {
-            ty = y;
-          } else {
-            // When going next, cards move up one slot.
-            // When going prev, cards move down one slot.
-            const dir = y < 0 ? -1 : 1;
-            const targetPos = clamp(stackPos + dir, 0, maxVisible - 1);
-            const targetY = targetPos * PEEK;
-            ty = baseY + (targetY - baseY) * t;
+          const posScale = (pos: number) => {
+            "worklet";
+            if (pos === -1) return 0.985;
+            return 1 - clamp(pos, 0, maxVisible - 1) * 0.03;
+          };
+
+          const posOpacity = (pos: number) => {
+            "worklet";
+            if (pos === -1) return 0.96;
+            return 1 - clamp(pos, 0, maxVisible - 1) * 0.10;
+          };
+
+          // Base at rest.
+          const y0 = posY(offset);
+          const s0 = posScale(offset);
+          const o0 = posOpacity(offset);
+
+          // Forward (p): everything shifts up by one slot.
+          // Backward (q): everything shifts down by one slot, and prev (-1) becomes top.
+          let y = y0;
+          let s = s0;
+          let o = o0;
+
+          if (p > 0) {
+            if (offset === 0) {
+              // Top card exits upward.
+              y = interpolate(p, [0, 1], [0, -EXIT]);
+              s = interpolate(p, [0, 1], [1, 0.985]);
+              // Keep opacity high; only soften near the end.
+              o = interpolate(p, [0, 0.85, 1], [1, 0.97, 0.92]);
+            } else if (offset >= 1) {
+              const y1 = posY(offset - 1);
+              const s1 = posScale(offset - 1);
+              const o1 = posOpacity(offset - 1);
+              y = y0 + (y1 - y0) * p - (offset === 1 ? LIFT * p : 8 * p);
+              s = s0 + (s1 - s0) * p;
+              o = o0 + (o1 - o0) * p;
+            } else {
+              // prev card stays tucked above.
+              y = y0;
+              s = s0;
+              o = o0;
+            }
+          } else if (q > 0) {
+            if (offset === -1) {
+              // Previous card slides down into the top.
+              const y1 = posY(0);
+              const s1 = posScale(0);
+              const o1 = posOpacity(0);
+              y = y0 + (y1 - y0) * q;
+              s = s0 + (s1 - s0) * q;
+              o = o0 + (o1 - o0) * q;
+            } else if (offset === 0) {
+              // Current top becomes second.
+              const y1 = posY(1);
+              const s1 = posScale(1);
+              const o1 = posOpacity(1);
+              y = y0 + (y1 - y0) * q + LIFT * q;
+              s = s0 + (s1 - s0) * q;
+              o = o0 + (o1 - o0) * q;
+            } else if (offset >= 1) {
+              const y1 = posY(offset + 1);
+              const s1 = posScale(offset + 1);
+              const o1 = posOpacity(offset + 1);
+              y = y0 + (y1 - y0) * q;
+              s = s0 + (s1 - s0) * q;
+              o = o0 + (o1 - o0) * q;
+            }
           }
 
-          // Fade the top card as it leaves, to sell the “swap”.
-          const topFade = isTop
-            ? interpolate(Math.abs(y), [0, EXIT * 0.85], [1, 0.0])
-            : baseOpacity;
+          // zIndex rules:
+          // - At rest / moving forward: current top (0) is above everything.
+          // - When pulling backward (raw < 0): previous (-1) should come above.
+          let z = 0;
+          if (offset === 0) z = raw < 0 ? 200 : 300;
+          else if (offset === -1) z = raw < 0 ? 310 : 150;
+          else z = 200 - offset;
 
           return {
-            transform: [{ translateY: ty }, { scale: isTop ? 1 : baseScale }],
-            opacity: isTop ? topFade : baseOpacity,
+            transform: [{ translateY: y }, { scale: s }],
+            opacity: o,
+            zIndex: z,
           };
-        }, [PEEK, THRESH, EXIT, maxVisible]);
+        }, [PEEK, LIFT, EXIT, maxVisible]);
 
-        return (
+        // Bold borders like feed cards: stronger on top, lighter behind.
+        const borderA = offset === 0 ? 0.95 : offset === 1 ? 0.55 : offset === 2 ? 0.35 : offset === -1 ? 0.35 : 0.22;
+        const borderColor = isDark
+          ? `rgba(255,255,255,${Math.max(0, Math.min(0.5, borderA * 0.5))})`
+          : `rgba(0,0,0,${Math.max(0, Math.min(0.22, borderA * 0.22))})`;
+
+        const cardInner = (
           <Animated.View
-            key={spec.key}
             style={[
               styles.card,
               {
                 height: cardHeight,
-                zIndex: 100 - renderPos,
-                borderColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)",
-                backgroundColor: isDark ? "rgba(30,30,30,0.92)" : "rgba(255,255,255,0.92)",
+                borderColor,
+                // Make the active card more opaque to avoid visual confusion
+                // (seeing background card content through the top card).
+                backgroundColor: isDark
+                  ? `rgba(20,20,20,${offset === 0 ? 0.985 : 0.92})`
+                  : `rgba(255,255,255,${offset === 0 ? 0.985 : 0.94})`,
               },
+              (Platform.OS === "web" ? (styles as any).webCard : null) as any,
               cardStyle,
             ]}
             pointerEvents={isTop ? "auto" : "none"}
           >
-            {/* Handle (always visible) */}
-            <GestureDetector gesture={pan}>
-              <View
-                style={[
-                  styles.handleRow,
-                  { backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)" },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.handleDot,
-                    { backgroundColor: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.22)" },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.handleDot,
-                    { backgroundColor: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.22)" },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.handleDot,
-                    { backgroundColor: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.22)" },
-                  ]}
-                />
-              </View>
-            </GestureDetector>
 
             {/* Header */}
             <View style={styles.header}>
@@ -264,7 +346,7 @@ export function WalletStack({ cards, cardHeight = 520, maxVisible = 4 }: Props) 
                     { color: isDark ? "rgba(46,229,255,0.90)" : "rgba(15,118,110,0.95)" },
                   ]}
                 >
-                  {renderPos === 0 ? "Active" : ""}
+                  {isTop ? "Active" : ""}
                 </Animated.Text>
               </View>
             </View>
@@ -272,6 +354,21 @@ export function WalletStack({ cards, cardHeight = 520, maxVisible = 4 }: Props) 
             {/* Body (top card only) */}
             <View style={styles.body}>{isTop ? spec.render() : null}</View>
           </Animated.View>
+        );
+
+        return isTop ? (
+          <GestureDetector key={spec.key} gesture={pan}>
+            <Animated.View
+              style={[styles.hitbox, { height: hitboxHeight, zIndex: 9999 }]}
+              pointerEvents="auto"
+              // @ts-expect-error RN-web supports onWheel on View
+              onWheel={Platform.OS === "web" ? onWheel : undefined}
+            >
+              {cardInner}
+            </Animated.View>
+          </GestureDetector>
+        ) : (
+          <React.Fragment key={spec.key}>{cardInner}</React.Fragment>
         );
       })}
     </View>
@@ -284,25 +381,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  hitbox: {
+    position: "absolute",
+    width: "92%",
+    maxWidth: 720,
+    borderRadius: 22,
+    backgroundColor: "transparent",
+  },
   card: {
     position: "absolute",
     width: "92%",
     maxWidth: 720,
     borderRadius: 22,
-    borderWidth: 1,
+    borderWidth: 4,
     overflow: "hidden",
-  },
-  handleRow: {
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  handleDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 999,
   },
   header: {
     paddingHorizontal: 18,
@@ -337,5 +429,16 @@ const styles = StyleSheet.create({
   body: {
     paddingHorizontal: 18,
     paddingBottom: 18,
+  },
+  // RN-web extras
+  webStage: {
+    // Prevent browser scroll/pinch from stealing the gesture.
+    // (RN-web will pass this through to the DOM.)
+    // @ts-expect-error web-only
+    touchAction: "none",
+  },
+  webCard: {
+    // @ts-expect-error web-only
+    boxShadow: "0 24px 60px rgba(0,0,0,0.40)",
   },
 });

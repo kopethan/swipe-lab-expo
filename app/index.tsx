@@ -1,2 +1,2 @@
-import WalletStackTemplateScreen from "./wallet";
-export default WalletStackTemplateScreen;
+import RailSettingsTemplateScreen from "./rails";
+export default RailSettingsTemplateScreen;

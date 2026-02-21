@@ -117,7 +117,7 @@ export default function WalletStackTemplateScreen() {
           Wallet Stack Template
         </Text>
         <Text style={[styles.p, { color: isDark ? "rgba(255,255,255,0.70)" : "#4b5563" }]}>
-          Scroll wheel (web) or drag the handle to rotate sections. Loops infinitely.
+          Scroll (wheel/trackpad) or swipe the top card to rotate sections. Loops infinitely.
         </Text>
       </View>
 
