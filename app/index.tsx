@@ -1,2 +1,2 @@
-import SwipeLabScreen from "./SwipeLabScreen";
-export default SwipeLabScreen;
+import WalletStackTemplateScreen from "./wallet";
+export default WalletStackTemplateScreen;
