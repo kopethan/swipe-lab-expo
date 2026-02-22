@@ -518,6 +518,17 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
               const p = clamp(raw, 0, 1);
               const q = clamp(-raw, 0, 1);
 
+              // Polish: move the stack "conveyor-style" so the next/prev card
+              // begins filling the top position immediately. This prevents a
+              // visible "gap" while the active card travels.
+              const easeShift = (x: number) => {
+                "worklet";
+                // Fast-at-start curve (0..1).
+                return 1 - Math.pow(2, -8 * x);
+              };
+              const tf = clamp(easeShift(p), 0, 1);
+              const tb = clamp(easeShift(q), 0, 1);
+
               const d0 = it.depth;
 
               // Base pose (resting)
@@ -543,9 +554,11 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
                   const s1 = depthScale(d1);
                   const o1 = depthOpacity(d1);
 
-                  y = y + (y1 - y) * p - (d0 === 1 ? LIFT * p : 0);
-                  s = s + (s1 - s) * p;
-                  o = o + (o1 - o) * p;
+                  y = y + (y1 - y) * tf - (d0 === 1 ? LIFT * tf : 0);
+                  // Keep the stack tight: don't overshoot above the target slot.
+                  if (y < y1) y = y1;
+                  s = s + (s1 - s) * tf;
+                  o = o + (o1 - o) * tf;
                 } else if (it.role === "incomingPrev") {
                   // hidden during forward
                   o = 0;
@@ -586,9 +599,9 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
                   const y1 = depthY(1);
                   const s1 = depthScale(1);
                   const o1 = depthOpacity(1);
-                  y = y + (y1 - y) * q + LIFT * q;
-                  s = s + (s1 - s) * q;
-                  o = o + (o1 - o) * q;
+                  y = y + (y1 - y) * tb + LIFT * tb;
+                  s = s + (s1 - s) * tb;
+                  o = o + (o1 - o) * tb;
                 } else if (it.role === "stack") {
                   // Shift everyone one slot deeper.
                   const d1 = clamp(d0 + 1, 0, tailDepth);
@@ -596,14 +609,14 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
                   const s1 = depthScale(d1);
                   const o1 = depthOpacity(d1);
 
-                  y = y + (y1 - y) * q;
-                  s = s + (s1 - s) * q;
-                  o = o + (o1 - o) * q;
+                  y = y + (y1 - y) * tb;
+                  s = s + (s1 - s) * tb;
+                  o = o + (o1 - o) * tb;
 
                   // Hide the deepest prev card during backward swipe to avoid duplication
                   // (incomingPrev represents it).
                   if (d0 === tailDepth) {
-                    o = o * (1 - q);
+                    o = o * (1 - tb);
                   }
                 }
               }
