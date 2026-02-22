@@ -32,6 +32,10 @@ const SECTIONS = [
   "FEEDBACK",
 ] as const;
 
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
+
 function Rail({
   side,
   activeIndex,
@@ -87,16 +91,28 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export default function DeckSettingsScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const railsHidden = width < 920;
+
+  // Compact mode: rails hidden (mobile web / native / narrow windows).
+  // In compact mode we show only 3 cards to keep the stack clean.
+  const compact = railsHidden;
+  const maxVisible = compact ? 3 : 5;
+
+  // Card sizing: hero on desktop, compact on mobile.
+  const cardHeight = compact
+    ? clamp(Math.round(height * 0.66), 420, 520)
+    : 560;
+  const cardWidthMax = compact ? Math.min(520, width - 24) : 940;
+  const cardWidthRatio = compact ? 0.96 : 0.985;
 
   // Center the deck *between* the two rails ("navigator") instead of centering
   // against the full viewport. This removes the optical offset.
   const laneInset = railsHidden ? 0 : SIDE_PAD + RAIL_W + LANE_GAP;
 
-  // Deck vertical placement: on wide screens the hero stack can feel low because
-  // peeks extend downward; we nudge it up more when rails are visible.
-  const deckYOffset = railsHidden ? -24 : -90;
+  // Deck vertical placement: keep the stack visually centered relative to the rails.
+  // We avoid large negative offsets; the deck component already centers the full stack height.
+  const deckYOffset = railsHidden ? -10 : -48;
 
   const deckRef = useRef<SettingsWalletStackHandle | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -230,13 +246,14 @@ export default function DeckSettingsScreen() {
         <SettingsWalletStack
           ref={deckRef}
           cards={cards}
-          // Bigger cards + stronger presence in the center.
-          cardHeight={560}
-          cardWidthMax={940}
-          cardWidthRatio={0.985}
-          // Slight upward nudge (often looks more centered because peeks extend above).
-          centerBiasY={-12}
-          maxVisible={5}
+          // Responsive cards: hero on desktop, compact on mobile.
+          cardHeight={cardHeight}
+          cardWidthMax={cardWidthMax}
+          cardWidthRatio={cardWidthRatio}
+          // No extra bias; tune via deckYOffset if needed.
+          centerBiasY={0}
+          // Desktop: deeper stack. Mobile: keep it clean.
+          maxVisible={maxVisible}
           accent={ACCENT}
           onActiveIndexChange={setActiveIndex}
         />

@@ -63,6 +63,245 @@ type RenderItem = {
   role: RenderRole;
 };
 
+
+type WalletDeckCardProps = {
+  it: RenderItem;
+  spec: SettingsDeckCardSpec;
+  cardW: number;
+  cardHeight: number;
+  baseLeft: number;
+  baseTop: number;
+  tailDepth: number;
+  accent: string;
+  pan: any;
+  PEEK_Y: number;
+  EXIT: number;
+  LIFT: number;
+  LIFT_BACK: number;
+  PIPE_HANDOFF_AT: number;
+  progress: any;
+  carryIdx: any;
+  carryT: any;
+  carryDir: any;
+  enterIdx: any;
+  enterT: any;
+};
+
+function WalletDeckCard({
+  it,
+  spec,
+  cardW,
+  cardHeight,
+  baseLeft,
+  baseTop,
+  tailDepth,
+  accent,
+  pan,
+  PEEK_Y,
+  EXIT,
+  LIFT,
+  LIFT_BACK,
+  PIPE_HANDOFF_AT,
+  progress,
+  carryIdx,
+  carryT,
+  carryDir,
+  enterIdx,
+  enterT,
+}: WalletDeckCardProps) {
+  const isTop = it.role === "top";
+
+  // Helper functions for depth styling (worklets).
+  const depthY = (d: number) => {
+    "worklet";
+    return d * PEEK_Y;
+  };
+  const depthScale = (d: number) => {
+    "worklet";
+    return 1 - d * 0.03;
+  };
+  const depthOpacity = (d: number) => {
+    "worklet";
+    return 1 - d * 0.10;
+  };
+
+  const cardStyle = useAnimatedStyle(() => {
+    const raw = progress.value;
+    const p = clamp(raw, 0, 1);
+    const q = clamp(-raw, 0, 1);
+
+    // Polish: conveyor-style stack shift to avoid any visible "gap".
+    const easeShift = (x: number) => {
+      "worklet";
+      return 1 - Math.pow(2, -8 * x);
+    };
+    const bumpMid = (t: number) => {
+      "worklet";
+      return 4 * t * (1 - t);
+    };
+    const tf = clamp(easeShift(p), 0, 1);
+    const tb = clamp(easeShift(q), 0, 1);
+
+    const d0 = it.depth;
+
+    // Base pose (resting)
+    let y = depthY(d0);
+    let s = depthScale(d0);
+    let o = depthOpacity(d0);
+
+    // --- FORWARD (next) ---
+    if (p > 0) {
+      if (it.role === "top") {
+        const yTail = depthY(tailDepth);
+        const sTail = depthScale(tailDepth);
+        const oTail = depthOpacity(tailDepth);
+
+        y = interpolate(p, [0, 0.65, 1], [0, -EXIT, yTail]);
+        s = interpolate(p, [0, 1], [1, sTail]);
+        o = interpolate(p, [0, 0.75, 1], [1, 0.94, oTail]);
+      } else if (it.role === "stack") {
+        const d1 = clamp(d0 - 1, 0, tailDepth);
+        const y1 = depthY(d1);
+        const s1 = depthScale(d1);
+        const o1 = depthOpacity(d1);
+
+        y = y + (y1 - y) * tf - (d0 === 1 ? LIFT * tf : 0);
+        // Keep stack tight: don't overshoot above the target slot.
+        if (y < y1) y = y1;
+        s = s + (s1 - s) * tf;
+        o = o + (o1 - o) * tf;
+      } else if (it.role === "incomingPrev") {
+        o = 0;
+      }
+    }
+
+    // --- PIPELINED CARRY ---
+    if (carryIdx.value === it.idx) {
+      if (carryDir.value === 1) {
+        const yTail = depthY(tailDepth);
+        const yAt = interpolate(PIPE_HANDOFF_AT, [0, 0.65, 1], [0, -EXIT, yTail]);
+        const delta = yAt - yTail;
+        y = y + interpolate(carryT.value, [0, 1], [delta, 0]);
+      } else if (carryDir.value === -1) {
+        const yFinal = depthY(1);
+        const yAt = yFinal * PIPE_HANDOFF_AT + LIFT_BACK * bumpMid(PIPE_HANDOFF_AT);
+        const delta = yAt - yFinal;
+        y = y + interpolate(carryT.value, [0, 1], [delta, 0]);
+      }
+    }
+
+    // --- BACKWARD (prev) ---
+    if (q > 0) {
+      if (it.role === "incomingPrev") {
+        y = interpolate(q, [0, 0.78, 1], [-EXIT, -10, 0]);
+        s = interpolate(q, [0, 1], [0.995, 1]);
+        o = interpolate(q, [0, 0.15, 1], [0, 1, 1]);
+      } else if (it.role === "top") {
+        const y1 = depthY(1);
+        const s1 = depthScale(1);
+        const o1 = depthOpacity(1);
+        y = y + (y1 - y) * tb + LIFT_BACK * bumpMid(tb);
+        s = s + (s1 - s) * tb;
+        o = o + (o1 - o) * tb;
+      } else if (it.role === "stack") {
+        const d1 = clamp(d0 + 1, 0, tailDepth);
+        const y1 = depthY(d1);
+        const s1 = depthScale(d1);
+        const o1 = depthOpacity(d1);
+
+        y = y + (y1 - y) * tb;
+        s = s + (s1 - s) * tb;
+        o = o + (o1 - o) * tb;
+
+        if (d0 === tailDepth) {
+          o = o * (1 - tb);
+        }
+      }
+    }
+
+    // --- PIPELINED ENTER ---
+    if (enterIdx.value === it.idx && it.role === "top") {
+      const enterFrom = interpolate(PIPE_HANDOFF_AT, [0, 0.78], [-EXIT, -10]);
+      y = y + interpolate(enterT.value, [0, 1], [enterFrom, 0]);
+    }
+
+    // zIndex rules
+    let z = 0;
+    if (it.role === "incomingPrev") {
+      z = q > 0 ? 450 : -1;
+    } else if (it.role === "top") {
+      z = p > 0.82 ? 60 : 420;
+    } else {
+      z = 300 - d0;
+    }
+
+    return {
+      transform: [{ translateX: 0 }, { translateY: y }, { scale: s }],
+      opacity: o,
+      zIndex: z,
+    };
+  });
+
+  const borderAlpha =
+    it.depth === 0
+      ? 0.52
+      : it.depth === 1
+        ? 0.24
+        : it.depth === 2
+          ? 0.17
+          : 0.12;
+  const borderColor = `rgba(255,255,255,${borderAlpha})`;
+  const bg = it.depth === 0 ? "rgba(18,18,18,0.988)" : "rgba(18,18,18,0.92)";
+
+  const webShadow =
+    it.depth === 0
+      ? "0 34px 98px rgba(0,0,0,0.56)"
+      : it.depth === 1
+        ? "0 26px 66px rgba(0,0,0,0.40)"
+        : "0 20px 52px rgba(0,0,0,0.30)";
+
+  const node = (
+    <Animated.View
+      style={[
+        styles.card,
+        {
+          width: cardW,
+          height: cardHeight,
+          left: baseLeft,
+          top: baseTop,
+          borderColor,
+          backgroundColor: bg,
+          shadowColor: it.depth === 0 ? accent : "#000",
+          shadowOpacity: it.depth === 0 ? 0.18 : 0.10,
+          shadowRadius: it.depth === 0 ? 22 : 12,
+          shadowOffset: { width: 0, height: it.depth === 0 ? 14 : 9 },
+          elevation: it.depth === 0 ? 18 : 10,
+        },
+        Platform.OS === "web"
+          ? // @ts-expect-error web-only
+            ({ boxShadow: webShadow } as any)
+          : null,
+        cardStyle,
+      ]}
+      pointerEvents={isTop ? "auto" : "none"}
+    >
+      <View style={styles.header}>
+        <Animated.Text style={styles.title} numberOfLines={1}>
+          {spec.title}
+        </Animated.Text>
+      </View>
+
+      <View style={styles.body}>{isTop ? spec.render() : null}</View>
+    </Animated.View>
+  );
+
+  return isTop ? (
+    <GestureDetector gesture={pan}>{node}</GestureDetector>
+  ) : (
+    node
+  );
+}
+
 export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
   function SettingsWalletStack(
     {
@@ -162,7 +401,6 @@ const SINGLE_PREV_COMMIT_MS = 460;
         if (n <= 1) return prev;
         const next = dir === "next" ? (prev + 1) % n : (prev - 1 + n) % n;
         activeIndexSV.value = next;
-        onActiveIndexChange?.(next);
         return next;
       });
     };
@@ -170,7 +408,9 @@ const SINGLE_PREV_COMMIT_MS = 460;
     // Sync shared index (initial + external changes).
     useEffect(() => {
       activeIndexSV.value = activeIndex;
-    }, [activeIndex]);
+      // Notify parent AFTER commit to avoid "setState during render" warnings.
+      onActiveIndexChange?.(activeIndex);
+    }, [activeIndex, onActiveIndexChange]);
 
     const runNextQueuedStep = () => {
       if (animLock.value) return;
@@ -447,8 +687,20 @@ const SINGLE_PREV_COMMIT_MS = 460;
     ]);
 
     const cardW = useMemo(() => {
-      if (!stageW) return Math.min(cardWidthMax, 760);
-      return Math.min(cardWidthMax, Math.max(420, stageW * cardWidthRatio));
+      // IMPORTANT for mobile + mobile-web:
+      // do NOT enforce a large minimum width (it would overflow small screens).
+      // We cap to the stage width and keep only a small safety minimum.
+      const MIN_W = 280;
+      const safeStage = stageW ? Math.max(1, stageW - 12) : 0;
+
+      if (!stageW) {
+        // Before the first layout pass, keep a reasonable width based on the max.
+        return Math.max(MIN_W, Math.min(cardWidthMax, 760));
+      }
+
+      const desired = stageW * cardWidthRatio;
+      const capped = Math.min(cardWidthMax, desired);
+      return Math.max(MIN_W, Math.min(capped, safeStage));
     }, [cardWidthMax, cardWidthRatio, stageW]);
 
     const baseLeft = stageW ? (stageW - cardW) / 2 : 0;
@@ -561,216 +813,31 @@ const SINGLE_PREV_COMMIT_MS = 460;
           .slice()
           // Draw deeper first.
           .sort((a, b) => b.depth - a.depth)
-          .map((it) => {
-            const spec = cards[it.idx];
-            const isTop = it.role === "top";
-
-            const cardStyle = useAnimatedStyle(() => {
-              const raw = progress.value;
-              const p = clamp(raw, 0, 1);
-              const q = clamp(-raw, 0, 1);
-
-              // Polish: move the stack "conveyor-style" so the next/prev card
-              // begins filling the top position immediately. This prevents a
-              // visible "gap" while the active card travels.
-              const easeShift = (x: number) => {
-                "worklet";
-                // Fast-at-start curve (0..1).
-                return 1 - Math.pow(2, -8 * x);
-              };
-              const bumpMid = (t: number) => {
-                "worklet";
-                // 0 at endpoints, peak at 0.5
-                return 4 * t * (1 - t);
-              };
-              const tf = clamp(easeShift(p), 0, 1);
-              const tb = clamp(easeShift(q), 0, 1);
-
-              const d0 = it.depth;
-
-              // Base pose (resting)
-              let y = depthY(d0);
-              let s = depthScale(d0);
-              let o = depthOpacity(d0);
-
-              // --- FORWARD (next) ---
-              // Goal: active card lifts upward then becomes the deepest "tail" card.
-              if (p > 0) {
-                if (it.role === "top") {
-                  const yTail = depthY(tailDepth);
-                  const sTail = depthScale(tailDepth);
-                  const oTail = depthOpacity(tailDepth);
-
-                  y = interpolate(p, [0, 0.65, 1], [0, -EXIT, yTail]);
-                  s = interpolate(p, [0, 1], [1, sTail]);
-                  o = interpolate(p, [0, 0.75, 1], [1, 0.94, oTail]);
-                } else if (it.role === "stack") {
-                  // Everyone else shifts one slot toward the front.
-                  const d1 = clamp(d0 - 1, 0, tailDepth);
-                  const y1 = depthY(d1);
-                  const s1 = depthScale(d1);
-                  const o1 = depthOpacity(d1);
-
-                  y = y + (y1 - y) * tf - (d0 === 1 ? LIFT * tf : 0);
-                  // Keep the stack tight: don't overshoot above the target slot.
-                  if (y < y1) y = y1;
-                  s = s + (s1 - s) * tf;
-                  o = o + (o1 - o) * tf;
-                } else if (it.role === "incomingPrev") {
-                  // hidden during forward
-                  o = 0;
-                }
-              }
-
-              // --- PIPELINED CARRY ---
-              // After an early handoff in multi-step jumps, the outgoing card
-              // finishes settling into the back while the next step begins.
-              if (carryIdx.value === it.idx) {
-                if (carryDir.value === 1) {
-                  const yTail = depthY(tailDepth);
-                  const yAt = interpolate(
-                    PIPE_HANDOFF_AT,
-                    [0, 0.65, 1],
-                    [0, -EXIT, yTail]
-                  );
-                  const delta = yAt - yTail;
-                  y = y + interpolate(carryT.value, [0, 1], [delta, 0]);
-                } else if (carryDir.value === -1) {
-                  // In backward pipelining, the outgoing (previous active) card
-                  // should settle into depth 1 after the early handoff.
-                  const yFinal = depthY(1);
-                  const yAt = yFinal * PIPE_HANDOFF_AT + LIFT_BACK * bumpMid(PIPE_HANDOFF_AT);
-                  const delta = yAt - yFinal;
-                  y = y + interpolate(carryT.value, [0, 1], [delta, 0]);
-                }
-              }
-
-              // --- BACKWARD (prev) ---
-              // Goal: previous card appears from the top, then drops into place as active.
-              if (q > 0) {
-                if (it.role === "incomingPrev") {
-                  y = interpolate(q, [0, 0.78, 1], [-EXIT, -10, 0]);
-                  s = interpolate(q, [0, 1], [0.995, 1]);
-                  o = interpolate(q, [0, 0.15, 1], [0, 1, 1]);
-                } else if (it.role === "top") {
-                  const y1 = depthY(1);
-                  const s1 = depthScale(1);
-                  const o1 = depthOpacity(1);
-                  // Outgoing card slides toward depth-1. Add a mid-swipe bump for separation,
-                  // but return to 0 at the end so it doesn't land too low.
-                  y = y + (y1 - y) * tb + LIFT_BACK * bumpMid(tb);
-                  s = s + (s1 - s) * tb;
-                  o = o + (o1 - o) * tb;
-                } else if (it.role === "stack") {
-                  // Shift everyone one slot deeper.
-                  const d1 = clamp(d0 + 1, 0, tailDepth);
-                  const y1 = depthY(d1);
-                  const s1 = depthScale(d1);
-                  const o1 = depthOpacity(d1);
-
-                  y = y + (y1 - y) * tb;
-                  s = s + (s1 - s) * tb;
-                  o = o + (o1 - o) * tb;
-
-                  // Hide the deepest prev card during backward swipe to avoid duplication
-                  // (incomingPrev represents it).
-                  if (d0 === tailDepth) {
-                    o = o * (1 - tb);
-                  }
-                }
-              }
-
-              // --- PIPELINED ENTER ---
-              // After an early handoff in backward step-through, the incoming
-              // previous card continues dropping into place while we unlock.
-              if (enterIdx.value === it.idx && it.role === "top") {
-                const enterFrom = interpolate(
-                  PIPE_HANDOFF_AT,
-                  [0, 0.78],
-                  [-EXIT, -10]
-                );
-                y = y + interpolate(enterT.value, [0, 1], [enterFrom, 0]);
-              }
-
-              // zIndex: keep top above except when it becomes tail at end of forward swipe.
-              let z = 0;
-              if (it.role === "incomingPrev") {
-                z = q > 0 ? 450 : -1;
-              } else if (it.role === "top") {
-                z = p > 0.82 ? 60 : 420;
-              } else {
-                z = 300 - d0;
-              }
-
-              return {
-                transform: [{ translateX: 0 }, { translateY: y }, { scale: s }],
-                opacity: o,
-                zIndex: z,
-              };
-            }, [EXIT, LIFT, LIFT_BACK, tailDepth, PIPE_HANDOFF_AT]);
-
-            const borderAlpha =
-              it.depth === 0
-                ? 0.52
-                : it.depth === 1
-                  ? 0.24
-                  : it.depth === 2
-                    ? 0.17
-                    : 0.12;
-            const borderColor = `rgba(255,255,255,${borderAlpha})`;
-            const bg = it.depth === 0 ? "rgba(18,18,18,0.988)" : "rgba(18,18,18,0.92)";
-
-            const webShadow =
-              it.depth === 0
-                ? "0 34px 98px rgba(0,0,0,0.56)"
-                : it.depth === 1
-                  ? "0 26px 66px rgba(0,0,0,0.40)"
-                  : "0 20px 52px rgba(0,0,0,0.30)";
-
-            const node = (
-              <Animated.View
-                style={[
-                  styles.card,
-                  {
-                    width: cardW,
-                    height: cardHeight,
-                    left: baseLeft,
-                    top: baseTop,
-                    borderColor,
-                    backgroundColor: bg,
-                    shadowColor: it.depth === 0 ? accent : "#000",
-                    shadowOpacity: it.depth === 0 ? 0.18 : 0.10,
-                    shadowRadius: it.depth === 0 ? 22 : 12,
-                    shadowOffset: { width: 0, height: it.depth === 0 ? 14 : 9 },
-                    elevation: it.depth === 0 ? 18 : 10,
-                  },
-                  Platform.OS === "web"
-                    ? // @ts-expect-error web-only
-                      ({ boxShadow: webShadow } as any)
-                    : null,
-                  cardStyle,
-                ]}
-                pointerEvents={isTop ? "auto" : "none"}
-              >
-                <View style={styles.header}>
-                  <Animated.Text style={styles.title} numberOfLines={1}>
-                    {spec.title}
-                  </Animated.Text>
-                </View>
-
-                <View style={styles.body}>{isTop ? spec.render() : null}</View>
-              </Animated.View>
-            );
-
-            // Only the active/top card is interactive (drag on whole surface).
-            return isTop ? (
-              <GestureDetector key={it.key} gesture={pan}>
-                {node}
-              </GestureDetector>
-            ) : (
-              <React.Fragment key={it.key}>{node}</React.Fragment>
-            );
-          })}
+          .map((it) => (
+            <WalletDeckCard
+              key={it.key}
+              it={it}
+              spec={cards[it.idx]}
+              cardW={cardW}
+              cardHeight={cardHeight}
+              baseLeft={baseLeft}
+              baseTop={baseTop}
+              tailDepth={tailDepth}
+              accent={accent}
+              pan={pan}
+              PEEK_Y={PEEK_Y}
+              EXIT={EXIT}
+              LIFT={LIFT}
+              LIFT_BACK={LIFT_BACK}
+              PIPE_HANDOFF_AT={PIPE_HANDOFF_AT}
+              progress={progress}
+              carryIdx={carryIdx}
+              carryT={carryT}
+              carryDir={carryDir}
+              enterIdx={enterIdx}
+              enterT={enterT}
+            />
+          ))}
       </Animated.View>
     );
   }
