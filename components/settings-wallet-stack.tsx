@@ -83,6 +83,11 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
     // Stage measurement (for true centering).
     const [stageW, setStageW] = useState(0);
     const [stageH, setStageH] = useState(0);
+    const [measuredOnce, setMeasuredOnce] = useState(false);
+
+    // Prevent a one-frame "flash" at top-left before onLayout measures the stage.
+    // Keep the stage invisible until we have real dimensions, then fade in.
+    const readyOpacity = useSharedValue(0);
 
     // Animation state.
     const progress = useSharedValue(0); // [-1..1]
@@ -452,6 +457,33 @@ const SINGLE_PREV_COMMIT_MS = 460;
     // Since peeks extend downward, we center cardHeight + tailDepth*PEEK_Y.
     const stackH = cardHeight + tailDepth * PEEK_Y;
     const baseTop = stageH ? (stageH - stackH) / 2 + centerBiasY : 0;
+    // Some RN-web layouts can briefly report 0 height when children are % sized.
+    // We only need ONE real layout pass to avoid the top-left "flash".
+    const stageReady = measuredOnce && stageW > 0;
+    useEffect(() => {
+      if (stageReady) {
+        readyOpacity.value = withTiming(1, {
+          duration: 140,
+          easing: Easing.out(Easing.cubic),
+        });
+        return;
+      }
+
+      // Safety net: never stay invisible forever if onLayout is delayed.
+      // This should rarely trigger, but prevents a blank screen.
+      readyOpacity.value = 0;
+      const t = setTimeout(() => {
+        readyOpacity.value = withTiming(1, {
+          duration: 140,
+          easing: Easing.out(Easing.cubic),
+        });
+      }, 250);
+      return () => clearTimeout(t);
+    }, [stageReady]);
+
+    const stageFade = useAnimatedStyle(() => {
+      return { opacity: readyOpacity.value };
+    });
 
     const items: RenderItem[] = useMemo(() => {
       if (n <= 1) {
@@ -507,12 +539,22 @@ const SINGLE_PREV_COMMIT_MS = 460;
     };
 
     return (
-      <View
-        style={[styles.stage, Platform.OS === "web" ? (styles as any).webStage : null]}
+      <Animated.View
+        style={[
+          styles.stage,
+          Platform.OS === "web" ? (styles as any).webStage : null,
+          stageFade,
+        ]}
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout;
-          setStageW(width);
-          setStageH(height);
+
+          // Mark that we have at least one real layout pass.
+          if (!measuredOnce) setMeasuredOnce(true);
+
+          // Keep updating measurements (used for centering). Guard against
+          // occasional 0-height reports on web by still accepting width.
+          if (width > 0) setStageW(width);
+          if (height > 0) setStageH(height);
         }}
       >
         {items
@@ -729,15 +771,16 @@ const SINGLE_PREV_COMMIT_MS = 460;
               <React.Fragment key={it.key}>{node}</React.Fragment>
             );
           })}
-      </View>
+      </Animated.View>
     );
   }
 );
 
 const styles = StyleSheet.create({
   stage: {
+    flex: 1,
     width: "100%",
-    height: "100%",
+    alignSelf: "stretch",
     alignItems: "center",
     justifyContent: "center",
   },
