@@ -104,13 +104,15 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
 
     // Wheel / trackpad (web).
     const wheelIdleTimer = useRef<any>(null);
-    const wheelGestureTimer = useRef<any>(null);
-    const wheelAccumDy = useRef(0);
+    const wheelRunning = useRef(false);
 
     // Visual knobs.
     const PEEK_Y = 26; // depth separation (downward peeks)
     const EXIT = Math.min(cardHeight * 0.75, 520); // how far the active card travels upward
     const LIFT = 34;
+    // Backward swipe: we want the outgoing (current) top card to move to depth-1,
+    // but NOT land too low. We'll use a mid-swipe bump that returns to 0 at the end.
+    const LIFT_BACK = 24;
 
     // Input tuning
     const DRAG_TO_PROGRESS = 520;
@@ -120,9 +122,8 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
     const TRACKPAD_TO_PROGRESS = 0.0032;
     const TRACKPAD_IDLE_SNAP_MS = 160;
 
-    // Mouse wheel: one gesture should reliably advance exactly 1 card.
-    const WHEEL_GESTURE_MS = 110;
-    const WHEEL_FOLLOW_TO_PROGRESS = 0.0062;
+    // Mouse wheel: fixed-speed, discrete steps (no delta-based acceleration).
+    const WHEEL_STEP_MS = 560;
 
     // Pipelining: hand off early so next steps can start before the outgoing
     // card fully reaches its back position.
@@ -132,7 +133,9 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
     // - Single-step (adjacent, wheel/drag) should feel slower/premium.
     // - Multi-step jumps (>= 3 sections) can stay aggressive.
     const SINGLE_COMMIT_MS = 460;
-    const WHEEL_COMMIT_MS = 440;
+// Slightly slower for forward (next) single-step swipes to feel more premium.
+const SINGLE_NEXT_COMMIT_MS = 560;
+const SINGLE_PREV_COMMIT_MS = 460;
 
     const PIPE_SEGMENT_FAST_MS = 170;
     const PIPE_CARRY_FAST_MS = 200;
@@ -190,7 +193,9 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
       if (animLock.value) return;
       animLock.value = 1;
       cancelAnimation(progress);
-      const duration = opts?.duration ?? SINGLE_COMMIT_MS;
+      const duration =
+        opts?.duration ??
+        (target > 0 ? SINGLE_NEXT_COMMIT_MS : target < 0 ? SINGLE_PREV_COMMIT_MS : SINGLE_COMMIT_MS);
 
       progress.value = withTiming(
         target,
@@ -326,7 +331,14 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
     const stepOnce = (dir: "next" | "prev", speed: "normal" | "fast" = "normal") => {
       if (animLock.value) return;
       if (queueModeRef.current === "running") return;
-      commitTo(dir === "next" ? 1 : -1, { duration: speed === "fast" ? 320 : SINGLE_COMMIT_MS });
+      commitTo(dir === "next" ? 1 : -1, {
+        duration:
+          speed === "fast"
+            ? 320
+            : dir === "next"
+              ? SINGLE_NEXT_COMMIT_MS
+              : SINGLE_PREV_COMMIT_MS,
+      });
     };
 
     const goToIndex = (targetIndex: number) => {
@@ -339,7 +351,7 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
 
       // Adjacent jump: slower, premium single-step animation (no need to pipeline).
       if (steps <= 1) {
-        commitTo(dir === "next" ? 1 : -1, { duration: SINGLE_COMMIT_MS });
+        commitTo(dir === "next" ? 1 : -1, { duration: dir === "next" ? SINGLE_NEXT_COMMIT_MS : SINGLE_PREV_COMMIT_MS });
         return;
       }
 
@@ -356,7 +368,6 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
     const handleGlobalWheel = (e: WheelEvent) => {
       if (Platform.OS !== "web") return;
       if (queueModeRef.current === "running") return;
-      if (animLock.value) return;
 
       const dy = Number((e as any)?.deltaY ?? 0);
       if (!dy) return;
@@ -365,38 +376,37 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
       const deltaMode = Number((e as any)?.deltaMode ?? 0);
 
       // Heuristic: big deltas (or line-based) are almost always a physical mouse wheel.
-      // On Windows, one "notch" often doesn't reach our commit threshold unless we
-      // treat it as a discrete gesture.
       const isLikelyMouseWheel = deltaMode === 1 || abs >= 60;
 
       if (isLikelyMouseWheel) {
-        wheelAccumDy.current += dy;
+        const dir: "next" | "prev" = dy >= 0 ? "next" : "prev";
 
-        cancelAnimation(progress);
-        const follow = clamp(
-          wheelAccumDy.current * WHEEL_FOLLOW_TO_PROGRESS,
-          -1,
-          1
-        );
-        progress.value = withTiming(follow, {
-          duration: 60,
-          easing: Easing.out(Easing.cubic),
+        // Mouse wheel: always at most ONE swipe per gesture burst.
+        // If the user spins the wheel multiple notches quickly, we ignore the extras.
+        if (animLock.value) return;
+        if (wheelRunning.current) return;
+        wheelRunning.current = true;
+
+        commitTo(dir === "next" ? 1 : -1, {
+          duration: WHEEL_STEP_MS,
+          after: () => {
+            wheelRunning.current = false;
+          },
         });
-
-        if (wheelGestureTimer.current) clearTimeout(wheelGestureTimer.current);
-        wheelGestureTimer.current = setTimeout(() => {
-          const dir = wheelAccumDy.current >= 0 ? "next" : "prev";
-          wheelAccumDy.current = 0;
-          // 1 wheel gesture = 1 card.
-          commitTo(dir === "next" ? 1 : -1, { duration: WHEEL_COMMIT_MS });
-        }, WHEEL_GESTURE_MS);
-
         return;
       }
 
       // Trackpad: smooth + proportional, then snap after a short idle.
+      if (animLock.value) return;
       cancelAnimation(progress);
-      const nextTarget = clamp(progress.value + dy * TRACKPAD_TO_PROGRESS, -1, 1);
+
+      const dyClamped = clamp(dy, -35, 35);
+      const nextTarget = clamp(
+        progress.value + dyClamped * TRACKPAD_TO_PROGRESS,
+        -1,
+        1
+      );
+
       progress.value = withTiming(nextTarget, {
         duration: 70,
         easing: Easing.out(Easing.cubic),
@@ -526,6 +536,11 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
                 // Fast-at-start curve (0..1).
                 return 1 - Math.pow(2, -8 * x);
               };
+              const bumpMid = (t: number) => {
+                "worklet";
+                // 0 at endpoints, peak at 0.5
+                return 4 * t * (1 - t);
+              };
               const tf = clamp(easeShift(p), 0, 1);
               const tb = clamp(easeShift(q), 0, 1);
 
@@ -582,7 +597,7 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
                   // In backward pipelining, the outgoing (previous active) card
                   // should settle into depth 1 after the early handoff.
                   const yFinal = depthY(1);
-                  const yAt = (yFinal + LIFT) * PIPE_HANDOFF_AT;
+                  const yAt = yFinal * PIPE_HANDOFF_AT + LIFT_BACK * bumpMid(PIPE_HANDOFF_AT);
                   const delta = yAt - yFinal;
                   y = y + interpolate(carryT.value, [0, 1], [delta, 0]);
                 }
@@ -599,7 +614,9 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
                   const y1 = depthY(1);
                   const s1 = depthScale(1);
                   const o1 = depthOpacity(1);
-                  y = y + (y1 - y) * tb + LIFT * tb;
+                  // Outgoing card slides toward depth-1. Add a mid-swipe bump for separation,
+                  // but return to 0 at the end so it doesn't land too low.
+                  y = y + (y1 - y) * tb + LIFT_BACK * bumpMid(tb);
                   s = s + (s1 - s) * tb;
                   o = o + (o1 - o) * tb;
                 } else if (it.role === "stack") {
@@ -648,7 +665,7 @@ export const SettingsWalletStack = forwardRef<SettingsWalletStackHandle, Props>(
                 opacity: o,
                 zIndex: z,
               };
-            }, [EXIT, LIFT, tailDepth, PIPE_HANDOFF_AT]);
+            }, [EXIT, LIFT, LIFT_BACK, tailDepth, PIPE_HANDOFF_AT]);
 
             const borderAlpha =
               it.depth === 0
