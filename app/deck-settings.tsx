@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Stack } from "expo-router";
 
 import {
@@ -9,10 +16,11 @@ import {
 } from "@/components/settings-wallet-stack";
 
 const ACCENT = "#2CE5FF"; // teal for now
-// Move the whole deck up a bit relative to the side rails ("navigator").
-// Tune this visually if needed.
-const DECK_Y_OFFSET = -46;
 
+// Layout constants
+const SIDE_PAD = 18;
+const RAIL_W = 140;
+const LANE_GAP = 22; // space between rails and deck lane
 
 const SECTIONS = [
   "GENERAL",
@@ -81,6 +89,14 @@ function Row({ label, value }: { label: string; value: string }) {
 export default function DeckSettingsScreen() {
   const { width } = useWindowDimensions();
   const railsHidden = width < 920;
+
+  // Center the deck *between* the two rails ("navigator") instead of centering
+  // against the full viewport. This removes the optical offset.
+  const laneInset = railsHidden ? 0 : SIDE_PAD + RAIL_W + LANE_GAP;
+
+  // Deck vertical placement: on wide screens the hero stack can feel low because
+  // peeks extend downward; we nudge it up more when rails are visible.
+  const deckYOffset = railsHidden ? -24 : -90;
 
   const deckRef = useRef<SettingsWalletStackHandle | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -199,35 +215,34 @@ export default function DeckSettingsScreen() {
       {/* Removes the white header bar + route title */}
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.layoutRow}>
-        {!railsHidden ? (
-          <Rail side="left" activeIndex={activeIndex} onPick={onPick} />
-        ) : (
-          <View style={{ width: 0 }} />
-        )}
+      {!railsHidden ? <Rail side="left" activeIndex={activeIndex} onPick={onPick} /> : null}
 
-        <View style={[styles.center, { transform: [{ translateY: DECK_Y_OFFSET }] }]}>
-          <SettingsWalletStack
-            ref={deckRef}
-            cards={cards}
-            // Bigger cards + stronger presence in the center.
-            cardHeight={560}
-            cardWidthMax={940}
-            cardWidthRatio={0.985}
-            // Slight upward nudge (often looks more centered because peeks extend above).
-            centerBiasY={-28}
-            maxVisible={5}
-            accent={ACCENT}
-            onActiveIndexChange={setActiveIndex}
-          />
-        </View>
-
-        {!railsHidden ? (
-          <Rail side="right" activeIndex={activeIndex} onPick={onPick} />
-        ) : (
-          <View style={{ width: 0 }} />
-        )}
+      <View
+        style={[
+          styles.deckLane,
+          {
+            left: laneInset,
+            right: laneInset,
+            transform: [{ translateY: deckYOffset }],
+          },
+        ]}
+      >
+        <SettingsWalletStack
+          ref={deckRef}
+          cards={cards}
+          // Bigger cards + stronger presence in the center.
+          cardHeight={560}
+          cardWidthMax={940}
+          cardWidthRatio={0.985}
+          // Slight upward nudge (often looks more centered because peeks extend above).
+          centerBiasY={-12}
+          maxVisible={5}
+          accent={ACCENT}
+          onActiveIndexChange={setActiveIndex}
+        />
       </View>
+
+      {!railsHidden ? <Rail side="right" activeIndex={activeIndex} onPick={onPick} /> : null}
     </View>
   );
 }
@@ -237,29 +252,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0b0d0e",
   },
-  layoutRow: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-  },
-  center: {
-    flex: 1,
+  deckLane: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 14,
   },
   rail: {
-    width: 140,
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: RAIL_W,
     justifyContent: "center",
     gap: 8,
   },
   railLeft: {
-    alignItems: "flex-start",
+    left: SIDE_PAD,
+    // Face the labels toward the deck.
+    alignItems: "flex-end",
   },
   railRight: {
-    alignItems: "flex-end",
+    right: SIDE_PAD,
+    // Face the labels toward the deck.
+    alignItems: "flex-start",
   },
   railItem: {
     paddingVertical: 4,
