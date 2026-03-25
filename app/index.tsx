@@ -39,6 +39,11 @@ export default function LabsIndexScreen() {
         href: "/trade",
       },
       {
+        title: "Image Card",
+        description: "Full-bleed image card with a soft lower-third blur transition.",
+        href: "/image-card",
+      },
+      {
         title: "Wallet",
         description: "Wallet / balance UI prototype.",
         href: "/wallet",
