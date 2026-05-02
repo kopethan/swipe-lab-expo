@@ -1,0 +1,190 @@
+--- a/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx
++++ b/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx
+@@ -25,7 +25,7 @@
+   total: number;
+ };
+ 
+-const BLUR_SLICE_COUNT = 10;
++const BLUR_SLICE_COUNT = 18;
+ 
+ type LowerAtmosphereProps = {
+   source?: { uri: string };
+@@ -35,8 +35,9 @@
+ 
+ function LowerAtmosphere({ source, accent, isDark }: LowerAtmosphereProps) {
+   const slices = useMemo(() => Array.from({ length: BLUR_SLICE_COUNT }, (_, index) => index), []);
+-  const tintBase = isDark ? "rgba(4,6,9,0.70)" : "rgba(255,255,255,0.58)";
+-  const warmthTint = isDark ? "rgba(0,0,0,0.26)" : "rgba(255,255,255,0.26)";
++  const tintBase = isDark ? "rgba(4,6,9,0.64)" : "rgba(255,255,255,0.50)";
++  const bottomVeil = isDark ? "rgba(2,4,7,0.58)" : "rgba(255,255,255,0.42)";
++  const midVeil = isDark ? "rgba(2,4,7,0.20)" : "rgba(255,255,255,0.16)";
+ 
+   return (
+     <View pointerEvents="none" style={styles.lowerAtmosphere}>
+@@ -53,8 +54,8 @@
+                   styles.atmosphereSlice,
+                   {
+                     top: `${slice * sliceHeight}%`,
+-                    height: `${sliceHeight + 2}%`,
+-                    opacity: 0.08 + eased * 0.68,
++                    height: `${sliceHeight + 4}%`,
++                    opacity: eased * 0.58,
+                   },
+                 ]}
+               >
+@@ -62,7 +63,7 @@
+                   source={source}
+                   contentFit="cover"
+                   transition={0}
+-                  blurRadius={5 + eased * 18}
++                  blurRadius={4 + eased * 24}
+                   style={StyleSheet.absoluteFillObject}
+                 />
+               </View>
+@@ -71,9 +72,9 @@
+                   styles.atmosphereSlice,
+                   {
+                     top: `${slice * sliceHeight}%`,
+-                    height: `${sliceHeight + 2}%`,
++                    height: `${sliceHeight + 4}%`,
+                     backgroundColor: tintBase,
+-                    opacity: 0.04 + eased * 0.62,
++                    opacity: eased * 0.48,
+                   },
+                 ]}
+               />
+@@ -81,11 +82,12 @@
+           );
+         })
+       ) : (
+-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? "rgba(3,5,8,0.56)" : "rgba(255,255,255,0.54)" }]} />
++        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? "rgba(3,5,8,0.42)" : "rgba(255,255,255,0.34)" }]} />
+       )}
+ 
++      <View style={[styles.atmosphereFeather, styles.atmosphereFeatherTop, { backgroundColor: midVeil }]} />
++      <View style={[styles.atmosphereFeather, styles.atmosphereFeatherBottom, { backgroundColor: bottomVeil }]} />
+       <View style={[styles.atmosphereAccentWash, { backgroundColor: accent }]} />
+-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: warmthTint }]} />
+     </View>
+   );
+ }
+@@ -108,8 +110,8 @@
+   const isDark = palette.mode === "dark";
+   const mediaSurface = isDark ? "#0c1116" : "#dfe6dc";
+   const mediaSource = useMemo(() => (card.imageUrl ? { uri: card.imageUrl } : undefined), [card.imageUrl]);
+-  const lowerPanelColor = isDark ? "rgba(7,9,12,0.42)" : "rgba(255,255,255,0.44)";
+-  const lowerPanelBorder = isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)";
++  const lowerPanelColor = isDark ? "rgba(7,9,12,0.22)" : "rgba(255,255,255,0.22)";
++  const lowerPanelBorder = "rgba(255,255,255,0)";
+   const titleColor = isDark ? "#fff" : "#101010";
+   const bodyColor = isDark ? "rgba(255,255,255,0.76)" : "rgba(0,0,0,0.62)";
+   const pillBg = isDark ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.84)";
+@@ -147,7 +149,6 @@
+       )}
+ 
+       <View style={styles.topShade} />
+-      <View style={styles.bottomShade} />
+       <LowerAtmosphere source={mediaSource} accent={card.accent} isDark={isDark} />
+ 
+       <View style={styles.topChrome}>
+@@ -231,36 +232,43 @@
+     height: "28%",
+     backgroundColor: "rgba(0,0,0,0.18)",
+   },
+-  bottomShade: {
++  lowerAtmosphere: {
+     position: "absolute",
+     left: 0,
+     right: 0,
+     bottom: 0,
+-    height: "46%",
+-    backgroundColor: "rgba(0,0,0,0.14)",
++    height: "68%",
++    overflow: "hidden",
+   },
+-  lowerAtmosphere: {
++  atmosphereSlice: {
+     position: "absolute",
+     left: 0,
+     right: 0,
+-    bottom: 0,
+-    height: "52%",
+     overflow: "hidden",
+   },
+-  atmosphereSlice: {
++  atmosphereFeather: {
+     position: "absolute",
+     left: 0,
+     right: 0,
+-    overflow: "hidden",
++  },
++  atmosphereFeatherTop: {
++    top: 0,
++    height: "34%",
++    opacity: 0.10,
++  },
++  atmosphereFeatherBottom: {
++    bottom: 0,
++    height: "56%",
++    opacity: 0.72,
+   },
+   atmosphereAccentWash: {
+     position: "absolute",
+-    left: "12%",
+-    right: "12%",
+-    bottom: "5%",
+-    height: "45%",
++    left: "10%",
++    right: "10%",
++    bottom: "4%",
++    height: "52%",
+     borderRadius: 999,
+-    opacity: 0.10,
++    opacity: 0.08,
+   },
+   topChrome: {
+     position: "absolute",
+@@ -295,7 +303,7 @@
+     bottom: 12,
+     minHeight: "34%",
+     borderRadius: 24,
+-    borderWidth: StyleSheet.hairlineWidth,
++    borderWidth: 0,
+     padding: 13,
+     gap: 8,
+   },
+--- a/app/square-deck.tsx
++++ b/app/square-deck.tsx
+@@ -163,7 +163,7 @@
+       </View>
+ 
+       <View style={styles.footer}>
+-        <Text style={[styles.footerText, { color: palette.muted }]}>LAB5: lower-third atmospheric blur/fill is active. Static OSM-specific simulation stays for LAB6.</Text>
++        <Text style={[styles.footerText, { color: palette.muted }]}>LAB5a: bottom-up blur fade is active with the hard lower-third seam removed. Static OSM-specific simulation stays for LAB6.</Text>
+       </View>
+     </View>
+   );
+--- a/docs/SQUARE_STACK_DECK_LAB.md
++++ b/docs/SQUARE_STACK_DECK_LAB.md
+@@ -109,3 +109,21 @@
+ ```
+ 
+ This is still a lab simulation. LAB6 should add explicit photo/static-map/fallback variants and stress-test bright map surfaces in light and dark modes.
++
++
++## LAB5a bottom-up blur fade rule
++
++LAB5a keeps the lower-third atmosphere from LAB5, but removes the visible seam between the clear image zone and the readable lower text zone. The atmosphere now starts higher on the card with near-zero opacity, ramps stronger toward the bottom, and avoids using a separate hard footer shade.
++
++Implementation rules:
++
++```txt
++- the lower atmosphere is taller than the visible text area
++- the first blur slices are nearly invisible
++- blur/tint strength increases only as it approaches the bottom
++- no standalone bottom shade sits above the atmosphere
++- the lower text panel is much less boxed and has no visible border
++- keep transition={0} and stable source objects for the repeated blurred image layers
++```
++
++The intended result is not a frosted rectangle. It should feel like the image itself becomes softer and more readable near the bottom.

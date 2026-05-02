@@ -1,0 +1,223 @@
+diff --git a/app/square-deck.tsx b/app/square-deck.tsx
+index b87fd5d..e6ed37d 100644
+--- a/app/square-deck.tsx
++++ b/app/square-deck.tsx
+@@ -1,7 +1,7 @@
+-import React, { useMemo, useState } from "react";
++import React, { useCallback, useMemo, useState } from "react";
+ import { Image } from "expo-image";
+ import { Stack } from "expo-router";
+-import { Platform, StyleSheet, Text, View } from "react-native";
++import { type LayoutChangeEvent, Platform, StyleSheet, Text, View } from "react-native";
+ 
+ import { DeckProbeCard } from "@/components/deck-probe-card";
+ import { ContinuousSquareStackDeck, type SquareStackDeckCard } from "@/features/square-stack-deck";
+@@ -58,6 +58,20 @@ function DemoCard({ card, index, total }: { card: DemoSquareCard; index: number;
+ export default function SquareDeckScreen() {
+   const { palette } = useTheme();
+   const [activeLabel, setActiveLabel] = useState("sq01");
++  const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
++
++  const handleStageLayout = useCallback((event: LayoutChangeEvent) => {
++    const { height, width } = event.nativeEvent.layout;
++    setStageBounds((current) => {
++      const nextWidth = Math.round(width);
++      const nextHeight = Math.round(height);
++      if (Math.abs(current.width - nextWidth) < 1 && Math.abs(current.height - nextHeight) < 1) {
++        return current;
++      }
++
++      return { width: nextWidth, height: nextHeight };
++    });
++  }, []);
+ 
+   const cards = useMemo<DemoSquareCard[]>(
+     () =>
+@@ -95,9 +109,11 @@ export default function SquareDeckScreen() {
+         <Text style={[styles.meta, { color: palette.muted }]}>Active: {activeLabel}</Text>
+       </View>
+ 
+-      <View style={styles.stage}>
++      <View style={styles.stage} onLayout={handleStageLayout}>
+         <ContinuousSquareStackDeck
+           cards={cards}
++          availableWidth={stageBounds.width}
++          availableHeight={stageBounds.height}
+           onIndexChange={(_, card) => setActiveLabel(card.id)}
+           renderCard={({ card, index, total }) => <DemoCard card={card} index={index} total={total} />}
+         />
+diff --git a/docs/SQUARE_STACK_DECK_LAB.md b/docs/SQUARE_STACK_DECK_LAB.md
+index 7413a05..f94fa78 100644
+--- a/docs/SQUARE_STACK_DECK_LAB.md
++++ b/docs/SQUARE_STACK_DECK_LAB.md
+@@ -65,3 +65,28 @@ The HelloWhen Places feed should only receive this model after the lab proves:
+ - tail card remains visible with 5+ cards
+ - image cards do not remount while moving between top/back/depth poses
+ - dark/light clipping and rounded corners remain stable
++
++## LAB2 sizing rule
++
++The deck should size from the route's measured stage whenever possible, not only from the raw window dimensions.
++
++The square deck screen measures the center stage with `onLayout` and passes:
++
++```txt
++availableWidth
++availableHeight
++```
++
++into `ContinuousSquareStackDeck`. The deck then reserves fixed diagonal-depth space before choosing the card size:
++
++```txt
++cardSize = min(
++  availableWidth - depthAllowanceX,
++  availableHeight - depthAllowanceY,
++  maxCardSize
++)
++```
++
++The preferred minimum card size is only a preference. On small phones, the card is allowed to shrink below that minimum instead of clipping at the bottom or right edge.
++
++This keeps the lab honest for later HelloWhen mobile work, where the real deck sits between native headers, top tabs, action bars, and bottom tab/navigation areas.
+diff --git a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+index 949a629..80ef279 100644
+--- a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
++++ b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+@@ -13,6 +13,7 @@ import Animated, {
+ import {
+   clamp,
+   getCommitDuration,
++  getSquareStackLayoutMetrics,
+   getSquareStackTransform,
+   getSquareStackZIndex,
+   getVisibleSquareStackIndexes,
+@@ -66,13 +67,25 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+   initialIndex = 0,
+   renderCard,
+   onIndexChange,
++  availableWidth,
++  availableHeight,
++  minCardSize,
++  maxCardSize,
+ }: SquareStackDeckProps<TCard>) {
+   const { width, height } = useWindowDimensions();
+-  // Fit the whole diagonal stack stage inside the phone viewport. LAB1 sized the
+-  // card from the viewport and then added 82px for stack depth, which made the
+-  // root wider than the screen on devices like iPhone 15.
+-  const stageSize = Math.round(Math.max(292, Math.min(width - 36, height * 0.52, 420)));
+-  const cardSize = Math.round(stageSize - 72);
++  const layoutMetrics = useMemo(
++    () =>
++      getSquareStackLayoutMetrics({
++        // Prefer the measured screen stage when the route provides it. Fall back
++        // to conservative viewport estimates while the first layout pass happens.
++        availableWidth: availableWidth && availableWidth > 0 ? availableWidth : width - 36,
++        availableHeight: availableHeight && availableHeight > 0 ? availableHeight : height * 0.54,
++        minCardSize,
++        maxCardSize,
++      }),
++    [availableHeight, availableWidth, height, maxCardSize, minCardSize, width]
++  );
++  const { cardSize, stageHeight, stageWidth } = layoutMetrics;
+ 
+   const safeInitialIndex = Math.min(Math.max(initialIndex, 0), Math.max(cards.length - 1, 0));
+   const [committedIndex, setCommittedIndex] = useState(safeInitialIndex);
+@@ -174,13 +187,13 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+   );
+ 
+   if (cards.length === 0) {
+-    return <View style={[styles.empty, { width: cardSize, height: cardSize }]} />;
++    return <View style={[styles.empty, { width: stageWidth, height: stageHeight }]} />;
+   }
+ 
+   return (
+-    <View style={[styles.root, { width: stageSize, height: stageSize }]}>
++    <View style={[styles.root, { width: stageWidth, height: stageHeight }]}>
+       <GestureDetector gesture={gesture}>
+-        <Animated.View style={[styles.gestureSurface, { width: stageSize, height: stageSize }]}>
++        <Animated.View style={[styles.gestureSurface, { width: stageWidth, height: stageHeight }]}>
+           <View pointerEvents="none" style={styles.debugBadge}>
+             <View style={styles.debugDot} />
+           </View>
+diff --git a/features/square-stack-deck/squareStackDeck.model.ts b/features/square-stack-deck/squareStackDeck.model.ts
+index e814f8e..7a6c4c1 100644
+--- a/features/square-stack-deck/squareStackDeck.model.ts
++++ b/features/square-stack-deck/squareStackDeck.model.ts
+@@ -6,11 +6,59 @@ export const SQUARE_STACK_VISIBLE_AFTER = 4;
+ export const SQUARE_STACK_COMMIT_THRESHOLD = 0.36;
+ export const SQUARE_STACK_VELOCITY_THRESHOLD = 1.05;
+ 
++export const SQUARE_STACK_DEPTH_ALLOWANCE_X = 72;
++export const SQUARE_STACK_DEPTH_ALLOWANCE_Y = 72;
++export const SQUARE_STACK_DEFAULT_MIN_CARD_SIZE = 248;
++export const SQUARE_STACK_DEFAULT_MAX_CARD_SIZE = 390;
++
++export type SquareStackLayoutInput = {
++  availableWidth: number;
++  availableHeight: number;
++  minCardSize?: number;
++  maxCardSize?: number;
++};
++
++export type SquareStackLayoutMetrics = {
++  cardSize: number;
++  stageWidth: number;
++  stageHeight: number;
++  depthAllowanceX: number;
++  depthAllowanceY: number;
++};
++
+ export function clamp(value: number, min: number, max: number) {
+   "worklet";
+   return Math.min(max, Math.max(min, value));
+ }
+ 
++
++export function getSquareStackLayoutMetrics({
++  availableWidth,
++  availableHeight,
++  minCardSize = SQUARE_STACK_DEFAULT_MIN_CARD_SIZE,
++  maxCardSize = SQUARE_STACK_DEFAULT_MAX_CARD_SIZE,
++}: SquareStackLayoutInput): SquareStackLayoutMetrics {
++  const safeWidth = Math.max(0, availableWidth);
++  const safeHeight = Math.max(0, availableHeight);
++
++  const usableWidth = Math.max(180, safeWidth - SQUARE_STACK_DEPTH_ALLOWANCE_X);
++  const usableHeight = Math.max(180, safeHeight - SQUARE_STACK_DEPTH_ALLOWANCE_Y);
++  const naturalCardSize = Math.min(usableWidth, usableHeight, maxCardSize);
++
++  // The lower bound should never force the card larger than the measured stage.
++  // Small devices are allowed to go below the preferred min instead of clipping.
++  const safeMinCardSize = Math.min(minCardSize, naturalCardSize);
++  const cardSize = Math.round(clamp(naturalCardSize, safeMinCardSize, maxCardSize));
++
++  return {
++    cardSize,
++    stageWidth: cardSize + SQUARE_STACK_DEPTH_ALLOWANCE_X,
++    stageHeight: cardSize + SQUARE_STACK_DEPTH_ALLOWANCE_Y,
++    depthAllowanceX: SQUARE_STACK_DEPTH_ALLOWANCE_X,
++    depthAllowanceY: SQUARE_STACK_DEPTH_ALLOWANCE_Y,
++  };
++}
++
+ export function getVisibleSquareStackIndexes(activeIndex: number, total: number) {
+   const indexes: number[] = [];
+   const from = Math.max(0, activeIndex - SQUARE_STACK_VISIBLE_BEFORE);
+diff --git a/features/square-stack-deck/squareStackDeck.types.ts b/features/square-stack-deck/squareStackDeck.types.ts
+index 15b59cf..a1a7400 100644
+--- a/features/square-stack-deck/squareStackDeck.types.ts
++++ b/features/square-stack-deck/squareStackDeck.types.ts
+@@ -15,4 +15,13 @@ export type SquareStackDeckProps<TCard extends SquareStackDeckCard> = {
+   initialIndex?: number;
+   renderCard: (args: SquareStackDeckRenderArgs<TCard>) => React.ReactNode;
+   onIndexChange?: (index: number, card: TCard) => void;
++  /**
++   * Optional measured space from the screen that owns the deck. The square deck
++   * can calculate from the viewport, but a measured parent stage is more
++   * reliable on phones because native headers, footers, and safe areas vary.
++   */
++  availableWidth?: number;
++  availableHeight?: number;
++  minCardSize?: number;
++  maxCardSize?: number;
+ };

@@ -1,0 +1,741 @@
+diff --git a/app/index.tsx b/app/index.tsx
+index 16243eb..019dbb7 100644
+--- a/app/index.tsx
++++ b/app/index.tsx
+@@ -38,6 +38,12 @@ export default function LabsIndexScreen() {
+         description: "Trade cards prototype.",
+         href: "/trade",
+       },
++      {
++        title: "Square Deck Lab",
++        description: "Isolated square-card stack using one continuous diagonal swipe model.",
++        href: "/square-deck",
++        badge: "new",
++      },
+       {
+         title: "Image Card",
+         description: "Full-bleed image card with a soft lower-third blur transition.",
+diff --git a/app/square-deck.tsx b/app/square-deck.tsx
+new file mode 100644
+index 0000000..e8c416a
+--- /dev/null
++++ b/app/square-deck.tsx
+@@ -0,0 +1,227 @@
++import React, { useMemo, useState } from "react";
++import { Image } from "expo-image";
++import { Stack } from "expo-router";
++import { Platform, StyleSheet, Text, View } from "react-native";
++
++import { DeckProbeCard } from "@/components/deck-probe-card";
++import { ContinuousSquareStackDeck, type SquareStackDeckCard } from "@/features/square-stack-deck";
++import { useTheme } from "@/providers/ThemeProvider";
++
++type DemoSquareCard = SquareStackDeckCard & {
++  title: string;
++  location: string;
++  imageUrl: string;
++  tags: string[];
++};
++
++function DemoCard({ card, index, total }: { card: DemoSquareCard; index: number; total: number }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={styles.cardBody}>
++      <Image
++        source={{ uri: card.imageUrl }}
++        style={StyleSheet.absoluteFill}
++        contentFit="cover"
++        transition={0}
++        cachePolicy="memory-disk"
++      />
++      <View style={styles.scrim} />
++
++      <View style={styles.topRow}>
++        <Text style={styles.kicker}>{`SQUARE ${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`}</Text>
++        <Text style={styles.cardId}>{card.id.toUpperCase()}</Text>
++      </View>
++
++      <View style={styles.bottomPanel}>
++        <Text style={styles.title} numberOfLines={2}>
++          {card.title}
++        </Text>
++        <Text style={styles.location} numberOfLines={1}>
++          {card.location}
++        </Text>
++        <View style={styles.tagsRow}>
++          {card.tags.map((tag) => (
++            <View key={`${card.id}-${tag}`} style={styles.tag}>
++              <Text style={styles.tagText}>{tag}</Text>
++            </View>
++          ))}
++        </View>
++        <View style={[styles.probeWrap, { borderColor: palette.mode === "light" ? "rgba(0,0,0,0.10)" : "rgba(255,255,255,0.14)" }]}>
++          <DeckProbeCard cardId={`square-${card.id}`} label="SQUARE" />
++        </View>
++      </View>
++    </View>
++  );
++}
++
++export default function SquareDeckScreen() {
++  const { palette } = useTheme();
++  const [activeLabel, setActiveLabel] = useState("sq01");
++
++  const cards = useMemo<DemoSquareCard[]>(
++    () =>
++      Array.from({ length: 9 }, (_, index) => {
++        const id = `sq${String(index + 1).padStart(2, "0")}`;
++        const seed = `hello-when-square-${index + 1}`;
++        return {
++          id,
++          title: [
++            "Rooftop sunset walk",
++            "Hidden garden coffee",
++            "Late-night ramen corner",
++            "Canal-side book market",
++            "Tiny gallery opening",
++            "Morning bakery queue",
++            "Old town photo loop",
++            "Quiet jazz basement",
++            "Sunday park picnic",
++          ][index],
++          location: ["Paris", "Lyon", "Tokyo", "Amsterdam", "Berlin", "Lisbon", "Seoul", "New York", "Montreal"][index],
++          imageUrl: `https://picsum.photos/seed/${encodeURIComponent(seed)}/900/900`,
++          tags: ["stable-id", "diagonal", index % 2 === 0 ? "image" : "stack"],
++        };
++      }),
++    []
++  );
++
++  return (
++    <View style={[styles.screen, { backgroundColor: palette.background }]}>
++      <Stack.Screen options={{ title: "Square Deck Lab" }} />
++
++      <View style={styles.header}>
++        <Text style={[styles.h1, { color: palette.text }]}>Square stack deck</Text>
++        <Text style={[styles.sub, { color: palette.muted }]}>Swipe up-left for next. Swipe down-right for previous.</Text>
++        <Text style={[styles.meta, { color: palette.muted }]}>Active: {activeLabel}</Text>
++      </View>
++
++      <View style={styles.stage}>
++        <ContinuousSquareStackDeck
++          cards={cards}
++          onIndexChange={(_, card) => setActiveLabel(card.id)}
++          renderCard={({ card, index, total }) => <DemoCard card={card} index={index} total={total} />}
++        />
++      </View>
++
++      <View style={styles.footer}>
++        <Text style={[styles.footerText, { color: palette.muted }]}>Model: one stable card key per item, visualOffset = cardIndex - activeIndex - progress.</Text>
++      </View>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  screen: {
++    flex: 1,
++  },
++  header: {
++    paddingTop: Platform.OS === "web" ? 24 : 18,
++    paddingHorizontal: 18,
++    gap: 4,
++  },
++  h1: {
++    fontSize: 24,
++    fontWeight: "900",
++    letterSpacing: -0.4,
++  },
++  sub: {
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  meta: {
++    marginTop: 4,
++    fontSize: 12,
++    fontWeight: "800",
++    letterSpacing: 0.8,
++    textTransform: "uppercase",
++  },
++  stage: {
++    flex: 1,
++    alignItems: "center",
++    justifyContent: "center",
++    paddingHorizontal: 18,
++  },
++  footer: {
++    paddingHorizontal: 18,
++    paddingBottom: 18,
++  },
++  footerText: {
++    textAlign: "center",
++    fontSize: 12,
++    lineHeight: 17,
++  },
++  cardBody: {
++    flex: 1,
++    backgroundColor: "#111",
++  },
++  scrim: {
++    ...StyleSheet.absoluteFillObject,
++    backgroundColor: "rgba(0,0,0,0.22)",
++  },
++  topRow: {
++    position: "absolute",
++    top: 16,
++    left: 16,
++    right: 16,
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  kicker: {
++    color: "rgba(255,255,255,0.82)",
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 1.1,
++  },
++  cardId: {
++    color: "#fff",
++    fontSize: 18,
++    fontWeight: "900",
++    letterSpacing: -0.4,
++  },
++  bottomPanel: {
++    position: "absolute",
++    left: 14,
++    right: 14,
++    bottom: 14,
++    borderRadius: 22,
++    padding: 14,
++    gap: 8,
++    backgroundColor: "rgba(0,0,0,0.42)",
++    borderWidth: StyleSheet.hairlineWidth,
++    borderColor: "rgba(255,255,255,0.22)",
++  },
++  title: {
++    color: "#fff",
++    fontSize: 25,
++    fontWeight: "900",
++    letterSpacing: -0.6,
++    lineHeight: 29,
++  },
++  location: {
++    color: "rgba(255,255,255,0.74)",
++    fontSize: 13,
++    fontWeight: "700",
++  },
++  tagsRow: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 6,
++  },
++  tag: {
++    borderRadius: 999,
++    paddingHorizontal: 9,
++    paddingVertical: 5,
++    backgroundColor: "rgba(255,255,255,0.16)",
++  },
++  tagText: {
++    color: "rgba(255,255,255,0.88)",
++    fontSize: 11,
++    fontWeight: "800",
++  },
++  probeWrap: {
++    borderTopWidth: StyleSheet.hairlineWidth,
++    paddingTop: 6,
++  },
++});
+diff --git a/docs/SQUARE_STACK_DECK_LAB.md b/docs/SQUARE_STACK_DECK_LAB.md
+new file mode 100644
+index 0000000..7413a05
+--- /dev/null
++++ b/docs/SQUARE_STACK_DECK_LAB.md
+@@ -0,0 +1,67 @@
++# Square Stack Deck Lab
++
++This lab is intentionally separate from the existing `features/deck` implementation.
++
++## Goal
++
++Prototype a square-card stack where diagonal swipes are driven by one continuous physical model:
++
++```txt
++visualOffset = cardIndex - activeIndex - progress
++```
++
++- `progress = 1` means the next card has visually reached the top.
++- `progress = -1` means the previous card has visually reached the top.
++- At commit, `activeIndex += direction` and `progress = 0` should produce the same card positions as the pre-commit final frame.
++
++That is the core anti-pop/rebase rule.
++
++## Route
++
++Open:
++
++```txt
++/square-deck
++```
++
++## Gesture
++
++- Swipe up-left for next.
++- Swipe down-right for previous.
++
++The gesture scalar is based on both x and y translation so the deck feels diagonal rather than purely horizontal.
++
++## What this lab deliberately avoids
++
++- No `top-*`, `back-*`, `ghost-prev-*` render keys.
++- No duplicate visual owners for the same card.
++- No separate previous-card ghost layer.
++- No role-based media remount.
++- No hidden inactive card bodies.
++
++Each card is keyed by the stable card id.
++
++## Visible window
++
++The deck renders:
++
++```txt
++activeIndex - 1
++activeIndex
++activeIndex + 1
++activeIndex + 2
++activeIndex + 3
++activeIndex + 4
++```
++
++This keeps the incoming previous card and far tail card alive during the gesture.
++
++## Porting rule for HelloWhen later
++
++The HelloWhen Places feed should only receive this model after the lab proves:
++
++- previous swipe has no release pop
++- current top remains visible behind incoming previous
++- tail card remains visible with 5+ cards
++- image cards do not remount while moving between top/back/depth poses
++- dark/light clipping and rounded corners remain stable
+diff --git a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+new file mode 100644
+index 0000000..7376136
+--- /dev/null
++++ b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+@@ -0,0 +1,229 @@
++import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
++import { StyleSheet, useWindowDimensions, View } from "react-native";
++import { Gesture, GestureDetector } from "react-native-gesture-handler";
++import Animated, {
++  Easing,
++  runOnJS,
++  type SharedValue,
++  useAnimatedStyle,
++  useSharedValue,
++  withTiming,
++} from "react-native-reanimated";
++
++import {
++  clamp,
++  getCommitDuration,
++  getSquareStackTransform,
++  getSquareStackZIndex,
++  getVisibleSquareStackIndexes,
++  SQUARE_STACK_COMMIT_THRESHOLD,
++  SQUARE_STACK_VELOCITY_THRESHOLD,
++} from "../squareStackDeck.model";
++import type { SquareStackDeckCard, SquareStackDeckProps } from "../squareStackDeck.types";
++import { SquareStackCardShell } from "./SquareStackCardShell";
++
++type LayerProps<TCard extends SquareStackDeckCard> = {
++  card: TCard;
++  index: number;
++  total: number;
++  size: number;
++  baseIndex: SharedValue<number>;
++  progress: SharedValue<number>;
++  renderCard: SquareStackDeckProps<TCard>["renderCard"];
++};
++
++function SquareStackLayerInner<TCard extends SquareStackDeckCard>({
++  card,
++  index,
++  total,
++  size,
++  baseIndex,
++  progress,
++  renderCard,
++}: LayerProps<TCard>) {
++  const animatedStyle = useAnimatedStyle(() => {
++    const visualOffset = index - baseIndex.value - progress.value;
++    const pose = getSquareStackTransform(visualOffset, size);
++
++    return {
++      opacity: pose.opacity,
++      zIndex: getSquareStackZIndex(visualOffset),
++      transform: [{ translateX: pose.translateX }, { translateY: pose.translateY }, { scale: pose.scale }],
++    };
++  }, [index, size]);
++
++  return (
++    <Animated.View pointerEvents="box-none" style={[styles.layer, animatedStyle]}>
++      <SquareStackCardShell size={size}>{renderCard({ card, index, total })}</SquareStackCardShell>
++    </Animated.View>
++  );
++}
++
++const SquareStackLayer = memo(SquareStackLayerInner) as typeof SquareStackLayerInner;
++
++export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
++  cards,
++  initialIndex = 0,
++  renderCard,
++  onIndexChange,
++}: SquareStackDeckProps<TCard>) {
++  const { width, height } = useWindowDimensions();
++  const maxSquare = Math.min(width - 40, height * 0.58, 390);
++  const cardSize = Math.max(280, Math.round(maxSquare));
++
++  const safeInitialIndex = Math.min(Math.max(initialIndex, 0), Math.max(cards.length - 1, 0));
++  const [committedIndex, setCommittedIndex] = useState(safeInitialIndex);
++
++  const baseIndex = useSharedValue(safeInitialIndex);
++  const progress = useSharedValue(0);
++
++  useEffect(() => {
++    const nextIndex = Math.min(committedIndex, Math.max(cards.length - 1, 0));
++    if (nextIndex !== committedIndex) {
++      setCommittedIndex(nextIndex);
++    }
++    baseIndex.value = nextIndex;
++    progress.value = 0;
++  }, [baseIndex, cards.length, committedIndex, progress]);
++
++  const visibleIndexes = useMemo(
++    () => getVisibleSquareStackIndexes(committedIndex, cards.length),
++    [cards.length, committedIndex]
++  );
++
++  const commitIndex = useCallback(
++    (direction: -1 | 1) => {
++      setCommittedIndex((current) => {
++        const next = Math.min(Math.max(current + direction, 0), Math.max(cards.length - 1, 0));
++        const nextCard = cards[next];
++        if (nextCard) {
++          onIndexChange?.(next, nextCard);
++        }
++        return next;
++      });
++    },
++    [cards, onIndexChange]
++  );
++
++  const gesture = useMemo(
++    () =>
++      Gesture.Pan()
++        .minDistance(8)
++        .onUpdate((event) => {
++          const diagonalDrag = event.translationX + event.translationY * 0.9;
++          const rawProgress = -diagonalDrag / (cardSize * 0.72);
++
++          const canGoNext = baseIndex.value < cards.length - 1;
++          const canGoPrev = baseIndex.value > 0;
++          const resisted =
++            (rawProgress > 0 && !canGoNext) || (rawProgress < 0 && !canGoPrev) ? rawProgress * 0.18 : rawProgress;
++
++          progress.value = clamp(resisted, -1, 1);
++        })
++        .onEnd((event) => {
++          const velocityProgress = -(event.velocityX + event.velocityY * 0.9) / (cardSize * 0.72);
++          const currentProgress = progress.value;
++          const canGoNext = baseIndex.value < cards.length - 1;
++          const canGoPrev = baseIndex.value > 0;
++
++          let direction: -1 | 0 | 1 = 0;
++          if (
++            (currentProgress > SQUARE_STACK_COMMIT_THRESHOLD || velocityProgress > SQUARE_STACK_VELOCITY_THRESHOLD) &&
++            canGoNext
++          ) {
++            direction = 1;
++          } else if (
++            (currentProgress < -SQUARE_STACK_COMMIT_THRESHOLD || velocityProgress < -SQUARE_STACK_VELOCITY_THRESHOLD) &&
++            canGoPrev
++          ) {
++            direction = -1;
++          }
++
++          const targetProgress = direction === 0 ? 0 : direction;
++          const duration = getCommitDuration(currentProgress, targetProgress);
++
++          progress.value = withTiming(
++            targetProgress,
++            { duration, easing: Easing.out(Easing.cubic) },
++            (finished) => {
++              if (!finished) {
++                return;
++              }
++
++              if (direction !== 0) {
++                // Important: this is the invisible rebase. At progress = +/-1,
++                // baseIndex + direction with progress = 0 is the same visual pose.
++                baseIndex.value = baseIndex.value + direction;
++                progress.value = 0;
++                runOnJS(commitIndex)(direction);
++                return;
++              }
++
++              progress.value = 0;
++            }
++          );
++        }),
++    [baseIndex, cardSize, cards.length, commitIndex, progress]
++  );
++
++  if (cards.length === 0) {
++    return <View style={[styles.empty, { width: cardSize, height: cardSize }]} />;
++  }
++
++  return (
++    <View style={[styles.root, { width: cardSize + 82, height: cardSize + 82 }]}>
++      <GestureDetector gesture={gesture}>
++        <Animated.View style={[styles.gestureSurface, { width: cardSize + 82, height: cardSize + 82 }]}>
++          <View pointerEvents="none" style={styles.debugBadge}>
++            <View style={styles.debugDot} />
++          </View>
++          {visibleIndexes.map((cardIndex) => {
++            const card = cards[cardIndex];
++            return (
++              <SquareStackLayer
++                key={card.id}
++                card={card}
++                index={cardIndex}
++                total={cards.length}
++                size={cardSize}
++                baseIndex={baseIndex}
++                progress={progress}
++                renderCard={renderCard}
++              />
++            );
++          })}
++        </Animated.View>
++      </GestureDetector>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  root: {
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  gestureSurface: {
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  layer: {
++    position: "absolute",
++  },
++  empty: {
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  debugBadge: {
++    position: "absolute",
++    top: 6,
++    right: 6,
++    zIndex: 2000,
++  },
++  debugDot: {
++    width: 7,
++    height: 7,
++    borderRadius: 999,
++    backgroundColor: "rgba(255,255,255,0.28)",
++  },
++});
+diff --git a/features/square-stack-deck/components/SquareStackCardShell.tsx b/features/square-stack-deck/components/SquareStackCardShell.tsx
+new file mode 100644
+index 0000000..656482e
+--- /dev/null
++++ b/features/square-stack-deck/components/SquareStackCardShell.tsx
+@@ -0,0 +1,57 @@
++import React from "react";
++import { Platform, StyleSheet, View } from "react-native";
++
++import { useTheme } from "@/providers/ThemeProvider";
++
++type Props = {
++  size: number;
++  children: React.ReactNode;
++};
++
++export function SquareStackCardShell({ size, children }: Props) {
++  const { palette } = useTheme();
++  const radius = Math.max(24, Math.round(size * 0.075));
++
++  return (
++    <View
++      style={[
++        styles.shadow,
++        {
++          width: size,
++          height: size,
++          borderRadius: radius,
++          shadowColor: palette.mode === "light" ? "#000" : "#000",
++        },
++      ]}
++    >
++      <View
++        style={[
++          styles.card,
++          {
++            borderRadius: radius,
++            borderColor: palette.mode === "light" ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.12)",
++            backgroundColor: palette.surface,
++          },
++        ]}
++      >
++        {children}
++      </View>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  shadow: {
++    position: "absolute",
++    shadowOffset: { width: 0, height: 16 },
++    shadowOpacity: 0.22,
++    shadowRadius: 28,
++    elevation: 16,
++  },
++  card: {
++    flex: 1,
++    overflow: "hidden",
++    borderWidth: StyleSheet.hairlineWidth,
++    ...(Platform.OS === "web" ? ({ willChange: "transform" } as any) : null),
++  },
++});
+diff --git a/features/square-stack-deck/index.ts b/features/square-stack-deck/index.ts
+new file mode 100644
+index 0000000..3b2d1cd
+--- /dev/null
++++ b/features/square-stack-deck/index.ts
+@@ -0,0 +1,2 @@
++export { ContinuousSquareStackDeck } from "./components/ContinuousSquareStackDeck";
++export type { SquareStackDeckCard, SquareStackDeckProps } from "./squareStackDeck.types";
+diff --git a/features/square-stack-deck/squareStackDeck.model.ts b/features/square-stack-deck/squareStackDeck.model.ts
+new file mode 100644
+index 0000000..e814f8e
+--- /dev/null
++++ b/features/square-stack-deck/squareStackDeck.model.ts
+@@ -0,0 +1,68 @@
++import { Extrapolation, interpolate } from "react-native-reanimated";
++
++export const SQUARE_STACK_VISIBLE_BEFORE = 1;
++export const SQUARE_STACK_VISIBLE_AFTER = 4;
++
++export const SQUARE_STACK_COMMIT_THRESHOLD = 0.36;
++export const SQUARE_STACK_VELOCITY_THRESHOLD = 1.05;
++
++export function clamp(value: number, min: number, max: number) {
++  "worklet";
++  return Math.min(max, Math.max(min, value));
++}
++
++export function getVisibleSquareStackIndexes(activeIndex: number, total: number) {
++  const indexes: number[] = [];
++  const from = Math.max(0, activeIndex - SQUARE_STACK_VISIBLE_BEFORE);
++  const to = Math.min(total - 1, activeIndex + SQUARE_STACK_VISIBLE_AFTER);
++
++  for (let index = from; index <= to; index += 1) {
++    indexes.push(index);
++  }
++
++  return indexes;
++}
++
++export function getSquareStackTransform(visualOffset: number, cardSize: number) {
++  "worklet";
++
++  const clampedOffset = clamp(visualOffset, -1, 4.25);
++  const input = [-1, 0, 1, 2, 3, 4];
++
++  const translateX = interpolate(
++    clampedOffset,
++    input,
++    [-cardSize * 0.68, 0, 10, 20, 30, 40],
++    Extrapolation.CLAMP
++  );
++  const translateY = interpolate(
++    clampedOffset,
++    input,
++    [-cardSize * 0.58, 0, 10, 20, 30, 40],
++    Extrapolation.CLAMP
++  );
++  const scale = interpolate(clampedOffset, input, [0.96, 1, 0.97, 0.94, 0.91, 0.88], Extrapolation.CLAMP);
++  const opacity = interpolate(clampedOffset, input, [0, 1, 0.92, 0.78, 0.62, 0.38], Extrapolation.CLAMP);
++
++  return {
++    translateX,
++    translateY,
++    scale,
++    opacity,
++  };
++}
++
++export function getSquareStackZIndex(visualOffset: number) {
++  "worklet";
++
++  // Lower visual offsets are closer to the viewer. This makes the incoming
++  // previous card sit above the current top while it travels from -1 -> 0.
++  return Math.round(1000 - visualOffset * 40);
++}
++
++export function getCommitDuration(currentProgress: number, targetProgress: number) {
++  "worklet";
++
++  const remaining = Math.abs(targetProgress - currentProgress);
++  return clamp(160 + remaining * 180, 120, 340);
++}
+diff --git a/features/square-stack-deck/squareStackDeck.types.ts b/features/square-stack-deck/squareStackDeck.types.ts
+new file mode 100644
+index 0000000..15b59cf
+--- /dev/null
++++ b/features/square-stack-deck/squareStackDeck.types.ts
+@@ -0,0 +1,18 @@
++import type React from "react";
++
++export type SquareStackDeckCard = {
++  id: string;
++};
++
++export type SquareStackDeckRenderArgs<TCard extends SquareStackDeckCard> = {
++  card: TCard;
++  index: number;
++  total: number;
++};
++
++export type SquareStackDeckProps<TCard extends SquareStackDeckCard> = {
++  cards: TCard[];
++  initialIndex?: number;
++  renderCard: (args: SquareStackDeckRenderArgs<TCard>) => React.ReactNode;
++  onIndexChange?: (index: number, card: TCard) => void;
++};
+diff --git a/package.json b/package.json
+index 1f648a3..94e50f1 100644
+--- a/package.json
++++ b/package.json
+@@ -8,7 +8,8 @@
+     "android": "expo start --android",
+     "ios": "expo start --ios",
+     "web": "expo start --web",
+-    "lint": "expo lint"
++    "lint": "expo lint",
++    "typecheck": "tsc --noEmit"
+   },
+   "dependencies": {
+     "@expo/vector-icons": "^15.0.3",

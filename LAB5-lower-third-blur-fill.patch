@@ -1,0 +1,190 @@
+diff --git a/app/square-deck.tsx b/app/square-deck.tsx
+index 8d97fab..b1301e7 100644
+--- a/app/square-deck.tsx
++++ b/app/square-deck.tsx
+@@ -163,7 +163,7 @@ export default function SquareDeckScreen() {
+       </View>
+ 
+       <View style={styles.footer}>
+-        <Text style={[styles.footerText, { color: palette.muted }]}>LAB4: place-like content only. Real blur and static OSM simulation stay for LAB5/LAB6.</Text>
++        <Text style={[styles.footerText, { color: palette.muted }]}>LAB5: lower-third atmospheric blur/fill is active. Static OSM-specific simulation stays for LAB6.</Text>
+       </View>
+     </View>
+   );
+diff --git a/docs/SQUARE_STACK_DECK_LAB.md b/docs/SQUARE_STACK_DECK_LAB.md
+index fc826a3..3d31150 100644
+--- a/docs/SQUARE_STACK_DECK_LAB.md
++++ b/docs/SQUARE_STACK_DECK_LAB.md
+@@ -133,3 +133,21 @@ The LAB4 card simulates:
+ ```
+ 
+ This slice intentionally does not copy real HelloWhen feed code and does not add the expensive lower-third blur yet. LAB5 should bring in the image-card blur/fill behavior in a controlled way, and LAB6 should add a more explicit static OSM/map simulation.
++
++
++## LAB5 lower-third blur/fill rule
++
++LAB5 ports the image-card lab's lower atmospheric support into the square PlaceCard simulation. The card keeps one full-bleed base image, then adds a clipped lower atmosphere layer that starts softly and becomes stronger near the bottom third.
++
++Implementation rules:
++
++```txt
++- do not add a hard footer block
++- keep the media full bleed behind the text
++- keep the start of the lower effect hard to notice
++- use fewer blur slices than the standalone image-card lab
++- keep transition={0} and stable media source objects during deck movement
++- fallback cards use tint/fill only because they do not have a photo source
++```
++
++This is still a lab simulation. LAB6 should add explicit photo/static-map/fallback variants and stress-test bright map surfaces in light and dark modes.
+diff --git a/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx b/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx
+index 20b9a75..a930d78 100644
+--- a/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx
++++ b/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx
+@@ -25,6 +25,71 @@ type Props = {
+   total: number;
+ };
+ 
++const BLUR_SLICE_COUNT = 10;
++
++type LowerAtmosphereProps = {
++  source?: { uri: string };
++  accent: string;
++  isDark: boolean;
++};
++
++function LowerAtmosphere({ source, accent, isDark }: LowerAtmosphereProps) {
++  const slices = useMemo(() => Array.from({ length: BLUR_SLICE_COUNT }, (_, index) => index), []);
++  const tintBase = isDark ? "rgba(4,6,9,0.70)" : "rgba(255,255,255,0.58)";
++  const warmthTint = isDark ? "rgba(0,0,0,0.26)" : "rgba(255,255,255,0.26)";
++
++  return (
++    <View pointerEvents="none" style={styles.lowerAtmosphere}>
++      {source ? (
++        slices.map((slice) => {
++          const progress = (slice + 1) / BLUR_SLICE_COUNT;
++          const eased = progress * progress * (3 - 2 * progress);
++          const sliceHeight = 100 / BLUR_SLICE_COUNT;
++
++          return (
++            <React.Fragment key={`atmosphere-slice-${slice}`}>
++              <View
++                style={[
++                  styles.atmosphereSlice,
++                  {
++                    top: `${slice * sliceHeight}%`,
++                    height: `${sliceHeight + 2}%`,
++                    opacity: 0.08 + eased * 0.68,
++                  },
++                ]}
++              >
++                <Image
++                  source={source}
++                  contentFit="cover"
++                  transition={0}
++                  blurRadius={5 + eased * 18}
++                  style={StyleSheet.absoluteFillObject}
++                />
++              </View>
++              <View
++                style={[
++                  styles.atmosphereSlice,
++                  {
++                    top: `${slice * sliceHeight}%`,
++                    height: `${sliceHeight + 2}%`,
++                    backgroundColor: tintBase,
++                    opacity: 0.04 + eased * 0.62,
++                  },
++                ]}
++              />
++            </React.Fragment>
++          );
++        })
++      ) : (
++        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? "rgba(3,5,8,0.56)" : "rgba(255,255,255,0.54)" }]} />
++      )}
++
++      <View style={[styles.atmosphereAccentWash, { backgroundColor: accent }]} />
++      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: warmthTint }]} />
++    </View>
++  );
++}
++
+ function mediaLabel(kind: DemoPlaceMediaKind) {
+   switch (kind) {
+     case "photo":
+@@ -42,8 +107,9 @@ function HelloWhenPlaceCardDemoInner({ card, index, total }: Props) {
+   const { palette } = useTheme();
+   const isDark = palette.mode === "dark";
+   const mediaSurface = isDark ? "#0c1116" : "#dfe6dc";
+-  const lowerPanelColor = isDark ? "rgba(7,9,12,0.68)" : "rgba(255,255,255,0.76)";
+-  const lowerPanelBorder = isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.08)";
++  const mediaSource = useMemo(() => (card.imageUrl ? { uri: card.imageUrl } : undefined), [card.imageUrl]);
++  const lowerPanelColor = isDark ? "rgba(7,9,12,0.42)" : "rgba(255,255,255,0.44)";
++  const lowerPanelBorder = isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)";
+   const titleColor = isDark ? "#fff" : "#101010";
+   const bodyColor = isDark ? "rgba(255,255,255,0.76)" : "rgba(0,0,0,0.62)";
+   const pillBg = isDark ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.84)";
+@@ -53,9 +119,9 @@ function HelloWhenPlaceCardDemoInner({ card, index, total }: Props) {
+ 
+   return (
+     <View style={[styles.card, { backgroundColor: mediaSurface }]}>
+-      {card.imageUrl ? (
++      {mediaSource ? (
+         <Image
+-          source={{ uri: card.imageUrl }}
++          source={mediaSource}
+           style={StyleSheet.absoluteFillObject}
+           contentFit="cover"
+           transition={0}
+@@ -82,6 +148,7 @@ function HelloWhenPlaceCardDemoInner({ card, index, total }: Props) {
+ 
+       <View style={styles.topShade} />
+       <View style={styles.bottomShade} />
++      <LowerAtmosphere source={mediaSource} accent={card.accent} isDark={isDark} />
+ 
+       <View style={styles.topChrome}>
+         <View style={[styles.statusPill, { backgroundColor: pillBg }]}>
+@@ -118,7 +185,7 @@ function HelloWhenPlaceCardDemoInner({ card, index, total }: Props) {
+ 
+         <View style={styles.tagsRow}>
+           {card.tags.slice(0, 3).map((tag) => (
+-            <View key={`${card.id}-${tag}`} style={[styles.tag, { backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)" }]}>
++            <View key={`${card.id}-${tag}`} style={[styles.tag, { backgroundColor: isDark ? "rgba(255,255,255,0.11)" : "rgba(255,255,255,0.46)" }]}>
+               <Text style={[styles.tagText, { color: bodyColor }]}>{tag}</Text>
+             </View>
+           ))}
+@@ -169,8 +236,31 @@ const styles = StyleSheet.create({
+     left: 0,
+     right: 0,
+     bottom: 0,
+-    height: "54%",
+-    backgroundColor: "rgba(0,0,0,0.22)",
++    height: "46%",
++    backgroundColor: "rgba(0,0,0,0.14)",
++  },
++  lowerAtmosphere: {
++    position: "absolute",
++    left: 0,
++    right: 0,
++    bottom: 0,
++    height: "52%",
++    overflow: "hidden",
++  },
++  atmosphereSlice: {
++    position: "absolute",
++    left: 0,
++    right: 0,
++    overflow: "hidden",
++  },
++  atmosphereAccentWash: {
++    position: "absolute",
++    left: "12%",
++    right: "12%",
++    bottom: "5%",
++    height: "45%",
++    borderRadius: 999,
++    opacity: 0.10,
+   },
+   topChrome: {
+     position: "absolute",

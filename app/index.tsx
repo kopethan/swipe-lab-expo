@@ -39,6 +39,12 @@ export default function LabsIndexScreen() {
         href: "/trade",
       },
       {
+        title: "Square Deck Lab",
+        description: "Isolated square-card stack using one continuous diagonal swipe model.",
+        href: "/square-deck",
+        badge: "new",
+      },
+      {
         title: "Image Card",
         description: "Full-bleed image card with a soft lower-third blur transition.",
         href: "/image-card",
