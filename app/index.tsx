@@ -45,6 +45,24 @@ export default function LabsIndexScreen() {
         badge: "new",
       },
       {
+        title: "Square Deck Page Scroll",
+        description: "Deck embedded in a normal vertically scrolling page.",
+        href: "/square-deck-page",
+        badge: "test",
+      },
+      {
+        title: "Three Deck Scroll",
+        description: "Three deck sections stacked vertically to stress-test scroll handoff.",
+        href: "/square-deck-scroll",
+        badge: "test",
+      },
+      {
+        title: "Mixed Media Deck",
+        description: "Photo, static-map-like, and fallback cards in one deck.",
+        href: "/square-deck-mixed",
+        badge: "test",
+      },
+      {
         title: "Image Card",
         description: "Full-bleed image card with a soft lower-third blur transition.",
         href: "/image-card",

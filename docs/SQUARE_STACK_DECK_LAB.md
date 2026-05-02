@@ -184,3 +184,44 @@ The intended result is not a frosted rectangle. It should feel like the image it
 - Increased the blur slice count and overlap so the blur grows more continuously from top to bottom.
 - Slightly expanded the atmosphere height again, with stronger protection on static-map cards.
 
+
+
+## LAB5d — Align square deck blur with Image Card design
+
+- Replaced the square-card custom local lower-atmosphere model with the same full-card sliced fade model used by `FullBleedBlurCard`.
+- The blur/tint now starts from a card-level percentage, not from a nested bottom container, so the transition matches the `/image-card` reference more closely.
+- Removed bridge bands, feather veils, and accent washes that were creating a visible frosted-panel feeling.
+- Kept static-map cards slightly stronger, starting around 46% of card height, while photo cards start around 50%.
+- The intended look is the Image Card rule: almost invisible in the middle, softly visible lower down, strongest near the bottom edge.
+
+
+## LAB5e — Remove top shade and stabilize image fallback
+
+- Removed the separate top shade layer from the square demo card; it was visible as a gray rectangle over every card.
+- Added per-card image failure handling so a failed remote image cleanly falls back to the lab fallback surface instead of leaving the blur/image layers in a half-loaded state.
+- Added a stable recycling key to the main image layer so card identity stays tied to the card id while swiping.
+
+## LAB6 — Vertical/page scroll test routes
+
+Adds three routes that reuse the same square deck engine while placing it under real vertical-scroll pressure:
+
+- `/square-deck-page` — one deck embedded inside a normal feed-like page with content above and below.
+- `/square-deck-scroll` — three deck sections in one vertical `ScrollView` to stress-test moving between decks.
+- `/square-deck-mixed` — photo, static-map-like, and fallback cards in one route for media regression checks.
+
+The deck pan now uses `activeOffsetX([-12, 12])` so mostly vertical drags can be handled by the parent `ScrollView`, while deliberate up-left / down-right diagonal gestures still activate the deck.
+
+
+## LAB6a — HelloWhen-style gesture intent classifier
+
+The square deck now uses a lab-local copy of the HelloWhen deck gesture intent model instead of the coarse `activeOffsetX` route test.
+
+Intent rules:
+
+- mostly vertical drags fail the deck gesture so parent `ScrollView` routes can scroll naturally;
+- top-right / bottom-left diagonal drags are treated as scroll intent;
+- top-left / bottom-right diagonal drags are treated as card swipe intent when the requested direction exists;
+- horizontal drags still swipe the deck;
+- unavailable directions, such as previous on the first card or next on the last card, are handed to scroll instead of fighting the page.
+
+This patch is isolated to `features/square-stack-deck` and does not touch the older `features/deck` implementation.

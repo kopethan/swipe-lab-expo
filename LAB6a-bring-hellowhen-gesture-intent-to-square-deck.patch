@@ -1,0 +1,158 @@
+diff --git a/docs/SQUARE_STACK_DECK_LAB.md b/docs/SQUARE_STACK_DECK_LAB.md
+index bed1beb..641ae2e 100644
+--- a/docs/SQUARE_STACK_DECK_LAB.md
++++ b/docs/SQUARE_STACK_DECK_LAB.md
+@@ -210,3 +210,18 @@ Adds three routes that reuse the same square deck engine while placing it under
+ - `/square-deck-mixed` — photo, static-map-like, and fallback cards in one route for media regression checks.
+ 
+ The deck pan now uses `activeOffsetX([-12, 12])` so mostly vertical drags can be handled by the parent `ScrollView`, while deliberate up-left / down-right diagonal gestures still activate the deck.
++
++
++## LAB6a — HelloWhen-style gesture intent classifier
++
++The square deck now uses a lab-local copy of the HelloWhen deck gesture intent model instead of the coarse `activeOffsetX` route test.
++
++Intent rules:
++
++- mostly vertical drags fail the deck gesture so parent `ScrollView` routes can scroll naturally;
++- top-right / bottom-left diagonal drags are treated as scroll intent;
++- top-left / bottom-right diagonal drags are treated as card swipe intent when the requested direction exists;
++- horizontal drags still swipe the deck;
++- unavailable directions, such as previous on the first card or next on the last card, are handed to scroll instead of fighting the page.
++
++This patch is isolated to `features/square-stack-deck` and does not touch the older `features/deck` implementation.
+diff --git a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+index aeb321a..4d7a037 100644
+--- a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
++++ b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+@@ -22,6 +22,7 @@ import {
+   SQUARE_STACK_VELOCITY_THRESHOLD,
+ } from "../squareStackDeck.model";
+ import type { SquareStackDeckCard, SquareStackDeckProps } from "../squareStackDeck.types";
++import { classifySquareStackPanIntent, type SquareStackGestureIntent } from "../squareStackGestureIntent";
+ import { SquareStackCardShell } from "./SquareStackCardShell";
+ 
+ type LayerProps<TCard extends SquareStackDeckCard> = {
+@@ -111,6 +112,9 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+ 
+   const baseIndex = useSharedValue(safeInitialIndex);
+   const progress = useSharedValue(0);
++  const gestureIntent = useSharedValue<SquareStackGestureIntent>("UNDECIDED");
++  const gestureStartAbsX = useSharedValue(0);
++  const gestureStartAbsY = useSharedValue(0);
+ 
+   useEffect(() => {
+     const nextIndex = Math.min(committedIndex, Math.max(cards.length - 1, 0));
+@@ -146,11 +150,55 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+   const gesture = useMemo(
+     () =>
+       Gesture.Pan()
+-        .minDistance(8)
+-        // Let vertical ScrollViews win for mostly vertical movement. A real deck
+-        // swipe still has enough horizontal intent because the accepted motion is diagonal.
+-        .activeOffsetX([-12, 12])
++        .manualActivation(true)
++        .onTouchesDown((event: any) => {
++          const touch = event.allTouches[0];
++          if (!touch) {
++            return;
++          }
++
++          gestureStartAbsX.value = touch.absoluteX;
++          gestureStartAbsY.value = touch.absoluteY;
++          gestureIntent.value = "UNDECIDED";
++        })
++        .onTouchesMove((event: any, state: any) => {
++          if (gestureIntent.value !== "UNDECIDED") {
++            return;
++          }
++
++          const touch = event.allTouches[0];
++          if (!touch) {
++            return;
++          }
++
++          const dx = touch.absoluteX - gestureStartAbsX.value;
++          const dy = touch.absoluteY - gestureStartAbsY.value;
++          const nextIntent = classifySquareStackPanIntent({
++            dx,
++            dy,
++            hasPrev: baseIndex.value > 0,
++            hasNext: baseIndex.value < cards.length - 1,
++          });
++
++          if (nextIntent === "UNDECIDED") {
++            return;
++          }
++
++          gestureIntent.value = nextIntent;
++
++          if (nextIntent === "SCROLL") {
++            progress.value = withTiming(0, { duration: 90, easing: Easing.out(Easing.quad) });
++            state.fail();
++            return;
++          }
++
++          state.activate();
++        })
+         .onUpdate((event) => {
++          if (gestureIntent.value !== "SWIPE_NEXT" && gestureIntent.value !== "SWIPE_PREV") {
++            return;
++          }
++
+           const diagonalDrag = event.translationX + event.translationY * 0.9;
+           const rawProgress = -diagonalDrag / (cardSize * 0.72);
+ 
+@@ -162,6 +210,14 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+           progress.value = clamp(resisted, -1, 1);
+         })
+         .onEnd((event) => {
++          const endingIntent = gestureIntent.value;
++          gestureIntent.value = "UNDECIDED";
++
++          if (endingIntent !== "SWIPE_NEXT" && endingIntent !== "SWIPE_PREV") {
++            progress.value = withTiming(0, { duration: 90, easing: Easing.out(Easing.quad) });
++            return;
++          }
++
+           const velocityProgress = -(event.velocityX + event.velocityY * 0.9) / (cardSize * 0.72);
+           const currentProgress = progress.value;
+           const canGoNext = baseIndex.value < cards.length - 1;
+@@ -169,11 +225,13 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+ 
+           let direction: -1 | 0 | 1 = 0;
+           if (
++            endingIntent === "SWIPE_NEXT" &&
+             (currentProgress > SQUARE_STACK_COMMIT_THRESHOLD || velocityProgress > SQUARE_STACK_VELOCITY_THRESHOLD) &&
+             canGoNext
+           ) {
+             direction = 1;
+           } else if (
++            endingIntent === "SWIPE_PREV" &&
+             (currentProgress < -SQUARE_STACK_COMMIT_THRESHOLD || velocityProgress < -SQUARE_STACK_VELOCITY_THRESHOLD) &&
+             canGoPrev
+           ) {
+@@ -203,8 +261,11 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+               progress.value = 0;
+             }
+           );
++        })
++        .onFinalize(() => {
++          gestureIntent.value = "UNDECIDED";
+         }),
+-    [baseIndex, cardSize, cards.length, commitIndex, progress]
++    [baseIndex, cardSize, cards.length, commitIndex, gestureIntent, gestureStartAbsX, gestureStartAbsY, progress]
+   );
+ 
+   if (cards.length === 0) {
+diff --git a/features/square-stack-deck/index.ts b/features/square-stack-deck/index.ts
+index 2688552..4d474df 100644
+--- a/features/square-stack-deck/index.ts
++++ b/features/square-stack-deck/index.ts
+@@ -4,3 +4,6 @@ export { HelloWhenPlaceCardDemo, type HelloWhenPlaceDemoCard, type DemoPlaceMedi
+ 
+ export { SquareDeckLabStage } from "./components/SquareDeckLabStage";
+ export { SQUARE_STACK_DEMO_CARDS, PHOTO_ONLY_DEMO_CARDS, MIXED_MEDIA_DEMO_CARDS, MAP_AND_FALLBACK_DEMO_CARDS, type DemoSquareCard } from "./demoPlaceCards";
++
++export { classifySquareStackPanIntent, isBackslashDiagonal } from "./squareStackGestureIntent";
++export type { SquareStackGestureIntent } from "./squareStackGestureIntent";

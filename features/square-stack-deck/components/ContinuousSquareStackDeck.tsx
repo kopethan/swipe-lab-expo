@@ -22,6 +22,7 @@ import {
   SQUARE_STACK_VELOCITY_THRESHOLD,
 } from "../squareStackDeck.model";
 import type { SquareStackDeckCard, SquareStackDeckProps } from "../squareStackDeck.types";
+import { classifySquareStackPanIntent, type SquareStackGestureIntent } from "../squareStackGestureIntent";
 import { SquareStackCardShell } from "./SquareStackCardShell";
 
 type LayerProps<TCard extends SquareStackDeckCard> = {
@@ -111,6 +112,9 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
 
   const baseIndex = useSharedValue(safeInitialIndex);
   const progress = useSharedValue(0);
+  const gestureIntent = useSharedValue<SquareStackGestureIntent>("UNDECIDED");
+  const gestureStartAbsX = useSharedValue(0);
+  const gestureStartAbsY = useSharedValue(0);
 
   useEffect(() => {
     const nextIndex = Math.min(committedIndex, Math.max(cards.length - 1, 0));
@@ -146,8 +150,55 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
   const gesture = useMemo(
     () =>
       Gesture.Pan()
-        .minDistance(8)
+        .manualActivation(true)
+        .onTouchesDown((event: any) => {
+          const touch = event.allTouches[0];
+          if (!touch) {
+            return;
+          }
+
+          gestureStartAbsX.value = touch.absoluteX;
+          gestureStartAbsY.value = touch.absoluteY;
+          gestureIntent.value = "UNDECIDED";
+        })
+        .onTouchesMove((event: any, state: any) => {
+          if (gestureIntent.value !== "UNDECIDED") {
+            return;
+          }
+
+          const touch = event.allTouches[0];
+          if (!touch) {
+            return;
+          }
+
+          const dx = touch.absoluteX - gestureStartAbsX.value;
+          const dy = touch.absoluteY - gestureStartAbsY.value;
+          const nextIntent = classifySquareStackPanIntent({
+            dx,
+            dy,
+            hasPrev: baseIndex.value > 0,
+            hasNext: baseIndex.value < cards.length - 1,
+          });
+
+          if (nextIntent === "UNDECIDED") {
+            return;
+          }
+
+          gestureIntent.value = nextIntent;
+
+          if (nextIntent === "SCROLL") {
+            progress.value = withTiming(0, { duration: 90, easing: Easing.out(Easing.quad) });
+            state.fail();
+            return;
+          }
+
+          state.activate();
+        })
         .onUpdate((event) => {
+          if (gestureIntent.value !== "SWIPE_NEXT" && gestureIntent.value !== "SWIPE_PREV") {
+            return;
+          }
+
           const diagonalDrag = event.translationX + event.translationY * 0.9;
           const rawProgress = -diagonalDrag / (cardSize * 0.72);
 
@@ -159,6 +210,14 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
           progress.value = clamp(resisted, -1, 1);
         })
         .onEnd((event) => {
+          const endingIntent = gestureIntent.value;
+          gestureIntent.value = "UNDECIDED";
+
+          if (endingIntent !== "SWIPE_NEXT" && endingIntent !== "SWIPE_PREV") {
+            progress.value = withTiming(0, { duration: 90, easing: Easing.out(Easing.quad) });
+            return;
+          }
+
           const velocityProgress = -(event.velocityX + event.velocityY * 0.9) / (cardSize * 0.72);
           const currentProgress = progress.value;
           const canGoNext = baseIndex.value < cards.length - 1;
@@ -166,11 +225,13 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
 
           let direction: -1 | 0 | 1 = 0;
           if (
+            endingIntent === "SWIPE_NEXT" &&
             (currentProgress > SQUARE_STACK_COMMIT_THRESHOLD || velocityProgress > SQUARE_STACK_VELOCITY_THRESHOLD) &&
             canGoNext
           ) {
             direction = 1;
           } else if (
+            endingIntent === "SWIPE_PREV" &&
             (currentProgress < -SQUARE_STACK_COMMIT_THRESHOLD || velocityProgress < -SQUARE_STACK_VELOCITY_THRESHOLD) &&
             canGoPrev
           ) {
@@ -200,8 +261,11 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
               progress.value = 0;
             }
           );
+        })
+        .onFinalize(() => {
+          gestureIntent.value = "UNDECIDED";
         }),
-    [baseIndex, cardSize, cards.length, commitIndex, progress]
+    [baseIndex, cardSize, cards.length, commitIndex, gestureIntent, gestureStartAbsX, gestureStartAbsY, progress]
   );
 
   if (cards.length === 0) {

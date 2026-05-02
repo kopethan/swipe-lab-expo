@@ -1,0 +1,907 @@
+diff --git a/app/index.tsx b/app/index.tsx
+index 019dbb7..512c5b9 100644
+--- a/app/index.tsx
++++ b/app/index.tsx
+@@ -44,6 +44,24 @@ export default function LabsIndexScreen() {
+         href: "/square-deck",
+         badge: "new",
+       },
++      {
++        title: "Square Deck Page Scroll",
++        description: "Deck embedded in a normal vertically scrolling page.",
++        href: "/square-deck-page",
++        badge: "test",
++      },
++      {
++        title: "Three Deck Scroll",
++        description: "Three deck sections stacked vertically to stress-test scroll handoff.",
++        href: "/square-deck-scroll",
++        badge: "test",
++      },
++      {
++        title: "Mixed Media Deck",
++        description: "Photo, static-map-like, and fallback cards in one deck.",
++        href: "/square-deck-mixed",
++        badge: "test",
++      },
+       {
+         title: "Image Card",
+         description: "Full-bleed image card with a soft lower-third blur transition.",
+diff --git a/app/square-deck-mixed.tsx b/app/square-deck-mixed.tsx
+new file mode 100644
+index 0000000..295d136
+--- /dev/null
++++ b/app/square-deck-mixed.tsx
+@@ -0,0 +1,90 @@
++import React from "react";
++import { Stack } from "expo-router";
++import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
++
++import { MIXED_MEDIA_DEMO_CARDS, SquareDeckLabStage } from "@/features/square-stack-deck";
++import { useTheme } from "@/providers/ThemeProvider";
++
++const MEDIA_NOTES = [
++  "Photo cards should show the Image Card blur behavior without a top shade box.",
++  "Static-map-like cards should stay readable without becoming a pale rectangle.",
++  "Fallback cards should look intentional when there is no remote media source.",
++  "Remote image failures should fall back cleanly and should not feed failed sources into blur slices.",
++];
++
++export default function SquareDeckMixedScreen() {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.screen, { backgroundColor: palette.background }]}>
++      <Stack.Screen options={{ title: "Mixed Media Deck" }} />
++
++      <ScrollView nestedScrollEnabled contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
++        <View style={styles.hero}>
++          <Text style={[styles.kicker, { color: palette.muted }]}>LAB6 / media simulation</Text>
++          <Text style={[styles.h1, { color: palette.text }]}>Photo, map, and fallback cards</Text>
++          <Text style={[styles.body, { color: palette.muted }]}>Use this route as the media regression screen while tuning deck gestures and theme mode later.</Text>
++        </View>
++
++        <SquareDeckLabStage
++          cards={MIXED_MEDIA_DEMO_CARDS}
++          stageStyle={styles.deckStage}
++          title="Mixed media deck"
++          description="Swipe through every card type, then vertically scroll the notes below."
++        />
++
++        <View style={[styles.noteCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++          {MEDIA_NOTES.map((note) => (
++            <Text key={note} style={[styles.note, { color: palette.text }]}>• {note}</Text>
++          ))}
++        </View>
++      </ScrollView>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  screen: {
++    flex: 1,
++  },
++  content: {
++    paddingTop: Platform.OS === "web" ? 24 : 18,
++    paddingBottom: 52,
++    gap: 18,
++  },
++  hero: {
++    paddingHorizontal: 18,
++    gap: 6,
++  },
++  kicker: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 1,
++    textTransform: "uppercase",
++  },
++  h1: {
++    fontSize: 28,
++    lineHeight: 32,
++    fontWeight: "900",
++    letterSpacing: -0.7,
++  },
++  body: {
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  deckStage: {
++    height: 520,
++  },
++  noteCard: {
++    marginHorizontal: 18,
++    borderRadius: 18,
++    borderWidth: 1,
++    padding: 14,
++    gap: 8,
++  },
++  note: {
++    fontSize: 13,
++    lineHeight: 18,
++    fontWeight: "650",
++  },
++});
+diff --git a/app/square-deck-page.tsx b/app/square-deck-page.tsx
+new file mode 100644
+index 0000000..084d431
+--- /dev/null
++++ b/app/square-deck-page.tsx
+@@ -0,0 +1,114 @@
++import React from "react";
++import { Stack } from "expo-router";
++import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
++
++import { SQUARE_STACK_DEMO_CARDS, SquareDeckLabStage } from "@/features/square-stack-deck";
++import { useTheme } from "@/providers/ThemeProvider";
++
++const CHECKS = [
++  "Vertical page drags above and below the deck should scroll the page.",
++  "A mostly vertical drag that starts on the deck should not accidentally commit a card.",
++  "A deliberate up-left or down-right diagonal drag should still commit the deck.",
++  "The deck should not clip while it sits inside normal page content.",
++];
++
++export default function SquareDeckPageScreen() {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.screen, { backgroundColor: palette.background }]}>
++      <Stack.Screen options={{ title: "Square Deck Page Scroll" }} />
++
++      <ScrollView
++        nestedScrollEnabled
++        contentContainerStyle={styles.content}
++        showsVerticalScrollIndicator={false}
++      >
++        <View style={styles.hero}>
++          <Text style={[styles.kicker, { color: palette.muted }]}>LAB6 / page-scroll</Text>
++          <Text style={[styles.h1, { color: palette.text }]}>Deck inside a vertically scrolling page</Text>
++          <Text style={[styles.body, { color: palette.muted }]}>This route simulates the Places feed pressure: normal page content around a diagonal deck.</Text>
++        </View>
++
++        <View style={[styles.noteCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++          {CHECKS.map((check) => (
++            <Text key={check} style={[styles.check, { color: palette.text }]}>• {check}</Text>
++          ))}
++        </View>
++
++        <SquareDeckLabStage
++          cards={SQUARE_STACK_DEMO_CARDS}
++          stageStyle={styles.deckStage}
++          title="Scrollable page deck"
++          description="Try slow vertical scrolls, fast flicks, then intentional diagonal swipes."
++          footer="Gesture guard: the deck now requires a horizontal component before the pan activates, so vertical page scroll has a chance to win."
++        />
++
++        {Array.from({ length: 6 }, (_, index) => (
++          <View key={`section-${index}`} style={[styles.section, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++            <Text style={[styles.sectionTitle, { color: palette.text }]}>Feed content block {index + 1}</Text>
++            <Text style={[styles.body, { color: palette.muted }]}>This filler content forces real vertical scrolling below the deck. Keep testing whether the page scroll feels natural after swiping cards.</Text>
++          </View>
++        ))}
++      </ScrollView>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  screen: {
++    flex: 1,
++  },
++  content: {
++    paddingTop: Platform.OS === "web" ? 24 : 18,
++    paddingBottom: 52,
++    gap: 18,
++  },
++  hero: {
++    paddingHorizontal: 18,
++    gap: 6,
++  },
++  kicker: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 1,
++    textTransform: "uppercase",
++  },
++  h1: {
++    fontSize: 28,
++    lineHeight: 32,
++    fontWeight: "900",
++    letterSpacing: -0.7,
++  },
++  body: {
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  noteCard: {
++    marginHorizontal: 18,
++    borderRadius: 18,
++    borderWidth: 1,
++    padding: 14,
++    gap: 8,
++  },
++  check: {
++    fontSize: 13,
++    lineHeight: 18,
++    fontWeight: "650",
++  },
++  deckStage: {
++    height: 520,
++  },
++  section: {
++    marginHorizontal: 18,
++    borderRadius: 18,
++    borderWidth: 1,
++    padding: 16,
++    minHeight: 112,
++    gap: 8,
++  },
++  sectionTitle: {
++    fontSize: 16,
++    fontWeight: "900",
++  },
++});
+diff --git a/app/square-deck-scroll.tsx b/app/square-deck-scroll.tsx
+new file mode 100644
+index 0000000..460a78a
+--- /dev/null
++++ b/app/square-deck-scroll.tsx
+@@ -0,0 +1,85 @@
++import React from "react";
++import { Stack } from "expo-router";
++import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
++
++import {
++  MAP_AND_FALLBACK_DEMO_CARDS,
++  PHOTO_ONLY_DEMO_CARDS,
++  SQUARE_STACK_DEMO_CARDS,
++  SquareDeckLabStage,
++} from "@/features/square-stack-deck";
++import { useTheme } from "@/providers/ThemeProvider";
++
++export default function SquareDeckScrollScreen() {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.screen, { backgroundColor: palette.background }]}>
++      <Stack.Screen options={{ title: "Three Deck Scroll" }} />
++
++      <ScrollView nestedScrollEnabled contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
++        <View style={styles.hero}>
++          <Text style={[styles.kicker, { color: palette.muted }]}>LAB6 / multi-deck</Text>
++          <Text style={[styles.h1, { color: palette.text }]}>Three decks in one scroll view</Text>
++          <Text style={[styles.body, { color: palette.muted }]}>This stress test checks whether moving between multiple deck zones still feels like normal vertical page scrolling.</Text>
++        </View>
++
++        <SquareDeckLabStage
++          cards={PHOTO_ONLY_DEMO_CARDS}
++          stageStyle={styles.deckStage}
++          title="Photo deck"
++          description="Only photo-backed cards. Check blur continuity and vertical scroll handoff."
++        />
++
++        <SquareDeckLabStage
++          cards={MAP_AND_FALLBACK_DEMO_CARDS}
++          stageStyle={styles.deckStage}
++          title="Map + fallback deck"
++          description="Static-map-like and fallback cards. Check white/black flash behavior and vertical scroll handoff."
++        />
++
++        <SquareDeckLabStage
++          cards={SQUARE_STACK_DEMO_CARDS}
++          stageStyle={styles.deckStage}
++          title="Mixed deck"
++          description="All media types in one stack. This is closest to the future Places feed test."
++          footer="Expected: vertical movement scrolls the page; intentional diagonal movement changes the active card."
++        />
++      </ScrollView>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  screen: {
++    flex: 1,
++  },
++  content: {
++    paddingTop: Platform.OS === "web" ? 24 : 18,
++    paddingBottom: 56,
++    gap: 24,
++  },
++  hero: {
++    paddingHorizontal: 18,
++    gap: 6,
++  },
++  kicker: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 1,
++    textTransform: "uppercase",
++  },
++  h1: {
++    fontSize: 28,
++    lineHeight: 32,
++    fontWeight: "900",
++    letterSpacing: -0.7,
++  },
++  body: {
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  deckStage: {
++    height: 500,
++  },
++});
+diff --git a/app/square-deck.tsx b/app/square-deck.tsx
+index 9075fc4..cf01225 100644
+--- a/app/square-deck.tsx
++++ b/app/square-deck.tsx
+@@ -1,182 +1,12 @@
+-﻿import React, { useCallback, useMemo, useState } from "react";
++import React from "react";
+ import { Stack } from "expo-router";
+-import { type LayoutChangeEvent, Platform, StyleSheet, Text, View } from "react-native";
++import { Platform, StyleSheet, Text, View } from "react-native";
+ 
+-import {
+-  ContinuousSquareStackDeck,
+-  HelloWhenPlaceCardDemo,
+-  type HelloWhenPlaceDemoCard,
+-  type SquareStackDeckCard,
+-} from "@/features/square-stack-deck";
++import { SQUARE_STACK_DEMO_CARDS, SquareDeckLabStage } from "@/features/square-stack-deck";
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+-type DemoSquareCard = SquareStackDeckCard & HelloWhenPlaceDemoCard;
+-
+ export default function SquareDeckScreen() {
+   const { palette } = useTheme();
+-  const [activeLabel, setActiveLabel] = useState("sq01");
+-  const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
+-
+-  const handleStageLayout = useCallback((event: LayoutChangeEvent) => {
+-    const { height, width } = event.nativeEvent.layout;
+-    setStageBounds((current) => {
+-      const nextWidth = Math.round(width);
+-      const nextHeight = Math.round(height);
+-      if (Math.abs(current.width - nextWidth) < 1 && Math.abs(current.height - nextHeight) < 1) {
+-        return current;
+-      }
+-
+-      return { width: nextWidth, height: nextHeight };
+-    });
+-  }, []);
+-
+-  const cards = useMemo<DemoSquareCard[]>(
+-    () => [
+-      {
+-        id: "sq01",
+-        title: "Rooftop sunset walk",
+-        area: "Paris · 11th arrondissement",
+-        descriptor: "Golden-hour terrace, short stairs, open sky, and a calm route back toward the canal.",
+-        subtitle: "Paris 11e, near Canal Saint-Martin, rooftop access, open sky, and an easy return route.",
+-        primaryContext: "Paris",
+-        contextBadgeLabel: "sunset",
+-        modeLabel: "offline",
+-        mediaKind: "photo",
+-        imageUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=82",
+-        distanceLabel: "12 min walk",
+-        moodLabel: "quiet",
+-        tags: ["sunset", "walk", "view"],
+-        accent: "#ff715b",
+-      },
+-      {
+-        id: "sq02",
+-        title: "Hidden garden coffee",
+-        area: "Lyon · Croix-Rousse",
+-        descriptor: "Small courtyard tables with plants, soft shade, and a good reset stop between plans.",
+-        subtitle: "Croix-Rousse courtyard tables, plants, soft shade, and a calm coffee reset.",
+-        primaryContext: "Lyon",
+-        contextBadgeLabel: "coffee",
+-        modeLabel: "offline",
+-        mediaKind: "photo",
+-        imageUrl: "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=82",
+-        distanceLabel: "650 m",
+-        moodLabel: "slow",
+-        tags: ["coffee", "garden", "nearby"],
+-        accent: "#6bbf8a",
+-      },
+-      {
+-        id: "sq03",
+-        title: "Late-night ramen corner",
+-        area: "Alfortville, Créteil, Val-de-Marne, Île-de-France, France métropolitaine",
+-        descriptor: "A compact food stop near the station, useful when the plan runs later than expected.",
+-        subtitle: "Alfortville, Créteil, Val-de-Marne, Île-de-France, France métropolitaine, 94140, France",
+-        primaryContext: "94140",
+-        contextBadgeLabel: "France",
+-        modeLabel: "offline",
+-        mediaKind: "static_map",
+-        imageUrl: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=1200&q=82",
+-        distanceLabel: "open late",
+-        moodLabel: "busy",
+-        tags: ["food", "night", "map"],
+-        accent: "#ffbd4a",
+-      },
+-      {
+-        id: "sq04",
+-        title: "Canal-side book market",
+-        area: "Amsterdam · Centrum",
+-        descriptor: "Outdoor stalls, water reflections, and a good low-pressure browse before dinner.",
+-        subtitle: "Canal edge, book stalls, calm browsing, and an easy stop before dinner.",
+-        primaryContext: "Amsterdam",
+-        contextBadgeLabel: "market",
+-        modeLabel: "offline",
+-        mediaKind: "photo",
+-        imageUrl: "https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=1200&q=82",
+-        distanceLabel: "2.1 km",
+-        moodLabel: "browse",
+-        tags: ["market", "books", "canal"],
+-        accent: "#6aa8ff",
+-      },
+-      {
+-        id: "sq05",
+-        title: "Tiny gallery opening",
+-        area: "Berlin · Mitte",
+-        descriptor: "A small indoor place with predictable lighting, useful as a weather-safe card type.",
+-        subtitle: "Berlin Mitte, indoor fallback-friendly stop with predictable light and calm pacing.",
+-        primaryContext: "Berlin",
+-        contextBadgeLabel: "indoor",
+-        modeLabel: "offline",
+-        mediaKind: "fallback",
+-        distanceLabel: "indoor",
+-        moodLabel: "art",
+-        tags: ["gallery", "backup", "calm"],
+-        accent: "#b48cff",
+-      },
+-      {
+-        id: "sq06",
+-        title: "Morning bakery queue",
+-        area: "Lisbon · Alfama",
+-        descriptor: "A simple early stop with warm light, quick service, and nearby benches for a pause.",
+-        subtitle: "Alfama bakery line, warm light, quick service, and benches nearby for a pause.",
+-        primaryContext: "Lisbon",
+-        contextBadgeLabel: "bakery",
+-        modeLabel: "offline",
+-        mediaKind: "photo",
+-        imageUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=1200&q=82",
+-        distanceLabel: "8 min walk",
+-        moodLabel: "morning",
+-        tags: ["bakery", "breakfast", "easy"],
+-        accent: "#f3a15f",
+-      },
+-      {
+-        id: "sq07",
+-        title: "Old town photo loop",
+-        area: "Seoul · Ikseon-dong",
+-        descriptor: "A short loop of narrow streets, textures, small shops, and easy alternate exits.",
+-        subtitle: "Ikseon-dong side streets, texture-heavy corners, and a short map-guided loop.",
+-        primaryContext: "Seoul",
+-        contextBadgeLabel: "photo",
+-        modeLabel: "offline",
+-        mediaKind: "static_map",
+-        imageUrl: "https://images.unsplash.com/photo-1538485399081-7191377e8241?auto=format&fit=crop&w=1200&q=82",
+-        distanceLabel: "loop",
+-        moodLabel: "photo",
+-        tags: ["streets", "map", "loop"],
+-        accent: "#44c7c1",
+-      },
+-      {
+-        id: "sq08",
+-        title: "Quiet jazz basement",
+-        area: "New York · West Village",
+-        descriptor: "Dim room, small tables, later timing, and a card that needs readable lower text.",
+-        subtitle: "West Village basement, dim room, small tables, and reliable late-evening timing.",
+-        primaryContext: "New York",
+-        contextBadgeLabel: "music",
+-        modeLabel: "offline",
+-        mediaKind: "photo",
+-        imageUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=82",
+-        distanceLabel: "after 9 PM",
+-        moodLabel: "music",
+-        tags: ["jazz", "night", "indoors"],
+-        accent: "#d76083",
+-      },
+-      {
+-        id: "sq09",
+-        title: "Sunday park picnic",
+-        area: "Montreal · Plateau",
+-        descriptor: "Fallback-friendly open area with simple text, no hard dependency on a perfect photo.",
+-        subtitle: "Plateau open area, easy fallback card, and simple readable outdoor text treatment.",
+-        primaryContext: "Montreal",
+-        contextBadgeLabel: "weekend",
+-        modeLabel: "offline",
+-        mediaKind: "fallback",
+-        distanceLabel: "weekend",
+-        moodLabel: "open air",
+-        tags: ["park", "picnic", "fallback"],
+-        accent: "#7bc96f",
+-      },
+-    ],
+-    []
+-  );
+ 
+   return (
+     <View style={[styles.screen, { backgroundColor: palette.background }]}>
+@@ -185,22 +15,14 @@ export default function SquareDeckScreen() {
+       <View style={styles.header}>
+         <Text style={[styles.h1, { color: palette.text }]}>Place card stack lab</Text>
+         <Text style={[styles.sub, { color: palette.muted }]}>HelloWhen-like fake place cards using the clean diagonal square-deck model.</Text>
+-        <Text style={[styles.meta, { color: palette.muted }]}>Active: {activeLabel}</Text>
+-      </View>
+-
+-      <View style={styles.stage} onLayout={handleStageLayout}>
+-        <ContinuousSquareStackDeck
+-          cards={cards}
+-          availableWidth={stageBounds.width}
+-          availableHeight={stageBounds.height}
+-          onIndexChange={(_, card) => setActiveLabel(card.id)}
+-          renderCard={({ card, index, total }) => <HelloWhenPlaceCardDemo card={card} index={index} total={total} />}
+-        />
+       </View>
+ 
+-      <View style={styles.footer}>
+-        <Text style={[styles.footerText, { color: palette.muted }]}>LAB5e: top shade removed; remote image failures now fall back cleanly while blur stays tied to visible media.</Text>
+-      </View>
++      <SquareDeckLabStage
++        cards={SQUARE_STACK_DEMO_CARDS}
++        containerStyle={styles.deckWrap}
++        stageStyle={styles.stage}
++        footer="LAB6 baseline: isolated deck route. Compare this against the page-scroll and multi-deck routes."
++      />
+     </View>
+   );
+ }
+@@ -223,28 +45,10 @@ const styles = StyleSheet.create({
+     fontSize: 13,
+     lineHeight: 18,
+   },
+-  meta: {
+-    marginTop: 4,
+-    fontSize: 12,
+-    fontWeight: "800",
+-    letterSpacing: 0.8,
+-    textTransform: "uppercase",
++  deckWrap: {
++    flex: 1,
+   },
+   stage: {
+     flex: 1,
+-    alignItems: "center",
+-    justifyContent: "center",
+-    overflow: "visible",
+-    paddingHorizontal: 18,
+-  },
+-  footer: {
+-    paddingHorizontal: 18,
+-    paddingBottom: 18,
+-  },
+-  footerText: {
+-    textAlign: "center",
+-    fontSize: 12,
+-    lineHeight: 17,
+   },
+ });
+-
+diff --git a/docs/SQUARE_STACK_DECK_LAB.md b/docs/SQUARE_STACK_DECK_LAB.md
+index aff372e..bed1beb 100644
+--- a/docs/SQUARE_STACK_DECK_LAB.md
++++ b/docs/SQUARE_STACK_DECK_LAB.md
+@@ -200,3 +200,13 @@ The intended result is not a frosted rectangle. It should feel like the image it
+ - Removed the separate top shade layer from the square demo card; it was visible as a gray rectangle over every card.
+ - Added per-card image failure handling so a failed remote image cleanly falls back to the lab fallback surface instead of leaving the blur/image layers in a half-loaded state.
+ - Added a stable recycling key to the main image layer so card identity stays tied to the card id while swiping.
++
++## LAB6 — Vertical/page scroll test routes
++
++Adds three routes that reuse the same square deck engine while placing it under real vertical-scroll pressure:
++
++- `/square-deck-page` — one deck embedded inside a normal feed-like page with content above and below.
++- `/square-deck-scroll` — three deck sections in one vertical `ScrollView` to stress-test moving between decks.
++- `/square-deck-mixed` — photo, static-map-like, and fallback cards in one route for media regression checks.
++
++The deck pan now uses `activeOffsetX([-12, 12])` so mostly vertical drags can be handled by the parent `ScrollView`, while deliberate up-left / down-right diagonal gestures still activate the deck.
+diff --git a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+index 99514de..aeb321a 100644
+--- a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
++++ b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+@@ -147,6 +147,9 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+     () =>
+       Gesture.Pan()
+         .minDistance(8)
++        // Let vertical ScrollViews win for mostly vertical movement. A real deck
++        // swipe still has enough horizontal intent because the accepted motion is diagonal.
++        .activeOffsetX([-12, 12])
+         .onUpdate((event) => {
+           const diagonalDrag = event.translationX + event.translationY * 0.9;
+           const rawProgress = -diagonalDrag / (cardSize * 0.72);
+diff --git a/features/square-stack-deck/components/SquareDeckLabStage.tsx b/features/square-stack-deck/components/SquareDeckLabStage.tsx
+new file mode 100644
+index 0000000..97e838c
+--- /dev/null
++++ b/features/square-stack-deck/components/SquareDeckLabStage.tsx
+@@ -0,0 +1,113 @@
++import React, { memo, useCallback, useState } from "react";
++import { type LayoutChangeEvent, StyleSheet, Text, type StyleProp, View, type ViewStyle } from "react-native";
++
++import { useTheme } from "@/providers/ThemeProvider";
++
++import { ContinuousSquareStackDeck } from "./ContinuousSquareStackDeck";
++import { HelloWhenPlaceCardDemo } from "./HelloWhenPlaceCardDemo";
++import type { DemoSquareCard } from "../demoPlaceCards";
++
++type Props = {
++  cards: DemoSquareCard[];
++  title?: string;
++  description?: string;
++  footer?: string;
++  containerStyle?: StyleProp<ViewStyle>;
++  stageStyle?: StyleProp<ViewStyle>;
++  minCardSize?: number;
++  maxCardSize?: number;
++};
++
++function SquareDeckLabStageInner({
++  cards,
++  title,
++  description,
++  footer,
++  containerStyle,
++  stageStyle,
++  minCardSize,
++  maxCardSize,
++}: Props) {
++  const { palette } = useTheme();
++  const [activeLabel, setActiveLabel] = useState(cards[0]?.id ?? "—");
++  const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
++
++  const handleStageLayout = useCallback((event: LayoutChangeEvent) => {
++    const { height, width } = event.nativeEvent.layout;
++    setStageBounds((current) => {
++      const nextWidth = Math.round(width);
++      const nextHeight = Math.round(height);
++      if (Math.abs(current.width - nextWidth) < 1 && Math.abs(current.height - nextHeight) < 1) {
++        return current;
++      }
++
++      return { width: nextWidth, height: nextHeight };
++    });
++  }, []);
++
++  return (
++    <View style={[styles.wrap, containerStyle]}>
++      {title || description ? (
++        <View style={styles.copy}>
++          {title ? <Text style={[styles.title, { color: palette.text }]}>{title}</Text> : null}
++          {description ? <Text style={[styles.description, { color: palette.muted }]}>{description}</Text> : null}
++          <Text style={[styles.meta, { color: palette.muted }]}>Active: {activeLabel}</Text>
++        </View>
++      ) : null}
++
++      <View style={[styles.stage, stageStyle]} onLayout={handleStageLayout}>
++        <ContinuousSquareStackDeck
++          cards={cards}
++          availableWidth={stageBounds.width}
++          availableHeight={stageBounds.height}
++          minCardSize={minCardSize}
++          maxCardSize={maxCardSize}
++          onIndexChange={(_, card) => setActiveLabel(card.id)}
++          renderCard={({ card, index, total }) => <HelloWhenPlaceCardDemo card={card} index={index} total={total} />}
++        />
++      </View>
++
++      {footer ? <Text style={[styles.footer, { color: palette.muted }]}>{footer}</Text> : null}
++    </View>
++  );
++}
++
++export const SquareDeckLabStage = memo(SquareDeckLabStageInner);
++
++const styles = StyleSheet.create({
++  wrap: {
++    gap: 12,
++  },
++  copy: {
++    paddingHorizontal: 18,
++    gap: 4,
++  },
++  title: {
++    fontSize: 24,
++    fontWeight: "900",
++    letterSpacing: -0.4,
++  },
++  description: {
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  meta: {
++    marginTop: 4,
++    fontSize: 12,
++    fontWeight: "800",
++    letterSpacing: 0.8,
++    textTransform: "uppercase",
++  },
++  stage: {
++    minHeight: 420,
++    alignItems: "center",
++    justifyContent: "center",
++    overflow: "visible",
++    paddingHorizontal: 18,
++  },
++  footer: {
++    paddingHorizontal: 18,
++    fontSize: 11,
++    lineHeight: 15,
++  },
++});
+diff --git a/features/square-stack-deck/demoPlaceCards.ts b/features/square-stack-deck/demoPlaceCards.ts
+new file mode 100644
+index 0000000..819af63
+--- /dev/null
++++ b/features/square-stack-deck/demoPlaceCards.ts
+@@ -0,0 +1,153 @@
++import type { HelloWhenPlaceDemoCard } from "./components/HelloWhenPlaceCardDemo";
++import type { SquareStackDeckCard } from "./squareStackDeck.types";
++
++export type DemoSquareCard = SquareStackDeckCard & HelloWhenPlaceDemoCard;
++
++export const SQUARE_STACK_DEMO_CARDS: DemoSquareCard[] = [
++  {
++    id: "sq01",
++    title: "Rooftop sunset walk",
++    area: "Paris · 11th arrondissement",
++    descriptor: "Golden-hour terrace, short stairs, open sky, and a calm route back toward the canal.",
++    subtitle: "Paris 11e, near Canal Saint-Martin, rooftop access, open sky, and an easy return route.",
++    primaryContext: "Paris",
++    contextBadgeLabel: "sunset",
++    modeLabel: "offline",
++    mediaKind: "photo",
++    imageUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=82",
++    distanceLabel: "12 min walk",
++    moodLabel: "quiet",
++    tags: ["sunset", "walk", "view"],
++    accent: "#ff715b",
++  },
++  {
++    id: "sq02",
++    title: "Hidden garden coffee",
++    area: "Lyon · Croix-Rousse",
++    descriptor: "Small courtyard tables with plants, soft shade, and a good reset stop between plans.",
++    subtitle: "Croix-Rousse courtyard tables, plants, soft shade, and a calm coffee reset.",
++    primaryContext: "Lyon",
++    contextBadgeLabel: "coffee",
++    modeLabel: "offline",
++    mediaKind: "photo",
++    imageUrl: "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=82",
++    distanceLabel: "650 m",
++    moodLabel: "slow",
++    tags: ["coffee", "garden", "nearby"],
++    accent: "#6bbf8a",
++  },
++  {
++    id: "sq03",
++    title: "Late-night ramen corner",
++    area: "Alfortville, Créteil, Val-de-Marne, Île-de-France, France métropolitaine",
++    descriptor: "A compact food stop near the station, useful when the plan runs later than expected.",
++    subtitle: "Alfortville, Créteil, Val-de-Marne, Île-de-France, France métropolitaine, 94140, France",
++    primaryContext: "94140",
++    contextBadgeLabel: "France",
++    modeLabel: "offline",
++    mediaKind: "static_map",
++    imageUrl: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=1200&q=82",
++    distanceLabel: "open late",
++    moodLabel: "busy",
++    tags: ["food", "night", "map"],
++    accent: "#ffbd4a",
++  },
++  {
++    id: "sq04",
++    title: "Canal-side book market",
++    area: "Amsterdam · Centrum",
++    descriptor: "Outdoor stalls, water reflections, and a good low-pressure browse before dinner.",
++    subtitle: "Canal edge, book stalls, calm browsing, and an easy stop before dinner.",
++    primaryContext: "Amsterdam",
++    contextBadgeLabel: "market",
++    modeLabel: "offline",
++    mediaKind: "photo",
++    imageUrl: "https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=1200&q=82",
++    distanceLabel: "2.1 km",
++    moodLabel: "browse",
++    tags: ["market", "books", "canal"],
++    accent: "#6aa8ff",
++  },
++  {
++    id: "sq05",
++    title: "Tiny gallery opening",
++    area: "Berlin · Mitte",
++    descriptor: "A small indoor place with predictable lighting, useful as a weather-safe card type.",
++    subtitle: "Berlin Mitte, indoor fallback-friendly stop with predictable light and calm pacing.",
++    primaryContext: "Berlin",
++    contextBadgeLabel: "indoor",
++    modeLabel: "offline",
++    mediaKind: "fallback",
++    distanceLabel: "indoor",
++    moodLabel: "art",
++    tags: ["gallery", "backup", "calm"],
++    accent: "#b48cff",
++  },
++  {
++    id: "sq06",
++    title: "Morning bakery queue",
++    area: "Lisbon · Alfama",
++    descriptor: "A simple early stop with warm light, quick service, and nearby benches for a pause.",
++    subtitle: "Alfama bakery line, warm light, quick service, and benches nearby for a pause.",
++    primaryContext: "Lisbon",
++    contextBadgeLabel: "bakery",
++    modeLabel: "offline",
++    mediaKind: "photo",
++    imageUrl: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=1200&q=82",
++    distanceLabel: "8 min walk",
++    moodLabel: "morning",
++    tags: ["bakery", "breakfast", "easy"],
++    accent: "#f3a15f",
++  },
++  {
++    id: "sq07",
++    title: "Old town photo loop",
++    area: "Seoul · Ikseon-dong",
++    descriptor: "A short loop of narrow streets, textures, small shops, and easy alternate exits.",
++    subtitle: "Ikseon-dong side streets, texture-heavy corners, and a short map-guided loop.",
++    primaryContext: "Seoul",
++    contextBadgeLabel: "photo",
++    modeLabel: "offline",
++    mediaKind: "static_map",
++    imageUrl: "https://images.unsplash.com/photo-1538485399081-7191377e8241?auto=format&fit=crop&w=1200&q=82",
++    distanceLabel: "loop",
++    moodLabel: "photo",
++    tags: ["streets", "map", "loop"],
++    accent: "#44c7c1",
++  },
++  {
++    id: "sq08",
++    title: "Quiet jazz basement",
++    area: "New York · West Village",
++    descriptor: "Dim room, small tables, later timing, and a card that needs readable lower text.",
++    subtitle: "West Village basement, dim room, small tables, and reliable late-evening timing.",
++    primaryContext: "New York",
++    contextBadgeLabel: "music",
++    modeLabel: "offline",
++    mediaKind: "photo",
++    imageUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=82",
++    distanceLabel: "after 9 PM",
++    moodLabel: "music",
++    tags: ["jazz", "night", "indoors"],
++    accent: "#d76083",
++  },
++  {
++    id: "sq09",
++    title: "Sunday park picnic",
++    area: "Montreal · Plateau",
++    descriptor: "Fallback-friendly open area with simple text, no hard dependency on a perfect photo.",
++    subtitle: "Plateau open area, easy fallback card, and simple readable outdoor text treatment.",
++    primaryContext: "Montreal",
++    contextBadgeLabel: "weekend",
++    modeLabel: "offline",
++    mediaKind: "fallback",
++    distanceLabel: "weekend",
++    moodLabel: "open air",
++    tags: ["park", "picnic", "fallback"],
++    accent: "#7bc96f",
++  },
++];
++
++export const PHOTO_ONLY_DEMO_CARDS = SQUARE_STACK_DEMO_CARDS.filter((card) => card.mediaKind === "photo");
++export const MIXED_MEDIA_DEMO_CARDS = SQUARE_STACK_DEMO_CARDS;
++export const MAP_AND_FALLBACK_DEMO_CARDS = SQUARE_STACK_DEMO_CARDS.filter((card) => card.mediaKind !== "photo");
+diff --git a/features/square-stack-deck/index.ts b/features/square-stack-deck/index.ts
+index 4abeb21..2688552 100644
+--- a/features/square-stack-deck/index.ts
++++ b/features/square-stack-deck/index.ts
+@@ -1,3 +1,6 @@
+ export { ContinuousSquareStackDeck } from "./components/ContinuousSquareStackDeck";
+ export type { SquareStackDeckCard, SquareStackDeckProps } from "./squareStackDeck.types";
+ export { HelloWhenPlaceCardDemo, type HelloWhenPlaceDemoCard, type DemoPlaceMediaKind } from "./components/HelloWhenPlaceCardDemo";
++
++export { SquareDeckLabStage } from "./components/SquareDeckLabStage";
++export { SQUARE_STACK_DEMO_CARDS, PHOTO_ONLY_DEMO_CARDS, MIXED_MEDIA_DEMO_CARDS, MAP_AND_FALLBACK_DEMO_CARDS, type DemoSquareCard } from "./demoPlaceCards";
