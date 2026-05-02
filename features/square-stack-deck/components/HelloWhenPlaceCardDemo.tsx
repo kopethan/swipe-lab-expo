@@ -29,8 +29,6 @@ type Props = {
   total: number;
 };
 
-const BLUR_SLICE_COUNT = 24;
-
 type LowerAtmosphereProps = {
   source?: { uri: string };
   isDark: boolean;
@@ -38,12 +36,14 @@ type LowerAtmosphereProps = {
 };
 
 function LowerAtmosphere({ source, isDark, mediaKind }: LowerAtmosphereProps) {
-  const slices = useMemo(() => Array.from({ length: BLUR_SLICE_COUNT }, (_, index) => index), []);
   const isStaticMap = mediaKind === "static_map";
+  const sliceCount = isStaticMap ? 26 : 24;
+  const slices = useMemo(() => Array.from({ length: sliceCount }, (_, index) => index), [sliceCount]);
   const blurStartPercent = isStaticMap ? 46 : 50;
   const safeStart = Math.max(0, Math.min(92, blurStartPercent));
   const overlayHeight = 100 - safeStart;
-  const sliceHeight = overlayHeight / BLUR_SLICE_COUNT;
+  const sliceHeight = overlayHeight / sliceCount;
+  const sliceOverlap = 0.9;
   const maxBlurRadius = isStaticMap ? 32 : 28;
   const bottomTint = isDark
     ? isStaticMap
@@ -58,9 +58,10 @@ function LowerAtmosphere({ source, isDark, mediaKind }: LowerAtmosphereProps) {
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
       {source ? (
         slices.map((slice) => {
-          const progress = (slice + 1) / BLUR_SLICE_COUNT;
+          const progress = (slice + 1) / sliceCount;
           const eased = progress * progress * (3 - 2 * progress);
-          const top = safeStart + slice * sliceHeight;
+          const top = safeStart + slice * sliceHeight - sliceOverlap / 2;
+          const height = sliceHeight + sliceOverlap;
           const blurOpacity = eased * 0.9;
           const tintOpacity = eased * tintStrength;
 
@@ -71,7 +72,7 @@ function LowerAtmosphere({ source, isDark, mediaKind }: LowerAtmosphereProps) {
                   styles.atmosphereSlice,
                   {
                     top: `${top}%`,
-                    height: `${sliceHeight}%`,
+                    height: `${height}%`,
                     opacity: blurOpacity,
                   },
                 ]}
@@ -89,7 +90,7 @@ function LowerAtmosphere({ source, isDark, mediaKind }: LowerAtmosphereProps) {
                   styles.atmosphereSlice,
                   {
                     top: `${top}%`,
-                    height: `${sliceHeight}%`,
+                    height: `${height}%`,
                     backgroundColor: bottomTint,
                     opacity: tintOpacity,
                   },
