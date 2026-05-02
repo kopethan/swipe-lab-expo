@@ -1,0 +1,104 @@
+diff --git a/docs/SQUARE_STACK_DECK_LAB.md b/docs/SQUARE_STACK_DECK_LAB.md
+index ec840a7..6011f2d 100644
+--- a/docs/SQUARE_STACK_DECK_LAB.md
++++ b/docs/SQUARE_STACK_DECK_LAB.md
+@@ -208,6 +208,15 @@ The intended result is not a frosted rectangle. It should feel like the image it
+ - Static-map cards still receive stronger protection than photo cards, but the lower wash is less panel-like than before.
+ - The lower text area should remain readable without making the lower half feel like a flat gray or white rectangle.
+ 
++
++## LAB5h — Linear image blur without panel wash
++
++- Replaced the foggy lower wash tuning with a more image-led linear blur ramp.
++- Kept the large overlapping blur bands, but reduced photo-card tint to a near-transparent support layer so the card keeps more of the original image color.
++- Reduced the photo bottom feather to a shallow, low-opacity edge guard instead of a broad lower-half wash.
++- Static-map cards still receive earlier and stronger protection than photo cards because map tiles can be brighter and lower contrast.
++- The intended result is closer to the reference linear blur cards: the image itself softens behind the text without looking like a gray panel or footer container.
++
+ ## LAB6 — Vertical/page scroll test routes
+ 
+ Adds three routes that reuse the same square deck engine while placing it under real vertical-scroll pressure:
+diff --git a/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx b/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx
+index 637526c..24fe0f4 100644
+--- a/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx
++++ b/features/square-stack-deck/components/HelloWhenPlaceCardDemo.tsx
+@@ -35,39 +35,39 @@ type LowerAtmosphereProps = {
+   mediaKind: DemoPlaceMediaKind;
+ };
+ 
+-const BLUR_WASH_BANDS = [
+-  { top: 42, height: 42, blur: 10, opacity: 0.07, tintOpacity: 0.035 },
+-  { top: 52, height: 40, blur: 16, opacity: 0.12, tintOpacity: 0.075 },
+-  { top: 62, height: 36, blur: 22, opacity: 0.17, tintOpacity: 0.14 },
+-  { top: 72, height: 32, blur: 28, opacity: 0.23, tintOpacity: 0.23 },
++const LINEAR_BLUR_BANDS = [
++  { top: 40, height: 48, blur: 8, opacity: 0.04, tintOpacity: 0 },
++  { top: 50, height: 44, blur: 14, opacity: 0.08, tintOpacity: 0.012 },
++  { top: 60, height: 40, blur: 22, opacity: 0.13, tintOpacity: 0.032 },
++  { top: 70, height: 34, blur: 32, opacity: 0.20, tintOpacity: 0.058 },
+ ] as const;
+ 
+ function LowerAtmosphere({ source, isDark, mediaKind }: LowerAtmosphereProps) {
+   const isStaticMap = mediaKind === "static_map";
+   const staticMapLift = isStaticMap ? -4 : 0;
+-  const bottomTint = isDark
++  const imageTint = isDark
+     ? isStaticMap
+-      ? "rgba(5,7,10,0.52)"
+-      : "rgba(8,10,12,0.38)"
++      ? "rgba(5,7,10,0.36)"
++      : "rgba(8,10,12,0.18)"
+     : isStaticMap
+-      ? "rgba(255,255,255,0.62)"
+-      : "rgba(255,255,255,0.34)";
+-  const lowerTint = isDark
++      ? "rgba(255,255,255,0.42)"
++      : "rgba(255,255,255,0.12)";
++  const bottomFeather = isDark
+     ? isStaticMap
+-      ? "rgba(3,5,8,0.62)"
+-      : "rgba(3,5,8,0.36)"
++      ? "rgba(3,5,8,0.50)"
++      : "rgba(3,5,8,0.22)"
+     : isStaticMap
+-      ? "rgba(255,255,255,0.68)"
+-      : "rgba(255,255,255,0.36)";
++      ? "rgba(255,255,255,0.54)"
++      : "rgba(255,255,255,0.16)";
+ 
+   return (
+     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+       {source
+-        ? BLUR_WASH_BANDS.map((band, index) => {
++        ? LINEAR_BLUR_BANDS.map((band, index) => {
+             const top = Math.max(0, band.top + staticMapLift);
+             const height = Math.min(100 - top, band.height - staticMapLift * 0.25);
+-            const blurOpacity = Math.min(0.38, band.opacity * (isStaticMap ? 1.18 : 1));
+-            const tintOpacity = Math.min(0.62, band.tintOpacity * (isStaticMap ? 1.34 : 1));
++            const blurOpacity = Math.min(0.34, band.opacity * (isStaticMap ? 1.22 : 1));
++            const tintOpacity = Math.min(0.48, band.tintOpacity * (isStaticMap ? 1.82 : 1));
+ 
+             return (
+               <React.Fragment key={`blur-wash-band-${index}`}>
+@@ -95,7 +95,7 @@ function LowerAtmosphere({ source, isDark, mediaKind }: LowerAtmosphereProps) {
+                     {
+                       top: `${top}%`,
+                       height: `${height}%`,
+-                      backgroundColor: bottomTint,
++                      backgroundColor: imageTint,
+                       opacity: tintOpacity,
+                     },
+                   ]}
+@@ -108,9 +108,9 @@ function LowerAtmosphere({ source, isDark, mediaKind }: LowerAtmosphereProps) {
+         style={[
+           styles.bottomWash,
+           {
+-            backgroundColor: lowerTint,
+-            height: isStaticMap ? "44%" : "34%",
+-            opacity: isStaticMap ? 0.50 : 0.28,
++            backgroundColor: bottomFeather,
++            height: isStaticMap ? "32%" : "22%",
++            opacity: isStaticMap ? 0.36 : 0.12,
+           },
+         ]}
+       />

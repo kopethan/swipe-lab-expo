@@ -201,6 +201,30 @@ The intended result is not a frosted rectangle. It should feel like the image it
 - Added per-card image failure handling so a failed remote image cleanly falls back to the lab fallback surface instead of leaving the blur/image layers in a half-loaded state.
 - Added a stable recycling key to the main image layer so card identity stays tied to the card id while swiping.
 
+## LAB5g — Soften foggy lower wash while preserving image mood
+
+- Reduced the photo-card lower tint and bottom wash so the image color remains more visible behind the text.
+- Kept the four large overlapping blur bands from LAB5f-v2 instead of returning to thin slices, so horizontal stripe seams should not come back.
+- Static-map cards still receive stronger protection than photo cards, but the lower wash is less panel-like than before.
+- The lower text area should remain readable without making the lower half feel like a flat gray or white rectangle.
+
+
+## LAB5h — Linear image blur without panel wash
+
+- Replaced the foggy lower wash tuning with a more image-led linear blur ramp.
+- Kept the large overlapping blur bands, but reduced photo-card tint to a near-transparent support layer so the card keeps more of the original image color.
+- Reduced the photo bottom feather to a shallow, low-opacity edge guard instead of a broad lower-half wash.
+- Static-map cards still receive earlier and stronger protection than photo cards because map tiles can be brighter and lower contrast.
+- The intended result is closer to the reference linear blur cards: the image itself softens behind the text without looking like a gray panel or footer container.
+
+## LAB5i — Targeted text-zone blur and mood preservation
+
+- Tightened the photo blur ramp so the strongest duplicate-image blur sits closer to the actual title, subtitle, and tag area instead of fogging the whole lower half.
+- Reduced photo-card blur opacity, tint opacity, and bottom feather strength again to preserve more of the source image color, especially on neon/night cards.
+- Strengthened text shadow and chip readability slightly so text remains readable without needing a broad gray wash behind it.
+- Kept static-map cards stronger than photo cards, but reduced their bottom feather a little so maps do not become flat panels.
+- The intended result is a more selective text-zone atmosphere: readable type, preserved image mood, no stripe seams, and no visible footer/container rectangle.
+
 ## LAB6 — Vertical/page scroll test routes
 
 Adds three routes that reuse the same square deck engine while placing it under real vertical-scroll pressure:
