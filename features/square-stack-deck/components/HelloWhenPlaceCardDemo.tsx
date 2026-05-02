@@ -1,4 +1,4 @@
-﻿import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -35,78 +35,85 @@ type LowerAtmosphereProps = {
   mediaKind: DemoPlaceMediaKind;
 };
 
+const BLUR_WASH_BANDS = [
+  { top: 42, height: 42, blur: 10, opacity: 0.08, tintOpacity: 0.05 },
+  { top: 52, height: 40, blur: 16, opacity: 0.14, tintOpacity: 0.12 },
+  { top: 62, height: 36, blur: 22, opacity: 0.20, tintOpacity: 0.22 },
+  { top: 72, height: 32, blur: 28, opacity: 0.28, tintOpacity: 0.36 },
+] as const;
+
 function LowerAtmosphere({ source, isDark, mediaKind }: LowerAtmosphereProps) {
   const isStaticMap = mediaKind === "static_map";
-  const sliceCount = isStaticMap ? 26 : 24;
-  const slices = useMemo(() => Array.from({ length: sliceCount }, (_, index) => index), [sliceCount]);
-  const blurStartPercent = isStaticMap ? 46 : 50;
-  const safeStart = Math.max(0, Math.min(92, blurStartPercent));
-  const overlayHeight = 100 - safeStart;
-  const sliceHeight = overlayHeight / sliceCount;
-  const sliceOverlap = 0.9;
-  const maxBlurRadius = isStaticMap ? 32 : 28;
+  const staticMapLift = isStaticMap ? -4 : 0;
   const bottomTint = isDark
     ? isStaticMap
-      ? "rgba(5,7,10,0.52)"
-      : "rgba(8,10,12,0.46)"
+      ? "rgba(5,7,10,0.58)"
+      : "rgba(8,10,12,0.48)"
     : isStaticMap
-      ? "rgba(255,255,255,0.66)"
-      : "rgba(255,255,255,0.46)";
-  const tintStrength = isStaticMap ? 0.92 : 0.82;
+      ? "rgba(255,255,255,0.70)"
+      : "rgba(255,255,255,0.48)";
+  const lowerTint = isDark
+    ? isStaticMap
+      ? "rgba(3,5,8,0.68)"
+      : "rgba(3,5,8,0.48)"
+    : isStaticMap
+      ? "rgba(255,255,255,0.78)"
+      : "rgba(255,255,255,0.54)";
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-      {source ? (
-        slices.map((slice) => {
-          const progress = (slice + 1) / sliceCount;
-          const eased = progress * progress * (3 - 2 * progress);
-          const top = safeStart + slice * sliceHeight - sliceOverlap / 2;
-          const height = sliceHeight + sliceOverlap;
-          const blurOpacity = eased * 0.9;
-          const tintOpacity = eased * tintStrength;
+      {source
+        ? BLUR_WASH_BANDS.map((band, index) => {
+            const top = Math.max(0, band.top + staticMapLift);
+            const height = Math.min(100 - top, band.height - staticMapLift * 0.25);
+            const blurOpacity = Math.min(0.42, band.opacity * (isStaticMap ? 1.16 : 1));
+            const tintOpacity = Math.min(0.72, band.tintOpacity * (isStaticMap ? 1.2 : 1));
 
-          return (
-            <React.Fragment key={`blur-slice-${slice}`}>
-              <View
-                style={[
-                  styles.atmosphereSlice,
-                  {
-                    top: `${top}%`,
-                    height: `${height}%`,
-                    opacity: blurOpacity,
-                  },
-                ]}
-              >
-                <Image
-                  source={source}
-                  contentFit="cover"
-                  transition={0}
-                  blurRadius={6 + eased * (maxBlurRadius - 6)}
-                  style={StyleSheet.absoluteFillObject}
+            return (
+              <React.Fragment key={`blur-wash-band-${index}`}>
+                <View
+                  style={[
+                    styles.blurBand,
+                    {
+                      top: `${top}%`,
+                      height: `${height}%`,
+                      opacity: blurOpacity,
+                    },
+                  ]}
+                >
+                  <Image
+                    source={source}
+                    contentFit="cover"
+                    transition={0}
+                    blurRadius={band.blur + (isStaticMap ? 4 : 0)}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                </View>
+                <View
+                  style={[
+                    styles.blurBand,
+                    {
+                      top: `${top}%`,
+                      height: `${height}%`,
+                      backgroundColor: bottomTint,
+                      opacity: tintOpacity,
+                    },
+                  ]}
                 />
-              </View>
-              <View
-                style={[
-                  styles.atmosphereSlice,
-                  {
-                    top: `${top}%`,
-                    height: `${height}%`,
-                    backgroundColor: bottomTint,
-                    opacity: tintOpacity,
-                  },
-                ]}
-              />
-            </React.Fragment>
-          );
-        })
-      ) : (
-        <View
-          style={[
-            StyleSheet.absoluteFillObject,
-            { backgroundColor: isDark ? "rgba(3,5,8,0.42)" : "rgba(255,255,255,0.40)" },
-          ]}
-        />
-      )}
+              </React.Fragment>
+            );
+          })
+        : null}
+      <View
+        style={[
+          styles.bottomWash,
+          {
+            backgroundColor: lowerTint,
+            height: isStaticMap ? "46%" : "42%",
+            opacity: isStaticMap ? 0.58 : 0.44,
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -332,11 +339,17 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     opacity: 0.82,
   },
-  atmosphereSlice: {
+  blurBand: {
     position: "absolute",
     left: 0,
     right: 0,
     overflow: "hidden",
+  },
+  bottomWash: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   contentLayer: {
     ...StyleSheet.absoluteFillObject,

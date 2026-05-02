@@ -225,3 +225,11 @@ Intent rules:
 - unavailable directions, such as previous on the first card or next on the last card, are handed to scroll instead of fighting the page.
 
 This patch is isolated to `features/square-stack-deck` and does not touch the older `features/deck` implementation.
+
+
+## LAB5f-v2 - Remove blur stripe seams
+
+- Replaced the many narrow blur slices in the square deck card with a small set of large overlapping blur wash bands.
+- This removes the visible horizontal stripe/gap artifacts that appeared in the lower text zone.
+- Kept the Image Card design principle: the blur starts subtly around the middle and becomes strongest near the bottom.
+- Static-map cards still receive slightly earlier and stronger readability protection than photo cards.
