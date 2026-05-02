@@ -1,4 +1,4 @@
-# Square Stack Deck Lab
+﻿# Square Stack Deck Lab
 
 This lab is intentionally separate from the existing `features/deck` implementation.
 
@@ -176,3 +176,11 @@ The intended result is not a frosted rectangle. It should feel like the image it
 - Removed the boxed lower panel styling from the lab card.
 - Replaced the prototype text layout with the main HelloWhen PlaceCard overlay structure: top mode chip, eyebrow row, title, subtitle, and footer tags.
 - Static-map demo cards receive slightly stronger readability protection than photo cards.
+
+## LAB5c - Progressive reference blur smoothing
+
+- Refined the lower atmosphere to better match the progressive blur reference image.
+- Added low-opacity bridge blur bands above the main blur field to soften the transition between the untouched image and the blurred lower zone.
+- Increased the blur slice count and overlap so the blur grows more continuously from top to bottom.
+- Slightly expanded the atmosphere height again, with stronger protection on static-map cards.
+
