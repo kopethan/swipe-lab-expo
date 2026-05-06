@@ -6,6 +6,7 @@ import { useTheme } from "@/providers/ThemeProvider";
 import { ContinuousSquareStackDeck } from "./ContinuousSquareStackDeck";
 import { HelloWhenPlaceCardDemo } from "./HelloWhenPlaceCardDemo";
 import type { DemoSquareCard } from "../demoPlaceCards";
+import type { SquareStackDeckProps } from "../squareStackDeck.types";
 
 type Props = {
   cards: DemoSquareCard[];
@@ -16,6 +17,9 @@ type Props = {
   stageStyle?: StyleProp<ViewStyle>;
   minCardSize?: number;
   maxCardSize?: number;
+  renderWindow?: SquareStackDeckProps<DemoSquareCard>["renderWindow"];
+  showDebugBadge?: boolean;
+  depthEffect?: SquareStackDeckProps<DemoSquareCard>["depthEffect"];
 };
 
 function SquareDeckLabStageInner({
@@ -27,6 +31,9 @@ function SquareDeckLabStageInner({
   stageStyle,
   minCardSize,
   maxCardSize,
+  renderWindow = "all",
+  showDebugBadge = false,
+  depthEffect = "motionOnly",
 }: Props) {
   const { palette } = useTheme();
   const [activeLabel, setActiveLabel] = useState(cards[0]?.id ?? "—");
@@ -62,6 +69,9 @@ function SquareDeckLabStageInner({
           availableHeight={stageBounds.height}
           minCardSize={minCardSize}
           maxCardSize={maxCardSize}
+          renderWindow={renderWindow}
+          showDebugBadge={showDebugBadge}
+          depthEffect={depthEffect}
           onIndexChange={(_, card) => setActiveLabel(card.id)}
           renderCard={({ card, index, total }) => <HelloWhenPlaceCardDemo card={card} index={index} total={total} />}
         />

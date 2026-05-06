@@ -32,6 +32,38 @@ const MODE_LABELS: Record<TradeServiceMode, string> = {
   hybrid: "Hybrid",
 };
 
+function formatDateTime(value?: string) {
+  if (!value) {
+    return "Not set";
+  }
+
+  const date = new Date(value);
+
+  if (!Number.isFinite(date.getTime())) {
+    return "Not set";
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function isExpiredTrade(item: TradeFeedItem) {
+  if (!item.expiresAt) {
+    return false;
+  }
+
+  const expiresAtMs = new Date(item.expiresAt).getTime();
+  return Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now();
+}
+
+function getVisibleStatus(item: TradeFeedItem) {
+  return isExpiredTrade(item) ? "expired" : item.status;
+}
+
 function compactMeta(parts: Array<string | undefined>) {
   return parts.filter(Boolean).join(" · ");
 }
@@ -141,6 +173,7 @@ export function TradeDetail({ tradeId }: TradeDetailProps) {
   if (!trade) {
     return <TradeNotFound tradeId={tradeId} />;
   }
+  const visibleStatus = getVisibleStatus(trade);
 
   const needMeta = compactMeta([
     CATEGORY_LABELS[trade.need.category],
@@ -165,7 +198,7 @@ export function TradeDetail({ tradeId }: TradeDetailProps) {
       <View style={styles.topBar}>
         <BackButton />
         <Text style={[styles.topMeta, { color: palette.muted }]} numberOfLines={1}>
-          {trade.status.toUpperCase()}
+          {visibleStatus.toUpperCase()}
         </Text>
       </View>
 
@@ -236,6 +269,17 @@ export function TradeDetail({ tradeId }: TradeDetailProps) {
           </View>
         </View>
       ) : null}
+
+      <View style={[styles.expirationSection, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+        <Text style={[styles.expirationTitle, { color: palette.muted }]}>LISTING TIME</Text>
+        <Text style={[styles.expirationMain, { color: palette.text }]}>
+          {trade.expirationMode === "manual" ? "Until closed by owner" : `Expires ${formatDateTime(trade.expiresAt)}`}
+        </Text>
+        <Text style={[styles.expirationText, { color: palette.muted }]}>
+          Published {formatDateTime(trade.publishedAt)}
+          {visibleStatus === "expired" ? " · This trade is no longer visible in the public Feed." : ""}
+        </Text>
+      </View>
 
       <View style={styles.actions}>
         <Pressable
@@ -469,6 +513,30 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 11,
     fontWeight: "900",
+  },
+
+  expirationSection: {
+    borderWidth: 1,
+    borderRadius: 28,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    gap: 7,
+  },
+  expirationTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  expirationMain: {
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.25,
+    lineHeight: 22,
+  },
+  expirationText: {
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16,
   },
 
   actions: {

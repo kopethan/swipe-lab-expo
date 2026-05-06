@@ -1,0 +1,376 @@
+diff --git a/features/trade/types.ts b/features/trade/types.ts
+index 4c0ab1b..d8196d7 100644
+--- a/features/trade/types.ts
++++ b/features/trade/types.ts
+@@ -10,7 +10,10 @@ export type TradeUrgency = "low" | "medium" | "high" | "urgent";
+
+-export type TradeStatus = "draft" | "active" | "paused" | "matched" | "closed";
++export type TradeStatus = "draft" | "active" | "paused" | "matched" | "expired" | "closed";
++
++export type TradeExpirationMode = "duration" | "manual";
++export type TradeDurationOption = "24h" | "3d" | "7d" | "14d" | "manual";
+
+ export type TradeCategory =
+   | "design"
+@@ -67,6 +70,10 @@ export type TradeFeedItem = {
+   offer: TradeOfferSummary;
+   matchScore?: number;
+   status: TradeStatus;
++  publishedAt?: string;
++  expiresAt?: string;
++  expirationMode?: TradeExpirationMode;
++  closedAt?: string;
+ };
+
+ export type TradeNeedItem = TradeNeedSummary & {
+diff --git a/features/trade/state/TradeStore.tsx b/features/trade/state/TradeStore.tsx
+index 1c36a9a..f78ecaa 100644
+--- a/features/trade/state/TradeStore.tsx
++++ b/features/trade/state/TradeStore.tsx
+@@ -11,6 +11,7 @@ import { TRADE_FEED_MOCK_ITEMS, TRADE_NEED_MOCK_ITEMS, TRADE_OFFER_MOCK_ITEMS }
+ import type {
++  TradeExpirationMode,
+   TradeFeedItem,
+   TradeNeedItem,
+   TradeNeedSummary,
+@@ -39,6 +40,10 @@ export type CreateTradeInput = {
+   id?: string;
+   matchScore?: number;
+   status?: TradeStatus;
++  publishedAt?: string;
++  expiresAt?: string;
++  expirationMode?: TradeExpirationMode;
++  closedAt?: string;
+ };
+
+ type TradeStoreContextValue = {
+@@ -61,6 +66,21 @@ const CURRENT_OWNER: TradeParticipantSummary = {
+
+ const TradeStoreContext = createContext<TradeStoreContextValue | null>(null);
+
++function isExpiredTrade(item: TradeFeedItem, nowMs = Date.now()) {
++  if (!item.expiresAt) {
++    return false;
++  }
++
++  const expiresAtMs = new Date(item.expiresAt).getTime();
++  return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
++}
++
++function isPublicFeedTrade(item: TradeFeedItem) {
++  if (item.status !== "active") {
++    return false;
++  }
++
++  return !isExpiredTrade(item);
++}
++
+ let generatedIdCounter = 0;
+
+ function createLocalId(prefix: string) {
+@@ -103,10 +123,11 @@ function toOfferSummary(offer: TradeOfferItem): TradeOfferSummary {
+
+ export function TradeStoreProvider({ children }: PropsWithChildren) {
+   const [needs, setNeeds] = useState<TradeNeedItem[]>(TRADE_NEED_MOCK_ITEMS);
+   const [offers, setOffers] = useState<TradeOfferItem[]>(TRADE_OFFER_MOCK_ITEMS);
+-  const [feedItems, setFeedItems] = useState<TradeFeedItem[]>(TRADE_FEED_MOCK_ITEMS);
++  const [tradeItems, setTradeItems] = useState<TradeFeedItem[]>(TRADE_FEED_MOCK_ITEMS);
+
+   const findNeedById = useCallback((id: string) => needs.find((item) => item.id === id), [needs]);
+   const findOfferById = useCallback((id: string) => offers.find((item) => item.id === id), [offers]);
+-  const findTradeById = useCallback((id: string) => feedItems.find((item) => item.id === id), [feedItems]);
++  const findTradeById = useCallback((id: string) => tradeItems.find((item) => item.id === id), [tradeItems]);
++  const feedItems = useMemo(() => tradeItems.filter(isPublicFeedTrade), [tradeItems]);
+
+   const createNeed = useCallback((input: CreateTradeNeedInput) => {
+     const nextNeed: TradeNeedItem = {
+@@ -151,9 +172,13 @@ export function TradeStoreProvider({ children }: PropsWithChildren) {
+         need: toNeedSummary(need),
+         offer: toOfferSummary(offer),
+         matchScore: input.matchScore ?? 72,
+         status: input.status ?? "active",
++        publishedAt: input.publishedAt ?? new Date().toISOString(),
++        expiresAt: input.expiresAt,
++        expirationMode: input.expirationMode ?? "duration",
++        closedAt: input.closedAt,
+       };
+
+-      setFeedItems((current) => [nextTrade, ...current]);
++      setTradeItems((current) => [nextTrade, ...current]);
+       return nextTrade;
+     },
+     [needs, offers]
+diff --git a/features/trade/TradeCreateScreen.tsx b/features/trade/TradeCreateScreen.tsx
+index 313a1fb..f84ee88 100644
+--- a/features/trade/TradeCreateScreen.tsx
++++ b/features/trade/TradeCreateScreen.tsx
+@@ -8,6 +8,7 @@ import { useTradeStore } from "./state";
+ import type {
+   TradeCategory,
++  TradeDurationOption,
+   TradeNeedItem,
+   TradeOfferItem,
+   TradeServiceMode,
+@@ -78,6 +79,13 @@ const URGENCY_OPTIONS: TradeUrgency[] = ["low", "medium", "high", "urgent"];
+
++const DURATION_OPTIONS: Array<{ value: TradeDurationOption; label: string; helper: string }> = [
++  { value: "24h", label: "24 hours", helper: "Minimum listing time" },
++  { value: "3d", label: "3 days", helper: "Short test window" },
++  { value: "7d", label: "7 days", helper: "Recommended" },
++  { value: "14d", label: "14 days", helper: "Maximum auto expiry" },
++  { value: "manual", label: "Until I close it", helper: "Owner closes manually" },
++];
++
+ const EMPTY_QUICK_NEED: QuickNeedDraft = {
+   title: "",
+   category: "design",
+@@ -109,6 +117,37 @@ function parseTags(value: string) {
+     .slice(0, 6);
+ }
+
++function addDurationToDate(startDate: Date, duration: TradeDurationOption) {
++  const next = new Date(startDate);
++
++  if (duration === "24h") {
++    next.setHours(next.getHours() + 24);
++    return next;
++  }
++
++  if (duration === "3d") {
++    next.setDate(next.getDate() + 3);
++    return next;
++  }
++
++  if (duration === "7d") {
++    next.setDate(next.getDate() + 7);
++    return next;
++  }
++
++  if (duration === "14d") {
++    next.setDate(next.getDate() + 14);
++    return next;
++  }
++
++  return null;
++}
++
++function getDurationSummary(duration: TradeDurationOption) {
++  const option = DURATION_OPTIONS.find((item) => item.value === duration);
++  return option ? `${option.label} · ${option.helper}` : "7 days · Recommended";
++}
++
+ function FieldLabel({ children }: { children: React.ReactNode }) {
+   const { palette } = useTheme();
+
+@@ -467,6 +506,7 @@ export function TradeCreateScreen() {
+   const [selectedOfferId, setSelectedOfferId] = useState(offers[0]?.id ?? "");
+   const [quickNeed, setQuickNeed] = useState<QuickNeedDraft>(EMPTY_QUICK_NEED);
+   const [quickOffer, setQuickOffer] = useState<QuickOfferDraft>(EMPTY_QUICK_OFFER);
++  const [duration, setDuration] = useState<TradeDurationOption>("7d");
+   const [error, setError] = useState("");
+
+   const selectedNeed = useMemo(() => needs.find((item) => item.id === selectedNeedId), [needs, selectedNeedId]);
+@@ -558,6 +598,10 @@ export function TradeCreateScreen() {
+       return;
+     }
+
++    const publishedAtDate = new Date();
++    const expiresAtDate = addDurationToDate(publishedAtDate, duration);
++    const publishedAt = publishedAtDate.toISOString();
++
+     const publishedTrade = createTrade({
+       needId: needForTrade.id,
+       offerId: offerForTrade.id,
+@@ -565,6 +609,9 @@ export function TradeCreateScreen() {
+       offer: offerForTrade,
+       matchScore: 88,
+       status: "active",
++      publishedAt,
++      expiresAt: expiresAtDate ? expiresAtDate.toISOString() : undefined,
++      expirationMode: duration === "manual" ? "manual" : "duration",
+     });
+
+     if (!publishedTrade) {
+@@ -722,12 +769,35 @@ export function TradeCreateScreen() {
+           <View style={[styles.publishNote, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+-            <Text style={[styles.publishNoteTitle, { color: palette.text }]}>Ready for first launch</Text>
++            <Text style={[styles.publishNoteTitle, { color: palette.text }]}>Choose listing duration</Text>
+             <Text style={[styles.publishNoteText, { color: palette.muted }]}>
+-              Duration and expiration options come next. For now, this publishes an active trade into the public Feed.
++              Trades are public only while active. Expired trades leave the Feed but remain available for owner history later.
+             </Text>
+           </View>
+
++          <View style={styles.durationGrid}>
++            {DURATION_OPTIONS.map((option) => (
++              <Pressable
++                key={option.value}
++                onPress={() => setDuration(option.value)}
++                accessibilityRole="button"
++                style={({ pressed }) => [
++                  styles.durationCard,
++                  {
++                    borderColor: duration === option.value ? palette.text : palette.border,
++                    backgroundColor: duration === option.value ? palette.text : palette.surface,
++                  },
++                  pressed ? { opacity: 0.84, transform: [{ scale: 0.98 }] } : null,
++                ]}
++              >
++                <Text style={[styles.durationTitle, { color: duration === option.value ? palette.background : palette.text }]}>
++                  {option.label}
++                </Text>
++                <Text style={[styles.durationText, { color: duration === option.value ? palette.background : palette.muted }]}>
++                  {option.helper}
++                </Text>
++              </Pressable>
++            ))}
++          </View>
++
++          <Text style={[styles.durationSummary, { color: palette.muted }]}>Selected: {getDurationSummary(duration)}</Text>
++
+           {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
+
+           <View style={styles.formActions}>
+@@ -959,6 +1029,37 @@ const styles = StyleSheet.create({
+     fontWeight: "700",
+     lineHeight: 16,
+   },
++  durationGrid: {
++    gap: 10,
++  },
++  durationCard: {
++    minHeight: 64,
++    justifyContent: "center",
++    borderWidth: 1,
++    borderRadius: 22,
++    paddingHorizontal: 14,
++    paddingVertical: 12,
++    gap: 4,
++  },
++  durationTitle: {
++    fontSize: 14,
++    fontWeight: "900",
++    letterSpacing: -0.15,
++    lineHeight: 18,
++  },
++  durationText: {
++    fontSize: 11,
++    fontWeight: "800",
++    lineHeight: 15,
++  },
++  durationSummary: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.2,
++    lineHeight: 15,
++  },
+   errorText: {
+     fontSize: 12,
+     fontWeight: "800",
+diff --git a/features/trade/TradeDetail.tsx b/features/trade/TradeDetail.tsx
+index 8cab9d0..ad16c0f 100644
+--- a/features/trade/TradeDetail.tsx
++++ b/features/trade/TradeDetail.tsx
+@@ -31,6 +31,35 @@ const MODE_LABELS: Record<TradeServiceMode, string> = {
+   hybrid: "Hybrid",
+ };
+
++function formatDateTime(value?: string) {
++  if (!value) {
++    return "Not set";
++  }
++
++  const date = new Date(value);
++
++  if (!Number.isFinite(date.getTime())) {
++    return "Not set";
++  }
++
++  return date.toLocaleDateString(undefined, {
++    month: "short",
++    day: "numeric",
++    hour: "numeric",
++    minute: "2-digit",
++  });
++}
++
++function isExpiredTrade(item: TradeFeedItem) {
++  if (!item.expiresAt) {
++    return false;
++  }
++
++  const expiresAtMs = new Date(item.expiresAt).getTime();
++  return Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now();
++}
++
++function getVisibleStatus(item: TradeFeedItem) {
++  return isExpiredTrade(item) ? "expired" : item.status;
++}
++
+ function compactMeta(parts: Array<string | undefined>) {
+   return parts.filter(Boolean).join(" · ");
+ }
+@@ -130,6 +159,7 @@ export function TradeDetail({ tradeId }: TradeDetailProps) {
+     return <TradeNotFound tradeId={tradeId} />;
+   }
++  const visibleStatus = getVisibleStatus(trade);
+
+   const needMeta = compactMeta([
+     CATEGORY_LABELS[trade.need.category],
+@@ -151,7 +181,7 @@ export function TradeDetail({ tradeId }: TradeDetailProps) {
+       <View style={styles.topBar}>
+         <BackButton />
+         <Text style={[styles.topMeta, { color: palette.muted }]} numberOfLines={1}>
+-          {trade.status.toUpperCase()}
++          {visibleStatus.toUpperCase()}
+         </Text>
+       </View>
+
+@@ -233,6 +263,22 @@ export function TradeDetail({ tradeId }: TradeDetailProps) {
+         </View>
+       ) : null}
+
++      <View style={[styles.expirationSection, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++        <Text style={[styles.expirationTitle, { color: palette.muted }]}>LISTING TIME</Text>
++        <Text style={[styles.expirationMain, { color: palette.text }]}>
++          {trade.expirationMode === "manual" ? "Until closed by owner" : `Expires ${formatDateTime(trade.expiresAt)}`}
++        </Text>
++        <Text style={[styles.expirationText, { color: palette.muted }]}>
++          Published {formatDateTime(trade.publishedAt)}
++          {visibleStatus === "expired" ? " · This trade is no longer visible in the public Feed." : ""}
++        </Text>
++      </View>
++
+       <View style={styles.actions}>
+         <Pressable
+           onPress={() => console.log("interested in trade", trade.id)}
+@@ -334,6 +380,28 @@ const styles = StyleSheet.create({
+   },
+
++  expirationSection: {
++    borderWidth: 1,
++    borderRadius: 28,
++    paddingHorizontal: 18,
++    paddingVertical: 18,
++    gap: 7,
++  },
++  expirationTitle: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 1.1,
++  },
++  expirationMain: {
++    fontSize: 18,
++    fontWeight: "900",
++    letterSpacing: -0.25,
++    lineHeight: 22,
++  },
++  expirationText: {
++    fontSize: 12,
++    fontWeight: "800",
++    lineHeight: 16,
++  },
++
+   actions: {
+     gap: 10,
+   },

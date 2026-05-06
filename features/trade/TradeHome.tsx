@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/providers/ThemeProvider";
 
-import { TradeFeed, TradeNeeds, TradeOffers, TradeTabs } from "./components";
+import { TradeFeed, TradeNeeds, TradeOffers, TradeOwnerTrades, TradeTabs } from "./components";
 import type { TradeTabKey } from "./types";
 
 export function TradeHome() {
@@ -35,7 +35,15 @@ export function TradeHome() {
         <TradeTabs activeTab={activeTab} onChange={setActiveTab} />
       </View>
 
-      {activeTab === "feed" ? <TradeFeed /> : activeTab === "needs" ? <TradeNeeds /> : <TradeOffers />}
+      {activeTab === "feed" ? (
+        <TradeFeed />
+      ) : activeTab === "needs" ? (
+        <TradeNeeds />
+      ) : activeTab === "offers" ? (
+        <TradeOffers />
+      ) : (
+        <TradeOwnerTrades />
+      )}
     </View>
   );
 }

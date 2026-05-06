@@ -1,4 +1,4 @@
-export type TradeTabKey = "feed" | "needs" | "offers";
+export type TradeTabKey = "feed" | "needs" | "offers" | "trades";
 
 export type TradeTab = {
   key: TradeTabKey;
@@ -22,6 +22,11 @@ export const TRADE_TABS: TradeTab[] = [
     label: "Offers",
     description: "Track what people can give in exchange.",
   },
+  {
+    key: "trades",
+    label: "My Trades",
+    description: "Private management for trades you published.",
+  },
 ];
 
 export type TradeServiceMode = "remote" | "local" | "hybrid";
@@ -35,7 +40,10 @@ export type TradeAvailabilityWindow =
 
 export type TradeUrgency = "low" | "medium" | "high" | "urgent";
 
-export type TradeStatus = "draft" | "active" | "paused" | "matched" | "closed";
+export type TradeStatus = "draft" | "active" | "paused" | "matched" | "expired" | "closed";
+
+export type TradeExpirationMode = "duration" | "manual";
+export type TradeDurationOption = "24h" | "3d" | "7d" | "14d" | "manual";
 
 export type TradeCategory =
   | "design"
@@ -88,6 +96,10 @@ export type TradeFeedItem = {
   offer: TradeOfferSummary;
   matchScore?: number;
   status: TradeStatus;
+  publishedAt?: string;
+  expiresAt?: string;
+  expirationMode?: TradeExpirationMode;
+  closedAt?: string;
 };
 
 export type TradeNeedItem = TradeNeedSummary & {

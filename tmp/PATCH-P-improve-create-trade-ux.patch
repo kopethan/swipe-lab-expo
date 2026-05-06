@@ -1,0 +1,337 @@
+diff --git a/features/trade/TradeCreateScreen.tsx b/features/trade/TradeCreateScreen.tsx
+index f84ee88..a4c1c42 100644
+--- a/features/trade/TradeCreateScreen.tsx
++++ b/features/trade/TradeCreateScreen.tsx
+@@ -463,6 +463,100 @@ function PreviewCard({
+   );
+ }
+
++function EmptySelectState({
++  title,
++  text,
++  buttonLabel,
++  onPress,
++}: {
++  title: string;
++  text: string;
++  buttonLabel: string;
++  onPress: () => void;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.emptyStateCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++      <Text style={[styles.emptyStateTitle, { color: palette.text }]}>{title}</Text>
++      <Text style={[styles.emptyStateText, { color: palette.muted }]}>{text}</Text>
++      <Pressable
++        onPress={onPress}
++        accessibilityRole="button"
++        style={({ pressed }) => [
++          styles.emptyStateButton,
++          { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
++          pressed ? { opacity: 0.82, transform: [{ scale: 0.98 }] } : null,
++        ]}
++      >
++        <Text style={[styles.emptyStateButtonText, { color: palette.text }]}>{buttonLabel}</Text>
++      </Pressable>
++    </View>
++  );
++}
++
++function SummaryLine({ label, value, complete }: { label: string; value: string; complete: boolean }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={styles.summaryLine}>
++      <View style={styles.summaryLabelWrap}>
++        <View
++          style={[
++            styles.summaryDot,
++            {
++              borderColor: complete ? palette.text : palette.border,
++              backgroundColor: complete ? palette.text : "transparent",
++            },
++          ]}
++        />
++        <Text style={[styles.summaryLabel, { color: palette.muted }]}>{label}</Text>
++      </View>
++      <Text style={[styles.summaryValue, { color: palette.text }]} numberOfLines={2}>
++        {value}
++      </Text>
++    </View>
++  );
++}
++
++function PublishSummaryCard({
++  needTitle,
++  offerTitle,
++  durationSummary,
++  needComplete,
++  offerComplete,
++}: {
++  needTitle: string;
++  offerTitle: string;
++  durationSummary: string;
++  needComplete: boolean;
++  offerComplete: boolean;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.publishSummaryCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++      <Text style={[styles.publishSummaryKicker, { color: palette.muted }]}>PUBLISH CHECKLIST</Text>
++      <SummaryLine label="Need" value={needTitle || "Missing need"} complete={needComplete} />
++      <SummaryLine label="Offer" value={offerTitle || "Missing offer"} complete={offerComplete} />
++      <SummaryLine label="Duration" value={durationSummary} complete />
++      <SummaryLine label="Visibility" value="Public Feed card" complete />
++    </View>
++  );
++}
++
++function ConfirmationToggle({
++  selected,
++  onPress,
++}: {
++  selected: boolean;
++  onPress: () => void;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <Pressable
++      onPress={onPress}
++      accessibilityRole="checkbox"
++      accessibilityState={{ checked: selected }}
++      style={({ pressed }) => [
++        styles.confirmCard,
++        {
++          borderColor: selected ? palette.text : palette.border,
++          backgroundColor: selected ? palette.text : palette.surface,
++        },
++        pressed ? { opacity: 0.84, transform: [{ scale: 0.99 }] } : null,
++      ]}
++    >
++      <Text style={[styles.confirmTitle, { color: selected ? palette.background : palette.text }]}>
++        {selected ? "Ready to publish ✓" : "Confirm before publishing"}
++      </Text>
++      <Text style={[styles.confirmText, { color: selected ? palette.background : palette.muted }]}>
++        I understand this Trade will be visible in the public Feed. My underlying Need and Offer stay private.
++      </Text>
++    </Pressable>
++  );
++}
++
+ export function TradeCreateScreen() {
+   const router = useRouter();
+   const { palette } = useTheme();
+@@ -507,6 +601,7 @@ export function TradeCreateScreen() {
+   const [quickNeed, setQuickNeed] = useState<QuickNeedDraft>(EMPTY_QUICK_NEED);
+   const [quickOffer, setQuickOffer] = useState<QuickOfferDraft>(EMPTY_QUICK_OFFER);
+   const [duration, setDuration] = useState<TradeDurationOption>("7d");
++  const [isPublishConfirmed, setIsPublishConfirmed] = useState(false);
+   const [error, setError] = useState("");
+
+   const selectedNeed = useMemo(() => needs.find((item) => item.id === selectedNeedId), [needs, selectedNeedId]);
+@@ -532,6 +627,7 @@ export function TradeCreateScreen() {
+   const needComplete = needSource === "existing" ? Boolean(selectedNeed) : quickNeed.title.trim().length > 0;
+   const offerComplete = offerSource === "existing" ? Boolean(selectedOffer) : quickOffer.title.trim().length > 0;
++  const durationSummary = getDurationSummary(duration);
+
+   function updateQuickNeed<TKey extends keyof QuickNeedDraft>(key: TKey, value: QuickNeedDraft[TKey]) {
+     setQuickNeed((current) => ({ ...current, [key]: value }));
+@@ -551,6 +647,23 @@ export function TradeCreateScreen() {
+   }
+
+   function handlePublish() {
++    if (!needComplete) {
++      setActiveSegment("need");
++      setError("Choose or create a need before publishing.");
++      return;
++    }
++
++    if (!offerComplete) {
++      setActiveSegment("offer");
++      setError("Choose or create an offer before publishing.");
++      return;
++    }
++
++    if (!isPublishConfirmed) {
++      setActiveSegment("publish");
++      setError("Confirm that this Trade can be shown publicly before publishing.");
++      return;
++    }
++
+     let needForTrade: TradeNeedItem | undefined = selectedNeed;
+     let offerForTrade: TradeOfferItem | undefined = selectedOffer;
+
+@@ -690,7 +803,13 @@ export function TradeCreateScreen() {
+                   />
+                 ))
+               ) : (
+-                <Text style={[styles.emptyText, { color: palette.muted }]}>No saved needs yet. Use Create need instead.</Text>
++                <EmptySelectState
++                  title="No saved needs yet"
++                  text="Create a private Need here, then use it to publish this public Trade."
++                  buttonLabel="Create need"
++                  onPress={() => setNeedSource("new")}
++                />
+               )}
+             </View>
+           ) : (
+@@ -735,7 +854,13 @@ export function TradeCreateScreen() {
+                   />
+                 ))
+               ) : (
+-                <Text style={[styles.emptyText, { color: palette.muted }]}>No saved offers yet. Use Create offer instead.</Text>
++                <EmptySelectState
++                  title="No saved offers yet"
++                  text="Create a private Offer here, then pair it with a Need for the public Feed."
++                  buttonLabel="Create offer"
++                  onPress={() => setOfferSource("new")}
++                />
+               )}
+             </View>
+           ) : (
+@@ -800,7 +925,18 @@ export function TradeCreateScreen() {
+             ))}
+           </View>
+
+-          <Text style={[styles.durationSummary, { color: palette.muted }]}>Selected: {getDurationSummary(duration)}</Text>
++          <Text style={[styles.durationSummary, { color: palette.muted }]}>Selected: {durationSummary}</Text>
++
++          <PublishSummaryCard
++            needTitle={previewNeedTitle}
++            offerTitle={previewOfferTitle}
++            durationSummary={durationSummary}
++            needComplete={needComplete}
++            offerComplete={offerComplete}
++          />
++
++          <ConfirmationToggle
++            selected={isPublishConfirmed}
++            onPress={() => setIsPublishConfirmed((current) => !current)}
++          />
+
+           {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
+
+@@ -824,6 +960,7 @@ export function TradeCreateScreen() {
+               onPress={handlePublish}
+               accessibilityRole="button"
+               style={({ pressed }) => [
+                 styles.primaryButton,
+                 { backgroundColor: palette.text },
++                !needComplete || !offerComplete || !isPublishConfirmed ? { opacity: 0.48 } : null,
+                 pressed ? { opacity: 0.86, transform: [{ scale: 0.98 }] } : null,
+               ]}
+             >
+@@ -1006,6 +1143,32 @@ const styles = StyleSheet.create({
+     gap: 10,
+   },
++  emptyStateCard: {
++    borderWidth: 1,
++    borderRadius: 22,
++    paddingHorizontal: 14,
++    paddingVertical: 14,
++    gap: 8,
++  },
++  emptyStateTitle: {
++    fontSize: 15,
++    fontWeight: "900",
++    letterSpacing: -0.2,
++    lineHeight: 19,
++  },
++  emptyStateText: {
++    fontSize: 12,
++    fontWeight: "800",
++    lineHeight: 16,
++  },
++  emptyStateButton: {
++    alignSelf: "flex-start",
++    borderWidth: 1,
++    borderRadius: 999,
++    paddingHorizontal: 12,
++    paddingVertical: 8,
++  },
++  emptyStateButtonText: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.1,
++  },
+   selectCard: {
+     borderWidth: 1,
+     borderRadius: 22,
+@@ -1060,11 +1223,6 @@ const styles = StyleSheet.create({
+     fontWeight: "900",
+     letterSpacing: 0.1,
+   },
+-  emptyText: {
+-    fontSize: 12,
+-    fontWeight: "800",
+-    lineHeight: 16,
+-  },
+   nextButton: {
+     minHeight: 46,
+     alignItems: "center",
+@@ -1125,6 +1283,80 @@ const styles = StyleSheet.create({
+     letterSpacing: 0.2,
+     lineHeight: 15,
+   },
++  publishSummaryCard: {
++    borderWidth: 1,
++    borderRadius: 24,
++    paddingHorizontal: 14,
++    paddingVertical: 14,
++    gap: 11,
++  },
++  publishSummaryKicker: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 1.1,
++  },
++  summaryLine: {
++    gap: 5,
++  },
++  summaryLabelWrap: {
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 7,
++  },
++  summaryDot: {
++    width: 9,
++    height: 9,
++    borderWidth: 1,
++    borderRadius: 999,
++  },
++  summaryLabel: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 0.8,
++    textTransform: "uppercase",
++  },
++  summaryValue: {
++    fontSize: 14,
++    fontWeight: "900",
++    letterSpacing: -0.15,
++    lineHeight: 18,
++  },
++  confirmCard: {
++    borderWidth: 1,
++    borderRadius: 24,
++    paddingHorizontal: 14,
++    paddingVertical: 14,
++    gap: 6,
++  },
++  confirmTitle: {
++    fontSize: 15,
++    fontWeight: "900",
++    letterSpacing: -0.15,
++    lineHeight: 19,
++  },
++  confirmText: {
++    fontSize: 12,
++    fontWeight: "800",
++    lineHeight: 16,
++  },
+   errorText: {
+     fontSize: 12,
+     fontWeight: "800",

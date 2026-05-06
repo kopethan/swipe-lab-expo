@@ -7,7 +7,6 @@ import { useTheme } from "@/providers/ThemeProvider";
 
 import { useTradeStore } from "../state";
 import type { TradeCategory, TradeFeedItem } from "../types";
-import { TradeCreateForm } from "./TradeCreateForm";
 import { TradeFeedCard } from "./TradeFeedCard";
 
 type FeedDeckGroup = {
@@ -127,7 +126,6 @@ export function TradeFeed() {
   const firstActiveFeedItemId = activeDeckItems[0]?.id ?? "-";
   const [activeLabel, setActiveLabel] = useState(firstActiveFeedItemId);
   const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
-  const [isCreatingTrade, setIsCreatingTrade] = useState(false);
 
   useEffect(() => {
     if (!deckGroups.some((group) => group.key === activeGroupKey)) {
@@ -176,7 +174,7 @@ export function TradeFeed() {
 
         <View style={styles.feedActions}>
           <Pressable
-            onPress={() => setIsCreatingTrade((current) => !current)}
+            onPress={() => router.push("/trade/create")}
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.createTradeButton,
@@ -184,9 +182,7 @@ export function TradeFeed() {
               pressed ? { opacity: 0.82, transform: [{ scale: 0.98 }] } : null,
             ]}
           >
-            <Text style={[styles.createTradeButtonText, { color: palette.text }]}>
-              {isCreatingTrade ? "Close create trade" : "Create trade"}
-            </Text>
+            <Text style={[styles.createTradeButtonText, { color: palette.text }]}>Create trade</Text>
           </Pressable>
         </View>
 
@@ -225,12 +221,6 @@ export function TradeFeed() {
           </ScrollView>
         </View>
       </View>
-
-      {isCreatingTrade ? (
-        <View style={styles.createTradeWrap}>
-          <TradeCreateForm onDone={() => setIsCreatingTrade(false)} />
-        </View>
-      ) : null}
 
       <View style={styles.stage} onLayout={handleStageLayout}>
         {activeDeckItems.length > 0 ? (
@@ -367,9 +357,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.1,
-  },
-  createTradeWrap: {
-    paddingHorizontal: 18,
   },
   stage: {
     height: 430,
