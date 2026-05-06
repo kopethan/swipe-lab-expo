@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/providers/ThemeProvider";
 import type { TradeCategory, TradeFeedItem, TradeServiceMode } from "../types";
+import { TradeExchangeIcon } from "./TradeExchangeIcon";
 
 type TradeFeedCardProps = {
   item: TradeFeedItem;
@@ -86,7 +87,7 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
   ]);
 
   return (
-    <View style={[styles.cardBody, { borderColor: cardBorder, backgroundColor: cardBackground }]}>
+    <View style={[styles.cardBody, { backgroundColor: cardBackground }]}>
       <View style={styles.cardHeader}>
         <Text style={[styles.cardKicker, { color: palette.muted }]} numberOfLines={1}>
           TRADE{cardPosition ? ` · ${cardPosition}` : ""}
@@ -102,10 +103,10 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
 
       <View style={styles.exchangeRow}>
         <View style={[styles.exchangeLine, { backgroundColor: palette.border }]} />
-        <View style={[styles.exchangeBadge, { borderColor: cardBorder, backgroundColor: badgeBackground }]}>
-          <Text style={[styles.exchangeText, { color: palette.text }]} numberOfLines={1}>
-            ↔
-          </Text>
+        <View style={styles.exchangeIconOnly}>
+          <View style={styles.exchangeIconWrap}>
+            <TradeExchangeIcon size={20} color={palette.text} />
+          </View>
         </View>
         <View style={[styles.exchangeLine, { backgroundColor: palette.border }]} />
       </View>
@@ -120,9 +121,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingVertical: 18,
-    borderWidth: 1,
-    borderRadius: 32,
-    overflow: "hidden",
   },
   cardHeader: {
     minHeight: 22,
@@ -183,17 +181,14 @@ const styles = StyleSheet.create({
     height: 2,
     borderRadius: 999,
   },
-  exchangeBadge: {
-    width: 38,
-    height: 38,
+  exchangeIconOnly: {
+    width: 30,
+    height: 30,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderRadius: 999,
   },
-  exchangeText: {
-    fontSize: 24,
-    fontWeight: "900",
-    lineHeight: 26,
+  exchangeIconWrap: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -1,0 +1,139 @@
+diff --git a/features/trade/TradeCreateScreen.tsx b/features/trade/TradeCreateScreen.tsx
+index 12771c7..a67f582 100644
+--- a/features/trade/TradeCreateScreen.tsx
++++ b/features/trade/TradeCreateScreen.tsx
+@@ -445,10 +445,10 @@ function PreviewCard({
+
+       <View style={styles.previewExchangeRow}>
+         <View style={[styles.previewLine, { backgroundColor: palette.border }]} />
+-        <View style={[styles.previewExchangeBadge, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++        <View style={styles.previewExchangeIconOnly}>
+           <View style={styles.previewExchangeIconWrap}>
+-            <TradeExchangeIcon size={18} color={palette.text} />
++            <TradeExchangeIcon size={16} color={palette.text} />
+           </View>
+         </View>
+         <View style={[styles.previewLine, { backgroundColor: palette.border }]} />
+@@ -911,11 +911,10 @@ const styles = StyleSheet.create({
+     justifyContent: "center",
+     gap: 10,
+   },
+-  previewExchangeBadge: {
+-    width: 38,
+-    height: 38,
++  previewExchangeIconOnly: {
++    width: 24,
++    height: 24,
+     alignItems: "center",
+     justifyContent: "center",
+-    borderWidth: 1,
+-    borderRadius: 999,
+   },
+   previewExchangeIconWrap: {
+     alignItems: "center",
+diff --git a/features/trade/components/TradeExchangeIcon.tsx b/features/trade/components/TradeExchangeIcon.tsx
+index 668486e..9746446 100644
+--- a/features/trade/components/TradeExchangeIcon.tsx
++++ b/features/trade/components/TradeExchangeIcon.tsx
+@@ -9,13 +9,13 @@ type TradeExchangeIconProps = {
+ export function TradeExchangeIcon({
+   size = 18,
+   color = "#111111",
+   strokeWidth = 2,
+ }: TradeExchangeIconProps) {
+-  const lineThickness = Math.max(1.5, Math.round(strokeWidth));
+-  const horizontalWidth = size * 0.74;
+-  const diagonalWidth = size * 0.34;
++  const lineThickness = Math.max(1.5, strokeWidth);
++  const horizontalWidth = size * 0.7;
++  const diagonalWidth = size * 0.26;
+
+   return (
+     <View style={[styles.root, { width: size, height: size }]}>
+       <View
+         style={[
+@@ -23,8 +23,8 @@ export function TradeExchangeIcon({
+           {
+-            top: size * 0.28,
+-            left: size * 0.12,
++            top: size * 0.3,
++            left: size * 0.15,
+             width: horizontalWidth,
+             height: lineThickness,
+             borderRadius: 999,
+             backgroundColor: color,
+@@ -36,8 +36,8 @@ export function TradeExchangeIcon({
+         style={[
+           styles.horizontal,
+           {
+-            top: size * 0.56,
+-            left: size * 0.12,
++            top: size * 0.56,
++            left: size * 0.15,
+             width: horizontalWidth,
+             height: lineThickness,
+             borderRadius: 999,
+@@ -50,8 +50,8 @@ export function TradeExchangeIcon({
+         style={[
+           styles.diagonal,
+           {
+-            top: size * 0.12,
+-            left: size * 0.56,
++            top: size * 0.18,
++            left: size * 0.56,
+             width: diagonalWidth,
+             height: lineThickness,
+             borderRadius: 999,
+@@ -64,8 +64,8 @@ export function TradeExchangeIcon({
+         style={[
+           styles.diagonal,
+           {
+-            top: size * 0.69,
+-            left: size * 0.10,
++            top: size * 0.63,
++            left: size * 0.14,
+             width: diagonalWidth,
+             height: lineThickness,
+             borderRadius: 999,
+@@ -81,6 +81,7 @@ const styles = StyleSheet.create({
+   root: {
+     position: "relative",
+     alignItems: "center",
+     justifyContent: "center",
++    overflow: "visible",
+   },
+   horizontal: {
+     position: "absolute",
+diff --git a/features/trade/components/TradeFeedCard.tsx b/features/trade/components/TradeFeedCard.tsx
+index d8cc144..8cb585f 100644
+--- a/features/trade/components/TradeFeedCard.tsx
++++ b/features/trade/components/TradeFeedCard.tsx
+@@ -97,10 +97,10 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
+
+       <View style={styles.exchangeRow}>
+         <View style={[styles.exchangeLine, { backgroundColor: palette.border }]} />
+-        <View style={[styles.exchangeBadge, { borderColor: cardBorder, backgroundColor: badgeBackground }]}>
++        <View style={styles.exchangeIconOnly}>
+           <View style={styles.exchangeIconWrap}>
+-            <TradeExchangeIcon size={18} color={palette.text} />
++            <TradeExchangeIcon size={16} color={palette.text} />
+           </View>
+         </View>
+         <View style={[styles.exchangeLine, { backgroundColor: palette.border }]} />
+@@ -168,11 +168,10 @@ const styles = StyleSheet.create({
+     height: 2,
+     borderRadius: 999,
+   },
+-  exchangeBadge: {
+-    width: 38,
+-    height: 38,
++  exchangeIconOnly: {
++    width: 24,
++    height: 24,
+     alignItems: "center",
+     justifyContent: "center",
+-    borderWidth: 1,
+-    borderRadius: 999,
+   },
+   exchangeIconWrap: {
+     alignItems: "center",

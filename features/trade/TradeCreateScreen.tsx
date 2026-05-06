@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 
 import { useTheme } from "@/providers/ThemeProvider";
 
+import { TradeExchangeIcon } from "./components/TradeExchangeIcon";
 import { useTradeStore } from "./state";
 import type {
   TradeCategory,
@@ -584,8 +585,10 @@ function PreviewCard({
 
       <View style={styles.previewExchangeRow}>
         <View style={[styles.previewLine, { backgroundColor: palette.border }]} />
-        <View style={[styles.previewExchangeBadge, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-          <Text style={[styles.previewExchangeText, { color: palette.text }]}>↔</Text>
+        <View style={styles.previewExchangeIconOnly}>
+          <View style={styles.previewExchangeIconWrap}>
+            <TradeExchangeIcon size={20} color={palette.text} />
+          </View>
         </View>
         <View style={[styles.previewLine, { backgroundColor: palette.border }]} />
       </View>
@@ -1221,18 +1224,15 @@ const styles = StyleSheet.create({
     height: 2,
     borderRadius: 999,
   },
-  previewExchangeBadge: {
-    width: 38,
-    height: 38,
+  previewExchangeIconOnly: {
+    width: 30,
+    height: 30,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderRadius: 999,
   },
-  previewExchangeText: {
-    fontSize: 24,
-    fontWeight: "900",
-    lineHeight: 26,
+  previewExchangeIconWrap: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   segmentControl: {
