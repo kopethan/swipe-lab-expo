@@ -90,6 +90,8 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
   availableHeight,
   minCardSize,
   maxCardSize,
+  renderWindow = "visible",
+  showDebugBadge = true,
 }: SquareStackDeckProps<TCard>) {
   const { width, height } = useWindowDimensions();
   const layoutMetrics = useMemo(
@@ -135,10 +137,13 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
     onIndexChange?.(committedIndex, nextCard);
   }, [cards, committedIndex, onIndexChange]);
 
-  const visibleIndexes = useMemo(
-    () => getVisibleSquareStackIndexes(committedIndex, cards.length),
-    [cards.length, committedIndex]
-  );
+  const visibleIndexes = useMemo(() => {
+    if (renderWindow === "all") {
+      return cards.map((_, cardIndex) => cardIndex);
+    }
+
+    return getVisibleSquareStackIndexes(committedIndex, cards.length);
+  }, [cards, cards.length, committedIndex, renderWindow]);
 
   const commitIndex = useCallback(
     (direction: -1 | 1) => {
@@ -276,9 +281,11 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
     <View style={[styles.root, { width: stageWidth, height: stageHeight }]}>
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.gestureSurface, { width: stageWidth, height: stageHeight }]}>
-          <View pointerEvents="none" style={styles.debugBadge}>
-            <View style={styles.debugDot} />
-          </View>
+          {showDebugBadge ? (
+            <View pointerEvents="none" style={styles.debugBadge}>
+              <View style={styles.debugDot} />
+            </View>
+          ) : null}
           {visibleIndexes.map((cardIndex) => {
             const card = cards[cardIndex];
             return (

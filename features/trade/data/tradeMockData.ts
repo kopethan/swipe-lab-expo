@@ -1,4 +1,4 @@
-import type { TradeFeedItem } from "../types";
+import type { TradeFeedItem, TradeNeedItem, TradeOfferItem } from "../types";
 
 export const TRADE_FEED_MOCK_ITEMS: TradeFeedItem[] = [
   {
@@ -264,5 +264,127 @@ export const TRADE_FEED_MOCK_ITEMS: TradeFeedItem[] = [
     },
     matchScore: 84,
     status: "active",
+  },
+];
+
+
+export const TRADE_NEED_MOCK_ITEMS: TradeNeedItem[] = [
+  {
+    id: "my-need-landing-page",
+    owner: {
+      id: "me",
+      name: "You",
+      locationLabel: "Remote",
+    },
+    title: "Landing page design",
+    category: "design",
+    timing: "This week",
+    mode: "remote",
+    urgency: "high",
+    locationLabel: "Remote",
+    shortDescription: "A simple page to explain a new product and collect early interest.",
+    tags: ["Web design", "Launch"],
+    desiredExchange: "Product photos or social video edit",
+    status: "active",
+    createdAt: "2026-05-01",
+  },
+  {
+    id: "my-need-copy-review",
+    owner: {
+      id: "me",
+      name: "You",
+      locationLabel: "Remote",
+    },
+    title: "Copy review for app intro",
+    category: "writing",
+    timing: "Next few days",
+    mode: "remote",
+    urgency: "medium",
+    locationLabel: "Remote",
+    shortDescription: "Short review for onboarding text, feature labels, and one call to action.",
+    tags: ["Writing", "UX copy"],
+    desiredExchange: "Frontend bug fixing or design feedback",
+    status: "active",
+    createdAt: "2026-05-02",
+  },
+  {
+    id: "my-need-logo-motion",
+    owner: {
+      id: "me",
+      name: "You",
+      locationLabel: "Hybrid",
+    },
+    title: "Small logo animation",
+    category: "design",
+    timing: "Flexible",
+    mode: "hybrid",
+    urgency: "low",
+    locationLabel: "Remote or local",
+    shortDescription: "A tiny animation for a splash screen or social intro.",
+    tags: ["Motion", "Brand"],
+    desiredExchange: "Landing page copy or tutoring session",
+    status: "paused",
+    createdAt: "2026-05-03",
+  },
+];
+
+
+export const TRADE_OFFER_MOCK_ITEMS: TradeOfferItem[] = [
+  {
+    id: "my-offer-product-photography",
+    owner: {
+      id: "me",
+      name: "You",
+      locationLabel: "Local studio",
+    },
+    title: "Product photography",
+    category: "photo-video",
+    availability: "Weekend",
+    mode: "local",
+    includes: "10 edited shots",
+    locationLabel: "Local studio",
+    shortDescription: "Clean product photos for small launches, menus, catalogs, or online shops.",
+    tags: ["Photography", "Editing"],
+    preferredExchange: "Landing page design or copy review",
+    status: "active",
+    createdAt: "2026-05-01",
+  },
+  {
+    id: "my-offer-react-debugging",
+    owner: {
+      id: "me",
+      name: "You",
+      locationLabel: "Remote",
+    },
+    title: "React bug fixing",
+    category: "development",
+    availability: "Evenings",
+    mode: "remote",
+    includes: "2 focused debugging sessions",
+    locationLabel: "Remote",
+    shortDescription: "Help with UI bugs, state issues, Expo screens, and small TypeScript problems.",
+    tags: ["React", "Expo"],
+    preferredExchange: "Design support or product photos",
+    status: "active",
+    createdAt: "2026-05-02",
+  },
+  {
+    id: "my-offer-french-tutoring",
+    owner: {
+      id: "me",
+      name: "You",
+      locationLabel: "Remote",
+    },
+    title: "French tutoring",
+    category: "language",
+    availability: "Flexible",
+    mode: "remote",
+    includes: "Two 45-minute sessions",
+    locationLabel: "Online",
+    shortDescription: "Beginner-friendly conversation practice, pronunciation help, and simple homework review.",
+    tags: ["Language", "Tutoring"],
+    preferredExchange: "Logo animation or landing page help",
+    status: "paused",
+    createdAt: "2026-05-03",
   },
 ];

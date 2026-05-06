@@ -1,0 +1,358 @@
+diff --git a/features/trade/TradeHome.tsx b/features/trade/TradeHome.tsx
+index 7015f43..18c20e3 100644
+--- a/features/trade/TradeHome.tsx
++++ b/features/trade/TradeHome.tsx
+@@ -3,10 +3,10 @@ import { StyleSheet, Text, View } from "react-native";
+ 
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+-import { TradeFeed, TradeTabs } from "./components";
++import { TradeFeed, TradeNeeds, TradeTabs } from "./components";
+ import { TRADE_TABS, type TradeTabKey } from "./types";
+ 
+-function TradePlaceholder({ tab }: { tab: Exclude<TradeTabKey, "feed"> }) {
++function TradePlaceholder({ tab }: { tab: Exclude<TradeTabKey, "feed" | "needs"> }) {
+   const { palette } = useTheme();
+   const tabConfig = TRADE_TABS.find((item) => item.key === tab);
+ 
+@@ -38,7 +38,7 @@ export function TradeHome() {
+         <TradeTabs activeTab={activeTab} onChange={setActiveTab} />
+       </View>
+ 
+-      {activeTab === "feed" ? <TradeFeed /> : <TradePlaceholder tab={activeTab} />}
++      {activeTab === "feed" ? <TradeFeed /> : activeTab === "needs" ? <TradeNeeds /> : <TradePlaceholder tab={activeTab} />}
+     </View>
+   );
+ }
+diff --git a/features/trade/components/TradeNeeds.tsx b/features/trade/components/TradeNeeds.tsx
+new file mode 100644
+index 0000000..a7aa880
+--- /dev/null
++++ b/features/trade/components/TradeNeeds.tsx
+@@ -0,0 +1,235 @@
++import React from "react";
++import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
++
++import { useTheme } from "@/providers/ThemeProvider";
++
++import { TRADE_NEED_MOCK_ITEMS } from "../data";
++import type { TradeCategory, TradeNeedItem, TradeServiceMode, TradeStatus } from "../types";
++
++const CATEGORY_LABELS: Record<TradeCategory, string> = {
++  design: "Design",
++  development: "Development",
++  marketing: "Marketing",
++  writing: "Writing",
++  "photo-video": "Photo / Video",
++  language: "Language",
++  "home-help": "Home help",
++  teaching: "Teaching",
++  business: "Business",
++  other: "Other",
++};
++
++const MODE_LABELS: Record<TradeServiceMode, string> = {
++  remote: "Remote",
++  local: "Local",
++  hybrid: "Hybrid",
++};
++
++const STATUS_LABELS: Record<TradeStatus, string> = {
++  draft: "Draft",
++  active: "Active",
++  paused: "Paused",
++  matched: "Matched",
++  closed: "Closed",
++};
++
++function compactMeta(parts: Array<string | undefined>) {
++  return parts.filter(Boolean).join(" · ");
++}
++
++function CreateNeedCard() {
++  const { palette } = useTheme();
++
++  return (
++    <Pressable
++      onPress={() => console.log("create need")}
++      accessibilityRole="button"
++      style={({ pressed }) => [
++        styles.createCard,
++        { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
++        pressed ? { opacity: 0.84, transform: [{ scale: 0.99 }] } : null,
++      ]}
++    >
++      <Text style={[styles.createPlus, { color: palette.muted }]}>＋</Text>
++      <Text style={[styles.createTitle, { color: palette.text }]}>Create a need</Text>
++      <Text style={[styles.createText, { color: palette.muted }]}>Describe what you need and what kind of trade you want.</Text>
++    </Pressable>
++  );
++}
++
++function NeedListCard({ item, index }: { item: TradeNeedItem; index: number }) {
++  const { palette } = useTheme();
++  const meta = compactMeta([CATEGORY_LABELS[item.category], item.timing, MODE_LABELS[item.mode]]);
++
++  return (
++    <Pressable
++      onPress={() => console.log("open need", item.id)}
++      accessibilityRole="button"
++      style={({ pressed }) => [
++        styles.needCard,
++        { borderColor: palette.border, backgroundColor: palette.surface },
++        pressed ? { opacity: 0.86, transform: [{ scale: 0.99 }] } : null,
++      ]}
++    >
++      <View style={styles.needTopRow}>
++        <Text style={[styles.needKicker, { color: palette.muted }]} numberOfLines={1}>
++          CREATED NEED {index + 1}
++        </Text>
++        <View style={[styles.statusPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++          <Text style={[styles.statusText, { color: palette.text }]} numberOfLines={1}>
++            {STATUS_LABELS[item.status]}
++          </Text>
++        </View>
++      </View>
++
++      <Text style={[styles.needTitle, { color: palette.text }]} numberOfLines={2}>
++        {item.title}
++      </Text>
++      <Text style={[styles.needMeta, { color: palette.muted }]} numberOfLines={1}>
++        {meta}
++      </Text>
++
++      {item.desiredExchange ? (
++        <Text style={[styles.exchangeText, { color: palette.text }]} numberOfLines={1}>
++          Wants: {item.desiredExchange}
++        </Text>
++      ) : null}
++    </Pressable>
++  );
++}
++
++export function TradeNeeds() {
++  const { palette } = useTheme();
++
++  return (
++    <ScrollView
++      showsVerticalScrollIndicator={false}
++      style={styles.screen}
++      contentContainerStyle={styles.content}
++    >
++      <CreateNeedCard />
++
++      <View style={styles.sectionHeader}>
++        <Text style={[styles.sectionKicker, { color: palette.muted }]}>MY NEEDS</Text>
++        <Text style={[styles.sectionCount, { color: palette.muted }]}>{TRADE_NEED_MOCK_ITEMS.length} created</Text>
++      </View>
++
++      <View style={styles.list}>
++        {TRADE_NEED_MOCK_ITEMS.map((item, index) => (
++          <NeedListCard key={item.id} item={item} index={index} />
++        ))}
++      </View>
++    </ScrollView>
++  );
++}
++
++const styles = StyleSheet.create({
++  screen: {
++    flex: 1,
++  },
++  content: {
++    paddingHorizontal: 18,
++    paddingBottom: 42,
++    paddingTop: 22,
++    gap: 18,
++  },
++  createCard: {
++    minHeight: 188,
++    alignItems: "center",
++    justifyContent: "center",
++    borderWidth: 2,
++    borderRadius: 34,
++    borderStyle: "dashed",
++    paddingHorizontal: 26,
++    paddingVertical: 28,
++    gap: 8,
++  },
++  createPlus: {
++    fontSize: 30,
++    fontWeight: "700",
++    lineHeight: 34,
++  },
++  createTitle: {
++    fontSize: 22,
++    fontWeight: "900",
++    letterSpacing: -0.35,
++    lineHeight: 26,
++    textAlign: "center",
++  },
++  createText: {
++    maxWidth: 260,
++    fontSize: 12,
++    fontWeight: "700",
++    lineHeight: 16,
++    textAlign: "center",
++  },
++  sectionHeader: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  sectionKicker: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 1.2,
++  },
++  sectionCount: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 0.4,
++    textTransform: "uppercase",
++  },
++  list: {
++    gap: 14,
++  },
++  needCard: {
++    minHeight: 124,
++    justifyContent: "center",
++    borderWidth: 1,
++    borderRadius: 28,
++    paddingHorizontal: 18,
++    paddingVertical: 18,
++    gap: 8,
++  },
++  needTopRow: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 10,
++  },
++  needKicker: {
++    flex: 1,
++    fontSize: 9,
++    fontWeight: "900",
++    letterSpacing: 1.1,
++  },
++  statusPill: {
++    borderWidth: 1,
++    borderRadius: 999,
++    paddingHorizontal: 9,
++    paddingVertical: 5,
++  },
++  statusText: {
++    fontSize: 9,
++    fontWeight: "900",
++    letterSpacing: 0.4,
++    textTransform: "uppercase",
++  },
++  needTitle: {
++    fontSize: 20,
++    fontWeight: "900",
++    letterSpacing: -0.35,
++    lineHeight: 24,
++  },
++  needMeta: {
++    fontSize: 12,
++    fontWeight: "800",
++    lineHeight: 16,
++  },
++  exchangeText: {
++    fontSize: 12,
++    fontWeight: "900",
++    lineHeight: 16,
++  },
++});
+diff --git a/features/trade/components/index.ts b/features/trade/components/index.ts
+index 0545518..f8d5c2b 100644
+--- a/features/trade/components/index.ts
++++ b/features/trade/components/index.ts
+@@ -1,3 +1,4 @@
+ export { TradeFeed } from "./TradeFeed";
+ export { TradeFeedCard } from "./TradeFeedCard";
++export { TradeNeeds } from "./TradeNeeds";
+ export { TradeTabs } from "./TradeTabs";
+diff --git a/features/trade/data/index.ts b/features/trade/data/index.ts
+index abfef72..8bd3c34 100644
+--- a/features/trade/data/index.ts
++++ b/features/trade/data/index.ts
+@@ -1 +1 @@
+-export { TRADE_FEED_MOCK_ITEMS } from "./tradeMockData";
++export { TRADE_FEED_MOCK_ITEMS, TRADE_NEED_MOCK_ITEMS } from "./tradeMockData";
+diff --git a/features/trade/data/tradeMockData.ts b/features/trade/data/tradeMockData.ts
+index aefea0c..0594759 100644
+--- a/features/trade/data/tradeMockData.ts
++++ b/features/trade/data/tradeMockData.ts
+@@ -1,4 +1,4 @@
+-import type { TradeFeedItem } from "../types";
++import type { TradeFeedItem, TradeNeedItem } from "../types";
+ 
+ export const TRADE_FEED_MOCK_ITEMS: TradeFeedItem[] = [
+   {
+@@ -266,3 +266,64 @@ export const TRADE_FEED_MOCK_ITEMS: TradeFeedItem[] = [
+     status: "active",
+   },
+ ];
++
++
++export const TRADE_NEED_MOCK_ITEMS: TradeNeedItem[] = [
++  {
++    id: "my-need-landing-page",
++    owner: {
++      id: "me",
++      name: "You",
++      locationLabel: "Remote",
++    },
++    title: "Landing page design",
++    category: "design",
++    timing: "This week",
++    mode: "remote",
++    urgency: "high",
++    locationLabel: "Remote",
++    shortDescription: "A simple page to explain a new product and collect early interest.",
++    tags: ["Web design", "Launch"],
++    desiredExchange: "Product photos or social video edit",
++    status: "active",
++    createdAt: "2026-05-01",
++  },
++  {
++    id: "my-need-copy-review",
++    owner: {
++      id: "me",
++      name: "You",
++      locationLabel: "Remote",
++    },
++    title: "Copy review for app intro",
++    category: "writing",
++    timing: "Next few days",
++    mode: "remote",
++    urgency: "medium",
++    locationLabel: "Remote",
++    shortDescription: "Short review for onboarding text, feature labels, and one call to action.",
++    tags: ["Writing", "UX copy"],
++    desiredExchange: "Frontend bug fixing or design feedback",
++    status: "active",
++    createdAt: "2026-05-02",
++  },
++  {
++    id: "my-need-logo-motion",
++    owner: {
++      id: "me",
++      name: "You",
++      locationLabel: "Hybrid",
++    },
++    title: "Small logo animation",
++    category: "design",
++    timing: "Flexible",
++    mode: "hybrid",
++    urgency: "low",
++    locationLabel: "Remote or local",
++    shortDescription: "A tiny animation for a splash screen or social intro.",
++    tags: ["Motion", "Brand"],
++    desiredExchange: "Landing page copy or tutoring session",
++    status: "paused",
++    createdAt: "2026-05-03",
++  },
++];

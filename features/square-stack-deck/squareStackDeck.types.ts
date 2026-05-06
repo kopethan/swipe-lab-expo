@@ -16,6 +16,16 @@ export type SquareStackDeckProps<TCard extends SquareStackDeckCard> = {
   renderCard: (args: SquareStackDeckRenderArgs<TCard>) => React.ReactNode;
   onIndexChange?: (index: number, card: TCard) => void;
   /**
+   * By default the square deck only mounts the active card and nearby depth
+   * layers. Use "all" for small feeds where back-list cards should already
+   * have their real content mounted.
+   */
+  renderWindow?: "visible" | "all";
+  /**
+   * Lab screens can keep the tiny debug dot. Product/feature surfaces can hide it.
+   */
+  showDebugBadge?: boolean;
+  /**
    * Optional measured space from the screen that owns the deck. The square deck
    * can calculate from the viewport, but a measured parent stage is more
    * reliable on phones because native headers, footers, and safe areas vary.
