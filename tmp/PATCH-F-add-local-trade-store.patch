@@ -1,0 +1,410 @@
+diff --git a/features/trade/TradeHome.tsx b/features/trade/TradeHome.tsx
+index 5cf805e..0b9c3f1 100644
+--- a/features/trade/TradeHome.tsx
++++ b/features/trade/TradeHome.tsx
+@@ -4,9 +4,10 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+ import { TradeFeed, TradeNeeds, TradeOffers, TradeTabs } from "./components";
++import { TradeStoreProvider } from "./state";
+ import type { TradeTabKey } from "./types";
+ 
+-export function TradeHome() {
++function TradeHomeContent() {
+   const { mode, palette, toggleMode } = useTheme();
+   const [activeTab, setActiveTab] = useState<TradeTabKey>("feed");
+ 
+@@ -34,6 +35,14 @@ export function TradeHome() {
+   );
+ }
+ 
++export function TradeHome() {
++  return (
++    <TradeStoreProvider>
++      <TradeHomeContent />
++    </TradeStoreProvider>
++  );
++}
++
+ export default TradeHome;
+ 
+ const styles = StyleSheet.create({
+diff --git a/features/trade/components/TradeFeed.tsx b/features/trade/components/TradeFeed.tsx
+index e7d2cab..c2ae198 100644
+--- a/features/trade/components/TradeFeed.tsx
++++ b/features/trade/components/TradeFeed.tsx
+@@ -1,18 +1,26 @@
+-import React, { useCallback, useState } from "react";
++import React, { useCallback, useEffect, useState } from "react";
+ import { type LayoutChangeEvent, ScrollView, StyleSheet, Text, View } from "react-native";
+ 
+ import { ContinuousSquareStackDeck } from "@/features/square-stack-deck";
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+-import { TRADE_FEED_MOCK_ITEMS } from "../data";
++import { useTradeStore } from "../state";
+ import { TradeFeedCard } from "./TradeFeedCard";
+ 
+ export function TradeFeed() {
+   const { palette } = useTheme();
+-  const [activeLabel, setActiveLabel] = useState(TRADE_FEED_MOCK_ITEMS[0]?.id ?? "—");
++  const { feedItems } = useTradeStore();
++  const firstFeedItemId = feedItems[0]?.id ?? "—";
++  const [activeLabel, setActiveLabel] = useState(firstFeedItemId);
+   const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
+ 
++  useEffect(() => {
++    setActiveLabel((current) => (feedItems.some((item) => item.id === current) ? current : firstFeedItemId));
++  }, [feedItems, firstFeedItemId]);
++
+   const handleStageLayout = useCallback((event: LayoutChangeEvent) => {
+     const { height, width } = event.nativeEvent.layout;
+ 
+@@ -47,20 +55,26 @@ export function TradeFeed() {
+       </View>
+ 
+       <View style={styles.stage} onLayout={handleStageLayout}>
+-        <ContinuousSquareStackDeck
+-          cards={TRADE_FEED_MOCK_ITEMS}
+-          availableWidth={stageBounds.width}
+-          availableHeight={stageBounds.height}
+-          minCardSize={254}
+-          maxCardSize={360}
+-          renderWindow="all"
+-          showDebugBadge={false}
+-          depthEffect="flat"
+-          onIndexChange={(_, item) => setActiveLabel(item.id)}
+-          renderCard={({ card, index, total }) => <TradeFeedCard item={card} index={index} total={total} />}
+-        />
++        {feedItems.length > 0 ? (
++          <ContinuousSquareStackDeck
++            cards={feedItems}
++            availableWidth={stageBounds.width}
++            availableHeight={stageBounds.height}
++            minCardSize={254}
++            maxCardSize={360}
++            renderWindow="all"
++            showDebugBadge={false}
++            depthEffect="flat"
++            onIndexChange={(_, item) => setActiveLabel(item.id)}
++            renderCard={({ card, index, total }) => <TradeFeedCard item={card} index={index} total={total} />}
++          />
++        ) : (
++          <View style={[styles.emptyFeedCard, { borderColor: palette.border, backgroundColor: palette.surface }]}> 
++            <Text style={[styles.emptyFeedText, { color: palette.muted }]}>No published trades yet.</Text>
++          </View>
++        )}
+       </View>
+ 
+       <Text style={[styles.footerText, { color: palette.muted }]}> 
+@@ -111,6 +125,20 @@ const styles = StyleSheet.create({
+     overflow: "visible",
+     paddingHorizontal: 18,
+   },
++  emptyFeedCard: {
++    width: "100%",
++    maxWidth: 360,
++    aspectRatio: 1,
++    alignItems: "center",
++    justifyContent: "center",
++    borderWidth: 1,
++    borderRadius: 32,
++    paddingHorizontal: 24,
++  },
++  emptyFeedText: {
++    fontSize: 13,
++    fontWeight: "800",
++    textAlign: "center",
++  },
+   footerText: {
+     paddingHorizontal: 18,
+     fontSize: 11,
+diff --git a/features/trade/components/TradeNeeds.tsx b/features/trade/components/TradeNeeds.tsx
+index a7aa880..6203ad3 100644
+--- a/features/trade/components/TradeNeeds.tsx
++++ b/features/trade/components/TradeNeeds.tsx
+@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+ 
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+-import { TRADE_NEED_MOCK_ITEMS } from "../data";
++import { useTradeStore } from "../state";
+ import type { TradeCategory, TradeNeedItem, TradeServiceMode, TradeStatus } from "../types";
+ 
+ const CATEGORY_LABELS: Record<TradeCategory, string> = {
+@@ -96,6 +96,7 @@ function NeedListCard({ item, index }: { item: TradeNeedItem; index: number }) {
+ 
+ export function TradeNeeds() {
+   const { palette } = useTheme();
++  const { needs } = useTradeStore();
+ 
+   return (
+     <ScrollView
+@@ -111,12 +112,12 @@ export function TradeNeeds() {
+       <View style={styles.sectionHeader}>
+         <Text style={[styles.sectionKicker, { color: palette.muted }]}>MY NEEDS</Text>
+-        <Text style={[styles.sectionCount, { color: palette.muted }]}>{TRADE_NEED_MOCK_ITEMS.length} created</Text>
++        <Text style={[styles.sectionCount, { color: palette.muted }]}>{needs.length} created</Text>
+       </View>
+ 
+       <View style={styles.list}>
+-        {TRADE_NEED_MOCK_ITEMS.map((item, index) => (
++        {needs.map((item, index) => (
+           <NeedListCard key={item.id} item={item} index={index} />
+         ))}
+       </View>
+diff --git a/features/trade/components/TradeOffers.tsx b/features/trade/components/TradeOffers.tsx
+index 09cdd17..6efd41d 100644
+--- a/features/trade/components/TradeOffers.tsx
++++ b/features/trade/components/TradeOffers.tsx
+@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+ 
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+-import { TRADE_OFFER_MOCK_ITEMS } from "../data";
++import { useTradeStore } from "../state";
+ import type { TradeCategory, TradeOfferItem, TradeServiceMode, TradeStatus } from "../types";
+ 
+ const CATEGORY_LABELS: Record<TradeCategory, string> = {
+@@ -100,6 +100,7 @@ function OfferListCard({ item, index }: { item: TradeOfferItem; index: number })
+ 
+ export function TradeOffers() {
+   const { palette } = useTheme();
++  const { offers } = useTradeStore();
+ 
+   return (
+     <ScrollView
+@@ -115,12 +116,12 @@ export function TradeOffers() {
+       <View style={styles.sectionHeader}>
+         <Text style={[styles.sectionKicker, { color: palette.muted }]}>MY OFFERS</Text>
+-        <Text style={[styles.sectionCount, { color: palette.muted }]}>{TRADE_OFFER_MOCK_ITEMS.length} created</Text>
++        <Text style={[styles.sectionCount, { color: palette.muted }]}>{offers.length} created</Text>
+       </View>
+ 
+       <View style={styles.list}>
+-        {TRADE_OFFER_MOCK_ITEMS.map((item, index) => (
++        {offers.map((item, index) => (
+           <OfferListCard key={item.id} item={item} index={index} />
+         ))}
+       </View>
+diff --git a/features/trade/index.ts b/features/trade/index.ts
+index e2436bf..f3ef7b2 100644
+--- a/features/trade/index.ts
++++ b/features/trade/index.ts
+@@ -2,3 +2,4 @@ export { TradeHome } from "./TradeHome";
+ export * from "./components";
+ export * from "./data";
++export * from "./state";
+ export * from "./types";
+diff --git a/features/trade/state/TradeStore.tsx b/features/trade/state/TradeStore.tsx
+new file mode 100644
+index 0000000..f78f093
+--- /dev/null
++++ b/features/trade/state/TradeStore.tsx
+@@ -0,0 +1,214 @@
++import React, {
++  createContext,
++  useCallback,
++  useContext,
++  useMemo,
++  useState,
++  type PropsWithChildren,
++} from "react";
++
++import { TRADE_FEED_MOCK_ITEMS, TRADE_NEED_MOCK_ITEMS, TRADE_OFFER_MOCK_ITEMS } from "../data";
++import type {
++  TradeFeedItem,
++  TradeNeedItem,
++  TradeNeedSummary,
++  TradeOfferItem,
++  TradeOfferSummary,
++  TradeParticipantSummary,
++  TradeStatus,
++} from "../types";
++
++export type CreateTradeNeedInput = Omit<TradeNeedItem, "id" | "owner" | "status" | "createdAt"> & {
++  id?: string;
++  owner?: TradeParticipantSummary;
++  status?: TradeStatus;
++  createdAt?: string;
++};
++
++export type CreateTradeOfferInput = Omit<TradeOfferItem, "id" | "owner" | "status" | "createdAt"> & {
++  id?: string;
++  owner?: TradeParticipantSummary;
++  status?: TradeStatus;
++  createdAt?: string;
++};
++
++export type CreateTradeInput = {
++  needId: string;
++  offerId: string;
++  id?: string;
++  matchScore?: number;
++  status?: TradeStatus;
++};
++
++type TradeStoreContextValue = {
++  currentOwner: TradeParticipantSummary;
++  feedItems: TradeFeedItem[];
++  needs: TradeNeedItem[];
++  offers: TradeOfferItem[];
++  createNeed: (input: CreateTradeNeedInput) => TradeNeedItem;
++  createOffer: (input: CreateTradeOfferInput) => TradeOfferItem;
++  createTrade: (input: CreateTradeInput) => TradeFeedItem | null;
++  findNeedById: (id: string) => TradeNeedItem | undefined;
++  findOfferById: (id: string) => TradeOfferItem | undefined;
++  findTradeById: (id: string) => TradeFeedItem | undefined;
++};
++
++const CURRENT_OWNER: TradeParticipantSummary = {
++  id: "me",
++  name: "You",
++  locationLabel: "Remote",
++};
++
++const TradeStoreContext = createContext<TradeStoreContextValue | null>(null);
++
++let generatedIdCounter = 0;
++
++function createLocalId(prefix: string) {
++  generatedIdCounter += 1;
++  return `${prefix}-${Date.now()}-${generatedIdCounter}`;
++}
++
++function todayLabel() {
++  return new Date().toISOString().slice(0, 10);
++}
++
++function toNeedSummary(need: TradeNeedItem): TradeNeedSummary {
++  return {
++    id: need.id,
++    title: need.title,
++    category: need.category,
++    timing: need.timing,
++    mode: need.mode,
++    urgency: need.urgency,
++    locationLabel: need.locationLabel,
++    shortDescription: need.shortDescription,
++    tags: need.tags,
++  };
++}
++
++function toOfferSummary(offer: TradeOfferItem): TradeOfferSummary {
++  return {
++    id: offer.id,
++    title: offer.title,
++    category: offer.category,
++    availability: offer.availability,
++    mode: offer.mode,
++    includes: offer.includes,
++    locationLabel: offer.locationLabel,
++    shortDescription: offer.shortDescription,
++    tags: offer.tags,
++  };
++}
++
++export function TradeStoreProvider({ children }: PropsWithChildren) {
++  const [needs, setNeeds] = useState<TradeNeedItem[]>(TRADE_NEED_MOCK_ITEMS);
++  const [offers, setOffers] = useState<TradeOfferItem[]>(TRADE_OFFER_MOCK_ITEMS);
++  const [feedItems, setFeedItems] = useState<TradeFeedItem[]>(TRADE_FEED_MOCK_ITEMS);
++
++  const findNeedById = useCallback((id: string) => needs.find((item) => item.id === id), [needs]);
++  const findOfferById = useCallback((id: string) => offers.find((item) => item.id === id), [offers]);
++  const findTradeById = useCallback((id: string) => feedItems.find((item) => item.id === id), [feedItems]);
++
++  const createNeed = useCallback((input: CreateTradeNeedInput) => {
++    const nextNeed: TradeNeedItem = {
++      ...input,
++      id: input.id ?? createLocalId("need"),
++      owner: input.owner ?? CURRENT_OWNER,
++      status: input.status ?? "active",
++      createdAt: input.createdAt ?? todayLabel(),
++    };
++
++    setNeeds((current) => [nextNeed, ...current]);
++    return nextNeed;
++  }, []);
++
++  const createOffer = useCallback((input: CreateTradeOfferInput) => {
++    const nextOffer: TradeOfferItem = {
++      ...input,
++      id: input.id ?? createLocalId("offer"),
++      owner: input.owner ?? CURRENT_OWNER,
++      status: input.status ?? "active",
++      createdAt: input.createdAt ?? todayLabel(),
++    };
++
++    setOffers((current) => [nextOffer, ...current]);
++    return nextOffer;
++  }, []);
++
++  const createTrade = useCallback(
++    (input: CreateTradeInput) => {
++      const need = needs.find((item) => item.id === input.needId);
++      const offer = offers.find((item) => item.id === input.offerId);
++
++      if (!need || !offer) {
++        return null;
++      }
++
++      const nextTrade: TradeFeedItem = {
++        id: input.id ?? createLocalId("trade"),
++        participant: need.owner ?? offer.owner ?? CURRENT_OWNER,
++        need: toNeedSummary(need),
++        offer: toOfferSummary(offer),
++        matchScore: input.matchScore ?? 72,
++        status: input.status ?? "active",
++      };
++
++      setFeedItems((current) => [nextTrade, ...current]);
++      return nextTrade;
++    },
++    [needs, offers]
++  );
++
++  const value = useMemo<TradeStoreContextValue>(
++    () => ({
++      currentOwner: CURRENT_OWNER,
++      feedItems,
++      needs,
++      offers,
++      createNeed,
++      createOffer,
++      createTrade,
++      findNeedById,
++      findOfferById,
++      findTradeById,
++    }),
++    [
++      createNeed,
++      createOffer,
++      createTrade,
++      feedItems,
++      findNeedById,
++      findOfferById,
++      findTradeById,
++      needs,
++      offers,
++    ]
++  );
++
++  return <TradeStoreContext.Provider value={value}>{children}</TradeStoreContext.Provider>;
++}
++
++export function useTradeStore() {
++  const value = useContext(TradeStoreContext);
++
++  if (!value) {
++    throw new Error("useTradeStore must be used inside TradeStoreProvider");
++  }
++
++  return value;
++}
+diff --git a/features/trade/state/index.ts b/features/trade/state/index.ts
+new file mode 100644
+index 0000000..8f17c3a
+--- /dev/null
++++ b/features/trade/state/index.ts
+@@ -0,0 +1 @@
++export * from "./TradeStore";

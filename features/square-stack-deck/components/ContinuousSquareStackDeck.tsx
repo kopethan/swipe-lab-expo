@@ -33,6 +33,7 @@ type LayerProps<TCard extends SquareStackDeckCard> = {
   baseIndex: SharedValue<number>;
   progress: SharedValue<number>;
   renderCard: SquareStackDeckProps<TCard>["renderCard"];
+  depthEffect: SquareStackDeckProps<TCard>["depthEffect"];
 };
 
 function SquareStackLayerInner<TCard extends SquareStackDeckCard>({
@@ -43,22 +44,23 @@ function SquareStackLayerInner<TCard extends SquareStackDeckCard>({
   baseIndex,
   progress,
   renderCard,
+  depthEffect,
 }: LayerProps<TCard>) {
   const animatedStyle = useAnimatedStyle(() => {
     const visualOffset = index - baseIndex.value - progress.value;
-    const pose = getSquareStackTransform(visualOffset, size);
+    const pose = getSquareStackTransform(visualOffset, size, depthEffect ?? "flat");
 
     return {
       opacity: pose.opacity,
       zIndex: getSquareStackZIndex(visualOffset),
       transform: [{ translateX: pose.translateX }, { translateY: pose.translateY }, { scale: pose.scale }],
     };
-  }, [index, size]);
+  }, [depthEffect, index, size]);
 
   const shadowStyle = useAnimatedStyle(() => {
     const visualOffset = index - baseIndex.value - progress.value;
-    return getSquareStackShadowStyle(visualOffset);
-  }, [index]);
+    return getSquareStackShadowStyle(visualOffset, depthEffect ?? "flat");
+  }, [depthEffect, index]);
 
   return (
     <Animated.View pointerEvents="box-none" style={[styles.layer, animatedStyle]}>
@@ -92,6 +94,7 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
   maxCardSize,
   renderWindow = "visible",
   showDebugBadge = true,
+  depthEffect = "flat",
 }: SquareStackDeckProps<TCard>) {
   const { width, height } = useWindowDimensions();
   const layoutMetrics = useMemo(
@@ -298,6 +301,7 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
                 baseIndex={baseIndex}
                 progress={progress}
                 renderCard={renderCard}
+                depthEffect={depthEffect}
               />
             );
           })}

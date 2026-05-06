@@ -1,4 +1,6 @@
 export { TradeHome } from "./TradeHome";
-export * from "./types";
-export * from "./data";
+export { TradeDetail } from "./TradeDetail";
 export * from "./components";
+export * from "./data";
+export * from "./state";
+export * from "./types";

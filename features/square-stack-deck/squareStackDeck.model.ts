@@ -28,6 +28,8 @@ export type SquareStackLayoutMetrics = {
   depthAllowanceY: number;
 };
 
+export type SquareStackDepthEffect = "stacked" | "flat";
+
 export function clamp(value: number, min: number, max: number) {
   "worklet";
   return Math.min(max, Math.max(min, value));
@@ -72,7 +74,7 @@ export function getVisibleSquareStackIndexes(activeIndex: number, total: number)
   return indexes;
 }
 
-export function getSquareStackTransform(visualOffset: number, cardSize: number) {
+export function getSquareStackTransform(visualOffset: number, cardSize: number, depthEffect: SquareStackDepthEffect = "flat") {
   "worklet";
 
   const clampedOffset = clamp(visualOffset, -1, 4);
@@ -81,6 +83,21 @@ export function getSquareStackTransform(visualOffset: number, cardSize: number) 
   // LAB3 keeps the physical model but makes the depth almost invisible. The
   // fourth-after card stays mounted as a hidden tail so it can slide into the
   // third depth slot during a next swipe instead of appearing after release.
+  if (depthEffect === "flat") {
+    const flatInput = [-1, -0.08, 0, 1, 2, 3, 4];
+    const translateX = interpolate(
+      clampedOffset,
+      flatInput,
+      [-cardSize * 0.22, 0, 0, 4, 8, 12, 16],
+      Extrapolation.CLAMP
+    );
+    const translateY = interpolate(clampedOffset, flatInput, [-cardSize * 0.18, 0, 0, 4, 8, 12, 16], Extrapolation.CLAMP);
+    const scale = interpolate(clampedOffset, flatInput, [0.995, 0.998, 1, 0.992, 0.986, 0.98, 0.974], Extrapolation.CLAMP);
+    const opacity = interpolate(clampedOffset, flatInput, [0, 0, 1, 0.985, 0.95, 0.88, 0], Extrapolation.CLAMP);
+
+    return { translateX, translateY, scale, opacity };
+  }
+
   const translateX = interpolate(
     clampedOffset,
     input,
@@ -105,10 +122,14 @@ export function getSquareStackTransform(visualOffset: number, cardSize: number) 
 }
 
 
-export function getSquareStackShadowStyle(visualOffset: number) {
+export function getSquareStackShadowStyle(visualOffset: number, depthEffect: SquareStackDepthEffect = "flat") {
   "worklet";
 
   const clampedOffset = clamp(visualOffset, -1, 4);
+  if (depthEffect === "flat") {
+    return { shadowOpacity: 0, shadowRadius: 0, elevation: 0 };
+  }
+
   const input = [-1, 0, 1, 2, 3, 4];
 
   return {

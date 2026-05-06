@@ -1,0 +1,490 @@
+diff --git a/features/trade/components/TradeOffers.tsx b/features/trade/components/TradeOffers.tsx
+index 6efd41d..c609bf2 100644
+--- a/features/trade/components/TradeOffers.tsx
++++ b/features/trade/components/TradeOffers.tsx
+@@ -1,5 +1,5 @@
+-import React from "react";
+-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
++import React, { useMemo, useState } from "react";
++import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+
+ import { useTheme } from "@/providers/ThemeProvider";
+
+@@ -33,24 +33,219 @@ const STATUS_LABELS: Record<TradeStatus, string> = {
+   closed: "Closed",
+ };
+
++const CATEGORY_OPTIONS: TradeCategory[] = [
++  "design",
++  "development",
++  "marketing",
++  "writing",
++  "photo-video",
++  "language",
++  "home-help",
++  "teaching",
++  "business",
++  "other",
++];
++
++const MODE_OPTIONS: TradeServiceMode[] = ["remote", "local", "hybrid"];
++
++type OfferDraft = {
++  title: string;
++  category: TradeCategory;
++  availability: string;
++  mode: TradeServiceMode;
++  includes: string;
++  locationLabel: string;
++  shortDescription: string;
++  tagsText: string;
++  preferredExchange: string;
++};
++
++const EMPTY_OFFER_DRAFT: OfferDraft = {
++  title: "",
++  category: "photo-video",
++  availability: "Weekend",
++  mode: "remote",
++  includes: "",
++  locationLabel: "Remote",
++  shortDescription: "",
++  tagsText: "",
++  preferredExchange: "",
++};
++
+ function compactMeta(parts: Array<string | undefined>) {
+   return parts.filter(Boolean).join(" · ");
+ }
+
+-function CreateOfferCard() {
++function parseTags(value: string) {
++  return value
++    .split(",")
++    .map((tag) => tag.trim())
++    .filter(Boolean)
++    .slice(0, 6);
++}
++
++function FieldLabel({ children }: { children: React.ReactNode }) {
+   const { palette } = useTheme();
+
++  return <Text style={[styles.fieldLabel, { color: palette.muted }]}>{children}</Text>;
++}
++
++function TextField({
++  label,
++  value,
++  onChangeText,
++  placeholder,
++  multiline,
++}: {
++  label: string;
++  value: string;
++  onChangeText: (value: string) => void;
++  placeholder: string;
++  multiline?: boolean;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={styles.field}>
++      <FieldLabel>{label}</FieldLabel>
++      <TextInput
++        value={value}
++        onChangeText={onChangeText}
++        placeholder={placeholder}
++        placeholderTextColor={palette.muted}
++        multiline={multiline}
++        textAlignVertical={multiline ? "top" : "center"}
++        style={[
++          styles.input,
++          multiline ? styles.multilineInput : null,
++          {
++            borderColor: palette.border,
++            backgroundColor: palette.surface,
++            color: palette.text,
++          },
++        ]}
++      />
++    </View>
++  );
++}
++
++function OptionChip<TValue extends string>({
++  label,
++  value,
++  selected,
++  onSelect,
++}: {
++  label: string;
++  value: TValue;
++  selected: boolean;
++  onSelect: (value: TValue) => void;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <Pressable
++      onPress={() => onSelect(value)}
++      accessibilityRole="button"
++      style={({ pressed }) => [
++        styles.optionChip,
++        {
++          borderColor: selected ? palette.text : palette.border,
++          backgroundColor: selected ? palette.text : palette.surface,
++        },
++        pressed ? { opacity: 0.82, transform: [{ scale: 0.98 }] } : null,
++      ]}
++    >
++      <Text style={[styles.optionChipText, { color: selected ? palette.background : palette.text }]} numberOfLines={1}>
++        {label}
++      </Text>
++    </Pressable>
++  );
++}
++
++function OfferCreateForm({ onCancel }: { onCancel: () => void }) {
++  const { palette } = useTheme();
++  const { createOffer } = useTradeStore();
++  const [draft, setDraft] = useState<OfferDraft>(EMPTY_OFFER_DRAFT);
++  const [error, setError] = useState("");
++
++  const canSave = draft.title.trim().length > 1;
++  const tagsPreview = useMemo(() => parseTags(draft.tagsText), [draft.tagsText]);
++
++  function updateDraft<TKey extends keyof OfferDraft>(key: TKey, value: OfferDraft[TKey]) {
++    setDraft((current) => ({ ...current, [key]: value }));
++    if (error) {
++      setError("");
++    }
++  }
++
++  function handleSave() {
++    const title = draft.title.trim();
++
++    if (!title) {
++      setError("Add a short offer title first.");
++      return;
++    }
++
++    createOffer({
++      title,
++      category: draft.category,
++      availability: draft.availability.trim() || "Flexible",
++      mode: draft.mode,
++      includes: draft.includes.trim() || "Simple service exchange",
++      locationLabel: draft.locationLabel.trim() || MODE_LABELS[draft.mode],
++      shortDescription: draft.shortDescription.trim() || "No description yet.",
++      tags: tagsPreview,
++      preferredExchange: draft.preferredExchange.trim() || undefined,
++      status: "active",
++    });
++
++    setDraft(EMPTY_OFFER_DRAFT);
++    setError("");
++    onCancel();
++  }
++
++  return (
++    <View style={[styles.formCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++      <View style={styles.formHeader}>
++        <View style={styles.formHeaderText}>
++          <Text style={[styles.formKicker, { color: palette.muted }]}>NEW OFFER</Text>
++          <Text style={[styles.formTitle, { color: palette.text }]}>Create an offer</Text>
++        </View>
++        <Pressable
++          onPress={onCancel}
++          accessibilityRole="button"
++          style={({ pressed }) => [
++            styles.closeButton,
++            { borderColor: palette.border, backgroundColor: palette.surface },
++            pressed ? { opacity: 0.82, transform: [{ scale: 0.98 }] } : null,
++          ]}
++        >
++          <Text style={[styles.closeButtonText, { color: palette.text }]}>×</Text>
++        </Pressable>
++      </View>
++
++      <TextField
++        label="Offer title"
++        value={draft.title}
++        onChangeText={(value) => updateDraft("title", value)}
++        placeholder="Example: Product photography"
++      />
++
++      <TextField
++        label="Short description"
++        value={draft.shortDescription}
++        onChangeText={(value) => updateDraft("shortDescription", value)}
++        placeholder="What can you help others with?"
++        multiline
++      />
++
++      <View style={styles.field}>
++        <FieldLabel>Category</FieldLabel>
++        <View style={styles.optionWrap}>
++          {CATEGORY_OPTIONS.map((category) => (
++            <OptionChip
++              key={category}
++              label={CATEGORY_LABELS[category]}
++              value={category}
++              selected={draft.category === category}
++              onSelect={(value) => updateDraft("category", value)}
++            />
++          ))}
++        </View>
++      </View>
++
++      <View style={styles.twoColumnFields}>
++        <TextField
++          label="Availability"
++          value={draft.availability}
++          onChangeText={(value) => updateDraft("availability", value)}
++          placeholder="Weekend"
++        />
++        <TextField
++          label="Location"
++          value={draft.locationLabel}
++          onChangeText={(value) => updateDraft("locationLabel", value)}
++          placeholder="Remote"
++        />
++      </View>
++
++      <View style={styles.field}>
++        <FieldLabel>Mode</FieldLabel>
++        <View style={styles.optionWrap}>
++          {MODE_OPTIONS.map((mode) => (
++            <OptionChip
++              key={mode}
++              label={MODE_LABELS[mode]}
++              value={mode}
++              selected={draft.mode === mode}
++              onSelect={(value) => updateDraft("mode", value)}
++            />
++          ))}
++        </View>
++      </View>
++
++      <TextField
++        label="Includes"
++        value={draft.includes}
++        onChangeText={(value) => updateDraft("includes", value)}
++        placeholder="Example: 10 edited shots"
++      />
++
++      <TextField
++        label="Tags"
++        value={draft.tagsText}
++        onChangeText={(value) => updateDraft("tagsText", value)}
++        placeholder="Photography, Editing, Studio"
++      />
++
++      <TextField
++        label="Preferred exchange"
++        value={draft.preferredExchange}
++        onChangeText={(value) => updateDraft("preferredExchange", value)}
++        placeholder="Example: Landing page design or copy review"
++      />
++
++      {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
++
++      <View style={styles.formActions}>
++        <Pressable
++          onPress={onCancel}
++          accessibilityRole="button"
++          style={({ pressed }) => [
++            styles.secondaryButton,
++            { borderColor: palette.border, backgroundColor: palette.surface },
++            pressed ? { opacity: 0.82, transform: [{ scale: 0.98 }] } : null,
++          ]}
++        >
++          <Text style={[styles.secondaryButtonText, { color: palette.text }]}>Cancel</Text>
++        </Pressable>
++
++        <Pressable
++          onPress={handleSave}
++          accessibilityRole="button"
++          disabled={!canSave}
++          style={({ pressed }) => [
++            styles.primaryButton,
++            { backgroundColor: palette.text },
++            !canSave ? { opacity: 0.42 } : null,
++            pressed && canSave ? { opacity: 0.86, transform: [{ scale: 0.98 }] } : null,
++          ]}
++        >
++          <Text style={[styles.primaryButtonText, { color: palette.background }]}>Save offer</Text>
++        </Pressable>
++      </View>
++    </View>
++  );
++}
++
++function CreateOfferCard({ onPress }: { onPress: () => void }) {
++  const { palette } = useTheme();
++
+   return (
+     <Pressable
+-      onPress={() => console.log("create offer")}
++      onPress={onPress}
+       accessibilityRole="button"
+       style={({ pressed }) => [
+         styles.createCard,
+@@ -59,7 +254,9 @@ function CreateOfferCard() {
+     >
+       <Text style={[styles.createPlus, { color: palette.muted }]}>＋</Text>
+       <Text style={[styles.createTitle, { color: palette.text }]}>Create an offer</Text>
+-      <Text style={[styles.createText, { color: palette.muted }]}>Describe what you can provide and what you want in exchange.</Text>
++      <Text style={[styles.createText, { color: palette.muted }]}>
++        Describe what you can provide and what you want in exchange.
++      </Text>
+     </Pressable>
+   );
+ }
+@@ -101,6 +298,7 @@ function OfferListCard({ item, index }: { item: TradeOfferItem; index: number })
+ export function TradeOffers() {
+   const { palette } = useTheme();
+   const { offers } = useTradeStore();
++  const [isCreating, setIsCreating] = useState(false);
+
+   return (
+     <ScrollView
+@@ -110,7 +308,9 @@ export function TradeOffers() {
+       contentContainerStyle={styles.content}
+     >
+-      <CreateOfferCard />
++      {isCreating ? (
++        <OfferCreateForm onCancel={() => setIsCreating(false)} />
++      ) : (
++        <CreateOfferCard onPress={() => setIsCreating(true)} />
++      )}
+
+       <View style={styles.sectionHeader}>
+         <Text style={[styles.sectionKicker, { color: palette.muted }]}>MY OFFERS</Text>
+@@ -144,6 +344,136 @@ const styles = StyleSheet.create({
+     paddingTop: 22,
+     gap: 18,
+   },
++
++  formCard: {
++    borderWidth: 1,
++    borderRadius: 32,
++    paddingHorizontal: 18,
++    paddingVertical: 18,
++    gap: 14,
++  },
++  formHeader: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  formHeaderText: {
++    flex: 1,
++    gap: 3,
++  },
++  formKicker: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 1.2,
++  },
++  formTitle: {
++    fontSize: 22,
++    fontWeight: "900",
++    letterSpacing: -0.35,
++    lineHeight: 26,
++  },
++  closeButton: {
++    width: 36,
++    height: 36,
++    alignItems: "center",
++    justifyContent: "center",
++    borderWidth: 1,
++    borderRadius: 999,
++  },
++  closeButtonText: {
++    fontSize: 22,
++    fontWeight: "800",
++    lineHeight: 24,
++  },
++  field: {
++    gap: 7,
++  },
++  fieldLabel: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 0.9,
++    textTransform: "uppercase",
++  },
++  input: {
++    minHeight: 46,
++    borderWidth: 1,
++    borderRadius: 18,
++    paddingHorizontal: 14,
++    paddingVertical: 11,
++    fontSize: 13,
++    fontWeight: "800",
++    lineHeight: 18,
++  },
++  multilineInput: {
++    minHeight: 86,
++  },
++  twoColumnFields: {
++    gap: 12,
++  },
++  optionWrap: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 8,
++  },
++  optionChip: {
++    borderWidth: 1,
++    borderRadius: 999,
++    paddingHorizontal: 11,
++    paddingVertical: 8,
++  },
++  optionChipText: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.1,
++  },
++  errorText: {
++    fontSize: 12,
++    fontWeight: "800",
++    lineHeight: 16,
++  },
++  formActions: {
++    flexDirection: "row",
++    gap: 10,
++  },
++  secondaryButton: {
++    flex: 1,
++    minHeight: 46,
++    alignItems: "center",
++    justifyContent: "center",
++    borderWidth: 1,
++    borderRadius: 18,
++    paddingHorizontal: 14,
++  },
++  secondaryButtonText: {
++    fontSize: 12,
++    fontWeight: "900",
++    letterSpacing: 0.2,
++  },
++  primaryButton: {
++    flex: 1,
++    minHeight: 46,
++    alignItems: "center",
++    justifyContent: "center",
++    borderRadius: 18,
++    paddingHorizontal: 14,
++  },
++  primaryButtonText: {
++    fontSize: 12,
++    fontWeight: "900",
++    letterSpacing: 0.2,
++  },
++
+   createCard: {
+     minHeight: 188,
+     alignItems: "center",

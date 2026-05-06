@@ -26,6 +26,12 @@ export type SquareStackDeckProps<TCard extends SquareStackDeckCard> = {
    */
   showDebugBadge?: boolean;
   /**
+   * "flat" keeps cards mounted and ready, but removes the heavy gray frame /
+   * shadow trail while swiping. Use "stacked" only when a lab explicitly needs
+   * the older depth visualization.
+   */
+  depthEffect?: "flat" | "stacked";
+  /**
    * Optional measured space from the screen that owns the deck. The square deck
    * can calculate from the viewport, but a measured parent stage is more
    * reliable on phones because native headers, footers, and safe areas vary.

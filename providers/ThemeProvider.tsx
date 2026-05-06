@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, type PropsWithChildren } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from "react";
 import { useColorScheme } from "react-native";
 
 export type ThemeMode = "light" | "dark";
@@ -25,6 +25,9 @@ export type ThemePalette = {
 
 type ThemeContextValue = {
   palette: ThemePalette;
+  mode: ThemeMode;
+  setMode: (mode: ThemeMode) => void;
+  toggleMode: () => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -63,10 +66,12 @@ function resolvePalette(mode: ThemeMode): ThemePalette {
 
 export function ThemeProvider({ children }: PropsWithChildren) {
   const scheme = useColorScheme();
-  const mode: ThemeMode = scheme === "light" ? "light" : "dark";
+  const systemMode: ThemeMode = scheme === "dark" ? "dark" : "light";
+  const [mode, setMode] = useState<ThemeMode>(systemMode);
+  const toggleMode = useCallback(() => setMode((current) => (current === "dark" ? "light" : "dark")), []);
 
   const palette = useMemo(() => resolvePalette(mode), [mode]);
-  const value = useMemo(() => ({ palette }), [palette]);
+  const value = useMemo(() => ({ palette, mode, setMode, toggleMode }), [mode, palette, toggleMode]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

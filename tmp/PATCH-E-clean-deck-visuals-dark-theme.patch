@@ -1,0 +1,262 @@
+diff --git a/providers/ThemeProvider.tsx b/providers/ThemeProvider.tsx
+index 0d47d46..f0c2e35 100644
+--- a/providers/ThemeProvider.tsx
++++ b/providers/ThemeProvider.tsx
+@@ -1,4 +1,4 @@
+-import React, { createContext, useContext, useMemo, type PropsWithChildren } from "react";
++import React, { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from "react";
+ import { useColorScheme } from "react-native";
+ 
+ export type ThemeMode = "light" | "dark";
+@@ -26,6 +26,9 @@ export type ThemePalette = {
+ 
+ type ThemeContextValue = {
+   palette: ThemePalette;
++  mode: ThemeMode;
++  setMode: (mode: ThemeMode) => void;
++  toggleMode: () => void;
+ };
+ 
+ const ThemeContext = createContext<ThemeContextValue | null>(null);
+@@ -68,11 +71,13 @@ function resolvePalette(mode: ThemeMode): ThemePalette {
+ 
+ export function ThemeProvider({ children }: PropsWithChildren) {
+   const scheme = useColorScheme();
+-  const mode: ThemeMode = scheme === "light" ? "light" : "dark";
++  const systemMode: ThemeMode = scheme === "dark" ? "dark" : "light";
++  const [mode, setMode] = useState<ThemeMode>(systemMode);
++  const toggleMode = useCallback(() => setMode((current) => (current === "dark" ? "light" : "dark")), []);
+ 
+   const palette = useMemo(() => resolvePalette(mode), [mode]);
+-  const value = useMemo(() => ({ palette }), [palette]);
++  const value = useMemo(() => ({ palette, mode, setMode, toggleMode }), [mode, palette, toggleMode]);
+ 
+   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+ }
+diff --git a/features/square-stack-deck/squareStackDeck.model.ts b/features/square-stack-deck/squareStackDeck.model.ts
+index 1defa22..3de3fd1 100644
+--- a/features/square-stack-deck/squareStackDeck.model.ts
++++ b/features/square-stack-deck/squareStackDeck.model.ts
+@@ -23,6 +23,8 @@ export type SquareStackLayoutMetrics = {
+   depthAllowanceY: number;
+ };
+ 
++export type SquareStackDepthEffect = "stacked" | "flat";
++
+ export function clamp(value: number, min: number, max: number) {
+   "worklet";
+   return Math.min(max, Math.max(min, value));
+@@ -70,7 +72,7 @@ export function getVisibleSquareStackIndexes(activeIndex: number, total: number)
+   return indexes;
+ }
+ 
+-export function getSquareStackTransform(visualOffset: number, cardSize: number) {
++export function getSquareStackTransform(visualOffset: number, cardSize: number, depthEffect: SquareStackDepthEffect = "flat") {
+   "worklet";
+ 
+   const clampedOffset = clamp(visualOffset, -1, 4);
+@@ -78,6 +80,24 @@ export function getSquareStackTransform(visualOffset: number, cardSize: number)
+ 
+   // LAB3 keeps the physical model but makes the depth almost invisible. The
+   // fourth-after card stays mounted as a hidden tail so it can slide into the
+   // third depth slot during a next swipe instead of appearing after release.
++  if (depthEffect === "flat") {
++    const flatInput = [-1, -0.08, 0, 1, 2, 3, 4];
++    const translateX = interpolate(
++      clampedOffset,
++      flatInput,
++      [-cardSize * 0.22, 0, 0, 4, 8, 12, 16],
++      Extrapolation.CLAMP
++    );
++    const translateY = interpolate(clampedOffset, flatInput, [-cardSize * 0.18, 0, 0, 4, 8, 12, 16], Extrapolation.CLAMP);
++    const scale = interpolate(clampedOffset, flatInput, [0.995, 0.998, 1, 0.992, 0.986, 0.98, 0.974], Extrapolation.CLAMP);
++    const opacity = interpolate(clampedOffset, flatInput, [0, 0, 1, 0.985, 0.95, 0.88, 0], Extrapolation.CLAMP);
++
++    return { translateX, translateY, scale, opacity };
++  }
++
+   const translateX = interpolate(
+     clampedOffset,
+     input,
+@@ -112,10 +132,14 @@ export function getSquareStackTransform(visualOffset: number, cardSize: number)
+ }
+ 
+ 
+-export function getSquareStackShadowStyle(visualOffset: number) {
++export function getSquareStackShadowStyle(visualOffset: number, depthEffect: SquareStackDepthEffect = "flat") {
+   "worklet";
+ 
+   const clampedOffset = clamp(visualOffset, -1, 4);
++  if (depthEffect === "flat") {
++    return { shadowOpacity: 0, shadowRadius: 0, elevation: 0 };
++  }
++
+   const input = [-1, 0, 1, 2, 3, 4];
+ 
+   return {
+diff --git a/features/square-stack-deck/squareStackDeck.types.ts b/features/square-stack-deck/squareStackDeck.types.ts
+index 112d0a7..4e7d357 100644
+--- a/features/square-stack-deck/squareStackDeck.types.ts
++++ b/features/square-stack-deck/squareStackDeck.types.ts
+@@ -25,6 +25,12 @@ export type SquareStackDeckProps<TCard extends SquareStackDeckCard> = {
+    * Lab screens can keep the tiny debug dot. Product/feature surfaces can hide it.
+    */
+   showDebugBadge?: boolean;
++  /**
++   * "flat" keeps cards mounted and ready, but removes the heavy gray frame /
++   * shadow trail while swiping. Use "stacked" only when a lab explicitly needs
++   * the older depth visualization.
++   */
++  depthEffect?: "flat" | "stacked";
+   /**
+    * Optional measured space from the screen that owns the deck. The square deck
+    * can calculate from the viewport, but a measured parent stage is more
+diff --git a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+index 624ea09..1347ec6 100644
+--- a/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
++++ b/features/square-stack-deck/components/ContinuousSquareStackDeck.tsx
+@@ -28,6 +28,7 @@ type LayerProps<TCard extends SquareStackDeckCard> = {
+   baseIndex: SharedValue<number>;
+   progress: SharedValue<number>;
+   renderCard: SquareStackDeckProps<TCard>["renderCard"];
++  depthEffect: SquareStackDeckProps<TCard>["depthEffect"];
+ };
+ 
+ function SquareStackLayerInner<TCard extends SquareStackDeckCard>({
+@@ -38,12 +39,13 @@ function SquareStackLayerInner<TCard extends SquareStackDeckCard>({
+   baseIndex,
+   progress,
+   renderCard,
++  depthEffect,
+ }: LayerProps<TCard>) {
+   const animatedStyle = useAnimatedStyle(() => {
+     const visualOffset = index - baseIndex.value - progress.value;
+-    const pose = getSquareStackTransform(visualOffset, size);
++    const pose = getSquareStackTransform(visualOffset, size, depthEffect ?? "flat");
+ 
+     return {
+       opacity: pose.opacity,
+@@ -51,12 +53,12 @@ function SquareStackLayerInner<TCard extends SquareStackDeckCard>({
+       transform: [{ translateX: pose.translateX }, { translateY: pose.translateY }, { scale: pose.scale }],
+     };
+-  }, [index, size]);
++  }, [depthEffect, index, size]);
+ 
+   const shadowStyle = useAnimatedStyle(() => {
+     const visualOffset = index - baseIndex.value - progress.value;
+-    return getSquareStackShadowStyle(visualOffset);
+-  }, [index]);
++    return getSquareStackShadowStyle(visualOffset, depthEffect ?? "flat");
++  }, [depthEffect, index]);
+ 
+   return (
+     <Animated.View pointerEvents="box-none" style={[styles.layer, animatedStyle]}>
+@@ -91,6 +93,7 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+   maxCardSize,
+   renderWindow = "visible",
+   showDebugBadge = true,
++  depthEffect = "flat",
+ }: SquareStackDeckProps<TCard>) {
+   const { width, height } = useWindowDimensions();
+   const layoutMetrics = useMemo(
+@@ -300,6 +303,7 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
+                 baseIndex={baseIndex}
+                 progress={progress}
+                 renderCard={renderCard}
++                depthEffect={depthEffect}
+               />
+             );
+           })}
+diff --git a/features/trade/TradeHome.tsx b/features/trade/TradeHome.tsx
+--- a/features/trade/TradeHome.tsx
++++ b/features/trade/TradeHome.tsx
+@@ -1,5 +1,5 @@
+ import React, { useState } from "react";
+-import { StyleSheet, Text, View } from "react-native";
++import { Pressable, StyleSheet, Text, View } from "react-native";
+ 
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+@@ -7,14 +7,28 @@ import { TradeFeed, TradeNeeds, TradeOffers, TradeTabs } from "./components";
+ import type { TradeTabKey } from "./types";
+ 
+ export function TradeHome() {
+-  const { palette } = useTheme();
++  const { mode, palette, toggleMode } = useTheme();
+   const [activeTab, setActiveTab] = useState<TradeTabKey>("feed");
+ 
+   return (
+     <View style={[styles.screen, { backgroundColor: palette.background }]}>
+       <View style={[styles.headerShell, { borderBottomColor: palette.border }]}>
+         <Text style={[styles.eyebrow, { color: palette.muted }]}>TRADE LAB</Text>
+-        <Text style={[styles.screenTitle, { color: palette.text }]}>Trade</Text>
++        <View style={styles.titleRow}>
++          <Text style={[styles.screenTitle, { color: palette.text }]}>Trade</Text>
++          <Pressable
++            onPress={toggleMode}
++            accessibilityRole="button"
++            accessibilityLabel={`Switch to ${mode === "dark" ? "light" : "dark"} theme`}
++            style={({ pressed }) => [
++              styles.themeToggle,
++              { borderColor: palette.border, backgroundColor: palette.surface },
++              pressed ? { opacity: 0.82, transform: [{ scale: 0.98 }] } : null,
++            ]}
++          >
++            <Text style={[styles.themeToggleText, { color: palette.text }]}>{mode === "dark" ? "Light" : "Dark"}</Text>
++          </Pressable>
++        </View>
+         <Text style={[styles.screenSubtitle, { color: palette.muted }]} numberOfLines={2}>
+           One isolated trade menu with Feed, Needs, and Offers inside it.
+         </Text>
+@@ -44,7 +58,14 @@ const styles = StyleSheet.create({
+     fontWeight: "900",
+     letterSpacing: 1.4,
+   },
++  titleRow: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
+   screenTitle: {
++    flex: 1,
+     fontSize: 28,
+     fontWeight: "900",
+     letterSpacing: -0.6,
+@@ -55,4 +76,18 @@ const styles = StyleSheet.create({
+     fontWeight: "700",
+     lineHeight: 16,
+   },
++  themeToggle: {
++    minWidth: 62,
++    alignItems: "center",
++    justifyContent: "center",
++    borderWidth: 1,
++    borderRadius: 999,
++    paddingHorizontal: 12,
++    paddingVertical: 8,
++  },
++  themeToggleText: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.2,
++  },
+ });
+diff --git a/features/trade/components/TradeFeed.tsx b/features/trade/components/TradeFeed.tsx
+index fcf131b..e7d2cab 100644
+--- a/features/trade/components/TradeFeed.tsx
++++ b/features/trade/components/TradeFeed.tsx
+@@ -33,7 +33,7 @@ export function TradeFeed() {
+       nestedScrollEnabled
+       showsVerticalScrollIndicator={false}
+-      style={styles.feedShell}
++      style={[styles.feedShell, { backgroundColor: palette.background }]}
+       contentContainerStyle={styles.content}
+     >
+@@ -54,6 +54,7 @@ export function TradeFeed() {
+           renderWindow="all"
+           showDebugBadge={false}
++          depthEffect="flat"
+           onIndexChange={(_, item) => setActiveLabel(item.id)}
+           renderCard={({ card, index, total }) => <TradeFeedCard item={card} index={index} total={total} />}
+         />
