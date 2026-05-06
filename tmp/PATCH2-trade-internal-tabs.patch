@@ -1,0 +1,303 @@
+diff --git a/features/trade/TradeHome.tsx b/features/trade/TradeHome.tsx
+index 4b994a7..dd06759 100644
+--- a/features/trade/TradeHome.tsx
++++ b/features/trade/TradeHome.tsx
+@@ -1,6 +1,9 @@
+ import React, { useMemo, useState } from "react";
+ import { Pressable, StyleSheet, Text, View } from "react-native";
+ 
++import { TradeTabs } from "./components/TradeTabs";
++import { TRADE_TABS, type TradeTabKey } from "./types";
++
+ import { SwipeDeck } from "@/features/deck";
+ import { DeckProbeCard } from "@/components/deck-probe-card";
+ import { DebugPanel } from "@/components/debug-panel";
+@@ -109,9 +112,27 @@ function FakeCardBody({ card, index, total }: { card: FakeFeedCard; index: numbe
+   );
+ }
+ 
++function TradePlaceholder({ tab }: { tab: Exclude<TradeTabKey, "feed"> }) {
++  const { palette } = useTheme();
++  const tabConfig = TRADE_TABS.find((item) => item.key === tab);
++
++  return (
++    <View style={styles.placeholderWrap}>
++      <View style={[styles.placeholderCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++        <Text style={[styles.placeholderKicker, { color: palette.muted }]}>COMING NEXT</Text>
++        <Text style={[styles.placeholderTitle, { color: palette.text }]}>{tabConfig?.label}</Text>
++        <Text style={[styles.placeholderText, { color: palette.muted }]}>
++          {tabConfig?.description} We keep this tab as a clean placeholder while the Feed card experience is built first.
++        </Text>
++      </View>
++    </View>
++  );
++}
++
+ export function TradeHome() {
+   const { palette } = useTheme();
+ 
++  const [activeTab, setActiveTab] = useState<TradeTabKey>("feed");
+   const [renderBackBodies, setRenderBackBodies] = useState(true);
+   const [useContentOwnerGating, setUseContentOwnerGating] = useState(true);
+ 
+@@ -133,36 +154,51 @@ export function TradeHome() {
+ 
+   return (
+     <View style={[styles.screen, { backgroundColor: palette.background }]}>
+-      <View style={styles.debugWrap} pointerEvents="box-none">
+-        <View style={styles.debugPanel}>
+-          <DebugPanel
+-            title="Feed deck A/B"
+-            note="Flip one toggle, swipe, come back to the same card."
+-            toggles={[
+-              {
+-                key: "backBodies",
+-                label: "Render back card bodies",
+-                value: renderBackBodies,
+-                onChange: setRenderBackBodies,
+-              },
+-              {
+-                key: "gating",
+-                label: "Use content-owner gating",
+-                value: useContentOwnerGating,
+-                onChange: setUseContentOwnerGating,
+-              },
+-            ]}
+-          />
+-        </View>
+-      </View>
+-      <View style={styles.stage}>
+-        <SwipeDeck
+-          cards={cards}
+-          onCardPress={(_, card) => console.log("press", card.id)}
+-          renderCard={({ card, index }) => <FakeCardBody card={card} index={index} total={cards.length} />}
+-          debug={{ renderBackCardBodies: renderBackBodies, useContentOwnerGating }}
+-        />
++      <View style={[styles.headerShell, { borderBottomColor: palette.border }]}>
++        <Text style={[styles.eyebrow, { color: palette.muted }]}>TRADE LAB</Text>
++        <Text style={[styles.screenTitle, { color: palette.text }]}>Trade</Text>
++        <Text style={[styles.screenSubtitle, { color: palette.muted }]} numberOfLines={2}>
++          One isolated trade menu with Feed, Needs, and Offers inside it.
++        </Text>
++        <TradeTabs activeTab={activeTab} onChange={setActiveTab} />
+       </View>
++
++      {activeTab === "feed" ? (
++        <View style={styles.feedShell}>
++          <View style={styles.debugWrap} pointerEvents="box-none">
++            <View style={styles.debugPanel}>
++              <DebugPanel
++                title="Feed deck A/B"
++                note="Flip one toggle, swipe, come back to the same card."
++                toggles={[
++                  {
++                    key: "backBodies",
++                    label: "Render back card bodies",
++                    value: renderBackBodies,
++                    onChange: setRenderBackBodies,
++                  },
++                  {
++                    key: "gating",
++                    label: "Use content-owner gating",
++                    value: useContentOwnerGating,
++                    onChange: setUseContentOwnerGating,
++                  },
++                ]}
++              />
++            </View>
++          </View>
++          <View style={styles.stage}>
++            <SwipeDeck
++              cards={cards}
++              onCardPress={(_, card) => console.log("press", card.id)}
++              renderCard={({ card, index }) => <FakeCardBody card={card} index={index} total={cards.length} />}
++              debug={{ renderBackCardBodies: renderBackBodies, useContentOwnerGating }}
++            />
++          </View>
++        </View>
++      ) : (
++        <TradePlaceholder tab={activeTab} />
++      )}
+     </View>
+   );
+ }
+@@ -173,6 +209,32 @@ const styles = StyleSheet.create({
+   screen: {
+     flex: 1,
+   },
++  headerShell: {
++    borderBottomWidth: 1,
++    paddingHorizontal: 18,
++    paddingBottom: 14,
++    paddingTop: 16,
++    gap: 8,
++  },
++  eyebrow: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 1.4,
++  },
++  screenTitle: {
++    fontSize: 28,
++    fontWeight: "900",
++    letterSpacing: -0.6,
++    lineHeight: 32,
++  },
++  screenSubtitle: {
++    fontSize: 12,
++    fontWeight: "700",
++    lineHeight: 16,
++  },
++  feedShell: {
++    flex: 1,
++  },
+   stage: {
+     flex: 1,
+     alignItems: "center",
+@@ -192,6 +254,37 @@ const styles = StyleSheet.create({
+     pointerEvents: "auto",
+   },
+ 
++  placeholderWrap: {
++    flex: 1,
++    alignItems: "center",
++    justifyContent: "center",
++    paddingHorizontal: 18,
++  },
++  placeholderCard: {
++    width: "100%",
++    maxWidth: 420,
++    borderWidth: 1,
++    borderRadius: 28,
++    paddingHorizontal: 22,
++    paddingVertical: 24,
++    gap: 10,
++  },
++  placeholderKicker: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 1.2,
++  },
++  placeholderTitle: {
++    fontSize: 24,
++    fontWeight: "900",
++    letterSpacing: -0.4,
++  },
++  placeholderText: {
++    fontSize: 13,
++    fontWeight: "700",
++    lineHeight: 18,
++  },
++
+   body: {
+     flex: 1,
+     paddingHorizontal: 18,
+diff --git a/b/features/trade/components/TradeTabs.tsx b/features/trade/components/TradeTabs.tsx
+new file mode 100644
+index 0000000..fee446a
+--- /dev/null
++++ b/features/trade/components/TradeTabs.tsx
+@@ -0,0 +1,65 @@
++import React from "react";
++import { Pressable, StyleSheet, Text, View } from "react-native";
++
++import { useTheme } from "@/providers/ThemeProvider";
++import { TRADE_TABS, type TradeTabKey } from "../types";
++
++type TradeTabsProps = {
++  activeTab: TradeTabKey;
++  onChange: (tab: TradeTabKey) => void;
++};
++
++export function TradeTabs({ activeTab, onChange }: TradeTabsProps) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.tabs, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++      {TRADE_TABS.map((tab) => {
++        const active = tab.key === activeTab;
++
++        return (
++          <Pressable
++            key={tab.key}
++            onPress={() => onChange(tab.key)}
++            hitSlop={6}
++            accessibilityRole="tab"
++            accessibilityState={{ selected: active }}
++            style={({ pressed }) => [
++              styles.tab,
++              active ? { backgroundColor: palette.surface, borderColor: palette.border } : { borderColor: "transparent" },
++              pressed ? { opacity: 0.82 } : null,
++            ]}
++          >
++            <Text style={[styles.tabText, { color: active ? palette.text : palette.muted }]} numberOfLines={1}>
++              {tab.label}
++            </Text>
++          </Pressable>
++        );
++      })}
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  tabs: {
++    flexDirection: "row",
++    borderWidth: 1,
++    borderRadius: 999,
++    padding: 4,
++    gap: 4,
++  },
++  tab: {
++    flex: 1,
++    alignItems: "center",
++    justifyContent: "center",
++    borderWidth: 1,
++    borderRadius: 999,
++    paddingHorizontal: 12,
++    paddingVertical: 10,
++  },
++  tabText: {
++    fontSize: 12,
++    fontWeight: "900",
++    letterSpacing: 0.2,
++  },
++});
+diff --git a/features/trade/index.ts b/features/trade/index.ts
+index 94dd58e..ed1c720 100644
+--- a/features/trade/index.ts
++++ b/features/trade/index.ts
+@@ -1 +1,2 @@
+ export { TradeHome } from "./TradeHome";
++export * from "./types";
+diff --git a/features/trade/types.ts b/features/trade/types.ts
+index 5d6c181..ce66cc0 100644
+--- a/features/trade/types.ts
++++ b/features/trade/types.ts
+@@ -1 +1,25 @@
+-// Trade domain types will live here as the feature evolves.
++export type TradeTabKey = "feed" | "needs" | "offers";
++
++export type TradeTab = {
++  key: TradeTabKey;
++  label: string;
++  description: string;
++};
++
++export const TRADE_TABS: TradeTab[] = [
++  {
++    key: "feed",
++    label: "Feed",
++    description: "Swipe through complete Need ↔ Offer trade cards.",
++  },
++  {
++    key: "needs",
++    label: "Needs",
++    description: "Track what people are asking for.",
++  },
++  {
++    key: "offers",
++    label: "Offers",
++    description: "Track what people can give in exchange.",
++  },
++];
