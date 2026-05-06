@@ -1,0 +1,209 @@
+diff --git a/features/trade/TradeCreateScreen.tsx b/features/trade/TradeCreateScreen.tsx
+index a4c1c42..12771c7 100644
+--- a/features/trade/TradeCreateScreen.tsx
++++ b/features/trade/TradeCreateScreen.tsx
+@@ -6,6 +6,7 @@ import { useTheme } from "@/providers/ThemeProvider";
+
+ import { useTradeStore } from "./state";
+ import type {
+   TradeCategory,
+   TradeDurationOption,
+   TradeNeedItem,
+   TradeOfferItem,
+   TradeServiceMode,
+   TradeUrgency,
+ } from "./types";
++import { TradeExchangeIcon } from "./components/TradeExchangeIcon";
+@@ -446,7 +447,9 @@ function PreviewCard({
+       <View style={styles.previewExchangeRow}>
+         <View style={[styles.previewLine, { backgroundColor: palette.border }]} />
+         <View style={[styles.previewExchangeBadge, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+-          <Text style={[styles.previewExchangeText, { color: palette.text }]}>↔</Text>
++          <View style={styles.previewExchangeIconWrap}>
++            <TradeExchangeIcon size={18} color={palette.text} />
++          </View>
+         </View>
+         <View style={[styles.previewLine, { backgroundColor: palette.border }]} />
+       </View>
+@@ -916,10 +919,9 @@ const styles = StyleSheet.create({
+     borderWidth: 1,
+     borderRadius: 999,
+   },
+-  previewExchangeText: {
+-    fontSize: 24,
+-    fontWeight: "900",
+-    lineHeight: 26,
++  previewExchangeIconWrap: {
++    alignItems: "center",
++    justifyContent: "center",
+   },
+
+   segmentControl: {
+diff --git a/features/trade/components/TradeExchangeIcon.tsx b/features/trade/components/TradeExchangeIcon.tsx
+new file mode 100644
+index 0000000..668486e
+--- /dev/null
++++ b/features/trade/components/TradeExchangeIcon.tsx
+@@ -0,0 +1,88 @@
++import React from "react";
++import { StyleSheet, View } from "react-native";
++
++type TradeExchangeIconProps = {
++  size?: number;
++  color?: string;
++  strokeWidth?: number;
++};
++
++export function TradeExchangeIcon({
++  size = 18,
++  color = "#111111",
++  strokeWidth = 2,
++}: TradeExchangeIconProps) {
++  const lineThickness = Math.max(1.5, Math.round(strokeWidth));
++  const horizontalWidth = size * 0.74;
++  const diagonalWidth = size * 0.34;
++
++  return (
++    <View style={[styles.root, { width: size, height: size }]}>
++      <View
++        style={[
++          styles.horizontal,
++          {
++            top: size * 0.28,
++            left: size * 0.12,
++            width: horizontalWidth,
++            height: lineThickness,
++            borderRadius: 999,
++            backgroundColor: color,
++          },
++        ]}
++      />
++      <View
++        style={[
++          styles.horizontal,
++          {
++            top: size * 0.56,
++            left: size * 0.12,
++            width: horizontalWidth,
++            height: lineThickness,
++            borderRadius: 999,
++            backgroundColor: color,
++          },
++        ]}
++      />
++      <View
++        style={[
++          styles.diagonal,
++          {
++            top: size * 0.12,
++            left: size * 0.56,
++            width: diagonalWidth,
++            height: lineThickness,
++            borderRadius: 999,
++            backgroundColor: color,
++            transform: [{ rotate: "45deg" }],
++          },
++        ]}
++      />
++      <View
++        style={[
++          styles.diagonal,
++          {
++            top: size * 0.69,
++            left: size * 0.10,
++            width: diagonalWidth,
++            height: lineThickness,
++            borderRadius: 999,
++            backgroundColor: color,
++            transform: [{ rotate: "45deg" }],
++          },
++        ]}
++      />
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  root: {
++    position: "relative",
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  horizontal: {
++    position: "absolute",
++  },
++  diagonal: {
++    position: "absolute",
++  },
++});
+diff --git a/features/trade/components/TradeFeedCard.tsx b/features/trade/components/TradeFeedCard.tsx
+index 056a4ad..d8cc144 100644
+--- a/features/trade/components/TradeFeedCard.tsx
++++ b/features/trade/components/TradeFeedCard.tsx
+@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
+
+ import { useTheme } from "@/providers/ThemeProvider";
+ import type { TradeCategory, TradeFeedItem, TradeServiceMode } from "../types";
++import { TradeExchangeIcon } from "./TradeExchangeIcon";
+
+ type TradeFeedCardProps = {
+   item: TradeFeedItem;
+@@ -86,7 +87,7 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
+   ]);
+
+   return (
+-    <View style={[styles.cardBody, { borderColor: cardBorder, backgroundColor: cardBackground }]}>
++    <View style={[styles.cardBody, { backgroundColor: cardBackground }]}>
+       <View style={styles.cardHeader}>
+         <Text style={[styles.cardKicker, { color: palette.muted }]} numberOfLines={1}>
+           TRADE{cardPosition ? ` · ${cardPosition}` : ""}
+@@ -98,9 +99,9 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
+       <TradeZone kind="need" title={item.need.title} meta={needMeta} />
+
+       <View style={styles.exchangeRow}>
+         <View style={[styles.exchangeLine, { backgroundColor: palette.border }]} />
+         <View style={[styles.exchangeBadge, { borderColor: cardBorder, backgroundColor: badgeBackground }]}>
+-          <Text style={[styles.exchangeText, { color: palette.text }]} numberOfLines={1}>
+-            ↔
+-          </Text>
++          <View style={styles.exchangeIconWrap}>
++            <TradeExchangeIcon size={18} color={palette.text} />
++          </View>
+         </View>
+         <View style={[styles.exchangeLine, { backgroundColor: palette.border }]} />
+       </View>
+@@ -121,9 +122,6 @@ const styles = StyleSheet.create({
+   cardBody: {
+     flex: 1,
+     paddingHorizontal: 20,
+     paddingVertical: 18,
+-    borderWidth: 1,
+-    borderRadius: 32,
+-    overflow: "hidden",
+   },
+   cardHeader: {
+     minHeight: 22,
+@@ -180,9 +178,9 @@ const styles = StyleSheet.create({
+     borderWidth: 1,
+     borderRadius: 999,
+   },
+-  exchangeText: {
+-    fontSize: 24,
+-    fontWeight: "900",
+-    lineHeight: 26,
++  exchangeIconWrap: {
++    alignItems: "center",
++    justifyContent: "center",
+   },
+ });
+diff --git a/features/trade/components/index.ts b/features/trade/components/index.ts
+index d0219a7..767f1cc 100644
+--- a/features/trade/components/index.ts
++++ b/features/trade/components/index.ts
+@@ -1,5 +1,6 @@
+ export { TradeCreateForm } from "./TradeCreateForm";
++export { TradeExchangeIcon } from "./TradeExchangeIcon";
+ export { TradeFeed } from "./TradeFeed";
+ export { TradeFeedCard } from "./TradeFeedCard";
+ export { TradeNeeds } from "./TradeNeeds";
+ export { TradeOffers } from "./TradeOffers";

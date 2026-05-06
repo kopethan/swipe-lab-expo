@@ -63,7 +63,10 @@ function TradeZone({
 }
 
 export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
-  const { palette } = useTheme();
+  const { mode, palette } = useTheme();
+  const cardBackground = mode === "dark" ? palette.surfaceAlt : palette.surface;
+  const cardBorder = mode === "light" ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.72)";
+  const badgeBackground = mode === "dark" ? palette.surface : palette.surfaceAlt;
 
   const cardPosition =
     index != null && total != null
@@ -83,7 +86,7 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
   ]);
 
   return (
-    <View style={styles.cardBody}>
+    <View style={[styles.cardBody, { borderColor: cardBorder, backgroundColor: cardBackground }]}>
       <View style={styles.cardHeader}>
         <Text style={[styles.cardKicker, { color: palette.muted }]} numberOfLines={1}>
           TRADE{cardPosition ? ` · ${cardPosition}` : ""}
@@ -99,7 +102,7 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
 
       <View style={styles.exchangeRow}>
         <View style={[styles.exchangeLine, { backgroundColor: palette.border }]} />
-        <View style={[styles.exchangeBadge, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+        <View style={[styles.exchangeBadge, { borderColor: cardBorder, backgroundColor: badgeBackground }]}>
           <Text style={[styles.exchangeText, { color: palette.text }]} numberOfLines={1}>
             ↔
           </Text>
@@ -117,6 +120,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingVertical: 18,
+    borderWidth: 1,
+    borderRadius: 32,
+    overflow: "hidden",
   },
   cardHeader: {
     minHeight: 22,

@@ -1,0 +1,144 @@
+diff --git a/features/square-stack-deck/components/SquareStackCardShell.tsx b/features/square-stack-deck/components/SquareStackCardShell.tsx
+index 94ecfd8..09d10d2 100644
+--- a/features/square-stack-deck/components/SquareStackCardShell.tsx
++++ b/features/square-stack-deck/components/SquareStackCardShell.tsx
+@@ -9,22 +9,37 @@ type Props = {
+
+ export function SquareStackCardShell({ size, children }: Props) {
+   const { palette } = useTheme();
+   const radius = Math.max(24, Math.round(size * 0.075));
++  const outlineColor = palette.mode === "light" ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.68)";
++  const innerOutlineOpacity = palette.mode === "light" ? 0.12 : 0.24;
+
+   return (
+     <View
+       style={[
+         styles.card,
+         {
+           width: size,
+           height: size,
+           borderRadius: radius,
+-          borderColor: palette.mode === "light" ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.12)",
++          borderColor: outlineColor,
+           backgroundColor: palette.surface,
+         },
+       ]}
+     >
++      <View
++        pointerEvents="none"
++        style={[
++          styles.innerFrame,
++          {
++            borderRadius: Math.max(0, radius - 2),
++            borderColor: outlineColor,
++            opacity: innerOutlineOpacity,
++          },
++        ]}
++      />
+       {children}
+     </View>
+   );
+ }
+
+ const styles = StyleSheet.create({
+   card: {
++    position: "relative",
+     overflow: "hidden",
+-    borderWidth: StyleSheet.hairlineWidth,
++    borderWidth: 1,
+     ...(Platform.OS === "web" ? ({ willChange: "transform" } as any) : null),
+   },
++  innerFrame: {
++    ...StyleSheet.absoluteFillObject,
++    borderWidth: 1,
++  },
+ });
+diff --git a/features/square-stack-deck/squareStackDeck.model.ts b/features/square-stack-deck/squareStackDeck.model.ts
+index d8f7dd3..8b6dd52 100644
+--- a/features/square-stack-deck/squareStackDeck.model.ts
++++ b/features/square-stack-deck/squareStackDeck.model.ts
+@@ -81,22 +81,32 @@ export function getSquareStackTransform(visualOffset: number, cardSize: number,
+   // LAB3 keeps the physical model but makes the depth almost invisible. The
+   // fourth-after card stays mounted as a hidden tail so it can slide into the
+   // third depth slot during a next swipe instead of appearing after release.
+   if (depthEffect === "motionOnly") {
+-    const motionInput = [-1, -0.65, -0.08, 0, 1, 2, 3, 4];
++    const motionInput = [-1, -0.72, -0.28, -0.08, 0, 1, 2, 3, 4];
+     const translateX = interpolate(
+       clampedOffset,
+       motionInput,
+-      [-cardSize * 0.72, -cardSize * 0.46, 0, 0, 8, 14, 20, 26],
++      [-cardSize * 0.74, -cardSize * 0.52, -cardSize * 0.16, 0, 0, 10, 20, 30, 40],
+       Extrapolation.CLAMP
+     );
+     const translateY = interpolate(
+       clampedOffset,
+       motionInput,
+-      [-cardSize * 0.72, -cardSize * 0.46, 0, 0, 8, 14, 20, 26],
++      [-cardSize * 0.74, -cardSize * 0.52, -cardSize * 0.16, 0, 0, 10, 20, 30, 40],
+       Extrapolation.CLAMP
+     );
+-    const scale = interpolate(clampedOffset, motionInput, [0.88, 0.94, 0.998, 1, 0.992, 0.986, 0.98, 0.974], Extrapolation.CLAMP);
+-    const opacity = interpolate(clampedOffset, motionInput, [0, 0.22, 0.94, 1, 0.985, 0.95, 0.88, 0], Extrapolation.CLAMP);
++    const scale = interpolate(
++      clampedOffset,
++      motionInput,
++      [0.88, 0.925, 0.975, 0.998, 1, 0.984, 0.968, 0.952, 0.936],
++      Extrapolation.CLAMP
++    );
++    const opacity = interpolate(
++      clampedOffset,
++      motionInput,
++      [0, 0.18, 0.72, 0.96, 1, 0.86, 0.64, 0.42, 0],
++      Extrapolation.CLAMP
++    );
+
+     return { translateX, translateY, scale, opacity };
+   }
+diff --git a/features/trade/components/TradeFeedCard.tsx b/features/trade/components/TradeFeedCard.tsx
+index 8c76ebb..056a4ad 100644
+--- a/features/trade/components/TradeFeedCard.tsx
++++ b/features/trade/components/TradeFeedCard.tsx
+@@ -68,7 +68,10 @@ function TradeZone({
+ }
+
+ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
+-  const { palette } = useTheme();
++  const { mode, palette } = useTheme();
++  const cardBackground = mode === "dark" ? palette.surfaceAlt : palette.surface;
++  const cardBorder = mode === "light" ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.72)";
++  const badgeBackground = mode === "dark" ? palette.surface : palette.surfaceAlt;
+   const cardPosition = total > 0 ? `${String(index + 1).padStart(2, "0")}/${String(total).padStart(2, "0")}` : undefined;
+
+   const needMeta = compactMeta([
+@@ -84,7 +87,7 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
+   ]);
+
+   return (
+-    <View style={styles.cardBody}>
++    <View style={[styles.cardBody, { borderColor: cardBorder, backgroundColor: cardBackground }]}>
+       <View style={styles.cardHeader}>
+         <Text style={[styles.cardKicker, { color: palette.muted }]} numberOfLines={1}>
+           TRADE{cardPosition ? ` · ${cardPosition}` : ""}
+@@ -96,7 +99,7 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
+       <TradeZone kind="need" title={item.need.title} meta={needMeta} />
+
+       <View style={styles.exchangeRow}>
+         <View style={[styles.exchangeLine, { backgroundColor: palette.border }]} />
+-        <View style={[styles.exchangeBadge, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++        <View style={[styles.exchangeBadge, { borderColor: cardBorder, backgroundColor: badgeBackground }]}>
+           <Text style={[styles.exchangeText, { color: palette.text }]} numberOfLines={1}>
+             ↔
+           </Text>
+@@ -117,8 +120,12 @@ const styles = StyleSheet.create({
+   cardBody: {
+     flex: 1,
+     paddingHorizontal: 20,
+     paddingVertical: 18,
++    borderWidth: 1,
++    borderRadius: 32,
++    overflow: "hidden",
+   },
+   cardHeader: {
+     minHeight: 22,
+     flexDirection: "row",

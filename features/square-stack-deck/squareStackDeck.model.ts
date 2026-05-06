@@ -84,21 +84,31 @@ export function getSquareStackTransform(visualOffset: number, cardSize: number, 
   // fourth-after card stays mounted as a hidden tail so it can slide into the
   // third depth slot during a next swipe instead of appearing after release.
   if (depthEffect === "motionOnly") {
-    const motionInput = [-1, -0.65, -0.08, 0, 1, 2, 3, 4];
+    const motionInput = [-1, -0.72, -0.28, -0.08, 0, 1, 2, 3, 4];
     const translateX = interpolate(
       clampedOffset,
       motionInput,
-      [-cardSize * 0.72, -cardSize * 0.46, 0, 0, 8, 14, 20, 26],
+      [-cardSize * 0.74, -cardSize * 0.52, -cardSize * 0.16, 0, 0, 10, 20, 30, 40],
       Extrapolation.CLAMP
     );
     const translateY = interpolate(
       clampedOffset,
       motionInput,
-      [-cardSize * 0.72, -cardSize * 0.46, 0, 0, 8, 14, 20, 26],
+      [-cardSize * 0.74, -cardSize * 0.52, -cardSize * 0.16, 0, 0, 10, 20, 30, 40],
       Extrapolation.CLAMP
     );
-    const scale = interpolate(clampedOffset, motionInput, [0.88, 0.94, 0.998, 1, 0.992, 0.986, 0.98, 0.974], Extrapolation.CLAMP);
-    const opacity = interpolate(clampedOffset, motionInput, [0, 0.22, 0.94, 1, 0.985, 0.95, 0.88, 0], Extrapolation.CLAMP);
+    const scale = interpolate(
+      clampedOffset,
+      motionInput,
+      [0.88, 0.925, 0.975, 0.998, 1, 0.984, 0.968, 0.952, 0.936],
+      Extrapolation.CLAMP
+    );
+    const opacity = interpolate(
+      clampedOffset,
+      motionInput,
+      [0, 0.18, 0.72, 0.96, 1, 0.86, 0.64, 0.42, 0],
+      Extrapolation.CLAMP
+    );
 
     return { translateX, translateY, scale, opacity };
   }
