@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/providers/ThemeProvider";
@@ -36,6 +36,47 @@ function compactMeta(parts: Array<string | undefined>) {
   return parts.filter(Boolean).join(" · ");
 }
 
+function getTimeLeftLabel(expiresAt?: string, expirationMode?: string) {
+  if (expirationMode === "manual") {
+    return "open";
+  }
+
+  if (!expiresAt) {
+    return "open";
+  }
+
+  const expiresAtMs = new Date(expiresAt).getTime();
+
+  if (!Number.isFinite(expiresAtMs)) {
+    return "open";
+  }
+
+  const diffMs = expiresAtMs - Date.now();
+
+  if (diffMs <= 0) {
+    return "ended";
+  }
+
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const totalHours = Math.floor(totalMinutes / 60);
+  const totalDays = Math.floor(totalHours / 24);
+
+  if (totalDays > 0) {
+    const hours = totalHours % 24;
+    return `${totalDays}d ${String(hours).padStart(2, "0")}h left`;
+  }
+
+  if (totalHours > 0) {
+    const minutes = totalMinutes % 60;
+    return `${String(totalHours).padStart(2, "0")}:${String(minutes).padStart(2, "0")} left`;
+  }
+
+  const minutes = totalMinutes;
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")} left`;
+}
+
 function TradeZone({
   kind,
   title,
@@ -66,13 +107,24 @@ function TradeZone({
 export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
   const { mode, palette } = useTheme();
   const cardBackground = mode === "dark" ? palette.surfaceAlt : palette.surface;
-  const cardBorder = mode === "light" ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.72)";
-  const badgeBackground = mode === "dark" ? palette.surface : palette.surfaceAlt;
+  const [, setClockTick] = useState(0);
+  const timeLeftText = useMemo(
+    () => getTimeLeftLabel(item.expiresAt, item.expirationMode),
+    [item.expiresAt, item.expirationMode, item.status, item.id]
+  );
 
   const cardPosition =
     index != null && total != null
       ? `${String(index + 1).padStart(2, "0")}/${String(total).padStart(2, "0")}`
       : null;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setClockTick((current) => current + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [item.id]);
 
   const needMeta = compactMeta([
     CATEGORY_LABELS[item.need.category],
@@ -92,11 +144,9 @@ export function TradeFeedCard({ item, index, total }: TradeFeedCardProps) {
         <Text style={[styles.cardKicker, { color: palette.muted }]} numberOfLines={1}>
           TRADE{cardPosition ? ` · ${cardPosition}` : ""}
         </Text>
-        {item.matchScore != null ? (
-          <Text style={[styles.matchText, { color: palette.text }]} numberOfLines={1}>
-            {item.matchScore}% match
-          </Text>
-        ) : null}
+        <Text style={[styles.timerText, { color: palette.text }]} numberOfLines={1}>
+          {timeLeftText}
+        </Text>
       </View>
 
       <TradeZone kind="need" title={item.need.title} meta={needMeta} />
@@ -135,10 +185,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1.1,
   },
-  matchText: {
+  timerText: {
     fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 0.1,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   zone: {
