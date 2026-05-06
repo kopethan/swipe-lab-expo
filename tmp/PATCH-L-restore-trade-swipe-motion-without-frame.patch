@@ -1,0 +1,80 @@
+diff --git a/features/square-stack-deck/squareStackDeck.model.ts b/features/square-stack-deck/squareStackDeck.model.ts
+index 3de3fd1..d8f7dd3 100644
+--- a/features/square-stack-deck/squareStackDeck.model.ts
++++ b/features/square-stack-deck/squareStackDeck.model.ts
+@@ -23,7 +23,7 @@ export type SquareStackLayoutMetrics = {
+   depthAllowanceY: number;
+ };
+
+-export type SquareStackDepthEffect = "stacked" | "flat";
++export type SquareStackDepthEffect = "stacked" | "flat" | "motionOnly";
+
+ export function clamp(value: number, min: number, max: number) {
+   "worklet";
+@@ -80,7 +80,26 @@ export function getSquareStackTransform(visualOffset: number, cardSize: number,
+
+   // LAB3 keeps the physical model but makes the depth almost invisible. The
+   // fourth-after card stays mounted as a hidden tail so it can slide into the
+   // third depth slot during a next swipe instead of appearing after release.
++  if (depthEffect === "motionOnly") {
++    const motionInput = [-1, -0.65, -0.08, 0, 1, 2, 3, 4];
++    const translateX = interpolate(
++      clampedOffset,
++      motionInput,
++      [-cardSize * 0.72, -cardSize * 0.46, 0, 0, 8, 14, 20, 26],
++      Extrapolation.CLAMP
++    );
++    const translateY = interpolate(
++      clampedOffset,
++      motionInput,
++      [-cardSize * 0.72, -cardSize * 0.46, 0, 0, 8, 14, 20, 26],
++      Extrapolation.CLAMP
++    );
++    const scale = interpolate(clampedOffset, motionInput, [0.88, 0.94, 0.998, 1, 0.992, 0.986, 0.98, 0.974], Extrapolation.CLAMP);
++    const opacity = interpolate(clampedOffset, motionInput, [0, 0.22, 0.94, 1, 0.985, 0.95, 0.88, 0], Extrapolation.CLAMP);
++
++    return { translateX, translateY, scale, opacity };
++  }
++
+   if (depthEffect === "flat") {
+     const flatInput = [-1, -0.08, 0, 1, 2, 3, 4];
+     const translateX = interpolate(
+@@ -138,7 +157,7 @@ export function getSquareStackShadowStyle(visualOffset: number, depthEffect: Squ
+   "worklet";
+
+   const clampedOffset = clamp(visualOffset, -1, 4);
+-  if (depthEffect === "flat") {
++  if (depthEffect === "flat" || depthEffect === "motionOnly") {
+     return { shadowOpacity: 0, shadowRadius: 0, elevation: 0 };
+   }
+
+diff --git a/features/square-stack-deck/squareStackDeck.types.ts b/features/square-stack-deck/squareStackDeck.types.ts
+index 4e7d357..6b88c0d 100644
+--- a/features/square-stack-deck/squareStackDeck.types.ts
++++ b/features/square-stack-deck/squareStackDeck.types.ts
+@@ -28,9 +28,10 @@ export type SquareStackDeckProps<TCard extends SquareStackDeckCard> = {
+   /**
+    * "flat" keeps cards mounted and ready, but removes the heavy gray frame /
+    * shadow trail while swiping. Use "stacked" only when a lab explicitly needs
+-   * the older depth visualization.
++   * the older depth visualization. "motionOnly" keeps the diagonal swipe/fade
++   * motion but removes the delayed frame/shadow artifact.
+    */
+-  depthEffect?: "flat" | "stacked";
++  depthEffect?: "flat" | "stacked" | "motionOnly";
+   /**
+    * Optional measured space from the screen that owns the deck. The square deck
+    * can calculate from the viewport, but a measured parent stage is more
+diff --git a/features/trade/components/TradeFeed.tsx b/features/trade/components/TradeFeed.tsx
+index 7f2a3aa..4c65de7 100644
+--- a/features/trade/components/TradeFeed.tsx
++++ b/features/trade/components/TradeFeed.tsx
+@@ -255,7 +255,7 @@ export function TradeFeed() {
+             maxCardSize={360}
+             renderWindow="all"
+             showDebugBadge={false}
+-            depthEffect="flat"
++            depthEffect="motionOnly"
+             onIndexChange={(_, item) => setActiveLabel(item.id)}
+             renderCard={({ card, index, total }) => (
+               <Pressable

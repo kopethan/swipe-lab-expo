@@ -1,0 +1,11 @@
+diff --git a/features/trade/components/TradeFeed.tsx b/features/trade/components/TradeFeed.tsx
+--- a/features/trade/components/TradeFeed.tsx
++++ b/features/trade/components/TradeFeed.tsx
+@@ -165,7 +165,7 @@ export function TradeFeed() {
+       <View style={styles.feedIntro}>
+         <Text style={[styles.feedKicker, { color: palette.muted }]}>DISCOVER</Text>
+-        <Text style={[styles.feedTitle, { color: palette.text }]}>Need <-> Offer feed</Text>
++        <Text style={[styles.feedTitle, { color: palette.text }]}>Need ↔ Offer feed</Text>
+         <Text style={[styles.feedText, { color: palette.muted }]}>
+           Browse compact trade cards. Vertical drags can scroll the page; intentional diagonal drags move through the
+           square stack.

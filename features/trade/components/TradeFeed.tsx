@@ -165,7 +165,7 @@ export function TradeFeed() {
     >
       <View style={styles.feedIntro}>
         <Text style={[styles.feedKicker, { color: palette.muted }]}>DISCOVER</Text>
-        <Text style={[styles.feedTitle, { color: palette.text }]}>Need <-> Offer feed</Text>
+        <Text style={[styles.feedTitle, { color: palette.text }]}>Need ↔ Offer feed</Text>
         <Text style={[styles.feedText, { color: palette.muted }]}>
           Browse compact trade cards. Vertical drags can scroll the page; intentional diagonal drags move through the
           square stack.
@@ -243,7 +243,7 @@ export function TradeFeed() {
             maxCardSize={360}
             renderWindow="all"
             showDebugBadge={false}
-            depthEffect="flat"
+            depthEffect="motionOnly"
             onIndexChange={(_, item) => setActiveLabel(item.id)}
             renderCard={({ card, index, total }) => (
               <Pressable

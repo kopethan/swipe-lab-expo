@@ -28,9 +28,10 @@ export type SquareStackDeckProps<TCard extends SquareStackDeckCard> = {
   /**
    * "flat" keeps cards mounted and ready, but removes the heavy gray frame /
    * shadow trail while swiping. Use "stacked" only when a lab explicitly needs
-   * the older depth visualization.
+   * the older depth visualization. "motionOnly" keeps the diagonal swipe/fade
+   * motion but removes the delayed frame/shadow artifact.
    */
-  depthEffect?: "flat" | "stacked";
+  depthEffect?: "flat" | "stacked" | "motionOnly";
   /**
    * Optional measured space from the screen that owns the deck. The square deck
    * can calculate from the viewport, but a measured parent stage is more
