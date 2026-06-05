@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Text, useColorScheme, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, useColorScheme, View } from "react-native";
+import { router } from "expo-router";
 
 import { WalletStack, type WalletCardSpec } from "@/components/wallet-stack";
 
@@ -8,22 +9,24 @@ function Row({
   value,
   hint,
   isDark,
+  onPress,
 }: {
   label: string;
   value: string;
   hint?: string;
   isDark: boolean;
+  onPress?: () => void;
 }) {
-  return (
-    <View
-      style={[
-        styles.row,
-        {
-          borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
-          backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
-        },
-      ]}
-    >
+  const rowStyle = [
+    styles.row,
+    {
+      borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+      backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+    },
+  ];
+
+  const content = (
+    <>
       <View style={styles.rowLeft}>
         <Text style={[styles.rowLabel, { color: isDark ? "rgba(255,255,255,0.92)" : "#0b0d0e" }]}>
           {label}
@@ -45,6 +48,25 @@ function Row({
       >
         {value}
       </Text>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${hint ?? value}`}
+        onPress={onPress}
+        style={({ pressed }) => [rowStyle, styles.rowInteractive, pressed ? styles.rowPressed : null]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={rowStyle}>
+      {content}
     </View>
   );
 }
@@ -96,6 +118,13 @@ export default function WalletStackTemplateScreen() {
         render: () => (
           <View style={{ gap: 10 }}>
             <Row isDark={isDark} label="Profile visibility" value="Public" hint="Who can see your profile." />
+            <Row
+              isDark={isDark}
+              label="User Guide"
+              value="Open"
+              hint="Replay the onboarding guide anytime."
+              onPress={() => router.push("/onboarding-guide?replay=1" as Parameters<typeof router.push>[0])}
+            />
             <Row isDark={isDark} label="Data export" value="Available" hint="Export your account data." />
             <Row isDark={isDark} label="Data deletion" value="Request" hint="Permanently delete your data." />
           </View>
@@ -164,6 +193,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  rowInteractive: {
+    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null),
+  },
+  rowPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.99 }],
   },
   rowLeft: { flex: 1, paddingRight: 10 },
   rowLabel: {

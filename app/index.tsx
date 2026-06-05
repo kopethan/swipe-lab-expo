@@ -13,6 +13,12 @@ export default function LabsIndexScreen() {
   const labs = useMemo<Lab[]>(
     () => [
       {
+        title: "Onboarding Guide",
+        description: "Mobile-first full-screen first-run guide with slide illustrations and skip flow.",
+        href: "/onboarding-guide",
+        badge: "new",
+      },
+      {
         title: "Action Bar",
         description: "Web docked action bar (bottom/center) + icon-collapse → panel morph.",
         href: "/action-bar",
@@ -103,7 +109,7 @@ export default function LabsIndexScreen() {
         {labs.map((lab) => (
           <Pressable
             key={lab.href}
-            onPress={() => router.push(lab.href)}
+            onPress={() => router.push(lab.href as Parameters<typeof router.push>[0])}
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           >
             <View style={styles.cardTopRow}>
