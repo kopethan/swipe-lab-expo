@@ -2,20 +2,26 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useTheme } from "@/providers/ThemeProvider";
+import { type ThemePreference, useTheme } from "@/providers/ThemeProvider";
 
 import { OnboardingActions } from "./OnboardingActions";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { ONBOARDING_GUIDE_SLIDES } from "./onboardingGuide.slides";
-import { OnboardingSlideIllustration } from "./OnboardingSlideIllustration";
+import { getOnboardingImageBackground, OnboardingSlideIllustration } from "./OnboardingSlideIllustration";
 
 type OnboardingGuideScreenProps = {
   replayMode?: boolean;
   onClose?: () => void;
 };
 
+const APPEARANCE_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
 export function OnboardingGuideScreen({ replayMode = false, onClose }: OnboardingGuideScreenProps) {
-  const { palette } = useTheme();
+  const { palette, preference, setPreference, systemMode } = useTheme();
   const { width, height } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isSkipped, setIsSkipped] = useState(false);
@@ -25,9 +31,10 @@ export function OnboardingGuideScreen({ replayMode = false, onClose }: Onboardin
   const isWideWeb = Platform.OS === "web" && width >= 760;
   const isCompactHeight = height < 700 && !isWideWeb;
   const maxContentWidth = isWideWeb ? Math.min(width - 64, 1120) : width >= 520 ? 430 : undefined;
-  const mobileIllustrationHeight = isWideWeb
+  const mobileIllustrationSize = isWideWeb
     ? undefined
-    : Math.max(210, Math.min(isCompactHeight ? 250 : 310, height * 0.38));
+    : Math.max(210, Math.min(width - 40, isCompactHeight ? 250 : 330, height * 0.38));
+  const onboardingBackground = getOnboardingImageBackground(palette.mode, slide.illustrationKey);
 
   const surfaceForPrimaryText = useMemo(
     () => (palette.mode === "dark" ? "#050506" : "#FFFFFF"),
@@ -57,7 +64,7 @@ export function OnboardingGuideScreen({ replayMode = false, onClose }: Onboardin
 
   if (isSkipped) {
     return (
-      <SafeAreaView style={[styles.screen, { backgroundColor: palette.background }]}>
+      <SafeAreaView style={[styles.screen, { backgroundColor: onboardingBackground }]}>
         <View style={styles.doneWrap}>
           <View style={[styles.doneCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <Text style={[styles.doneTitle, { color: palette.text }]}>Guide closed</Text>
@@ -85,7 +92,7 @@ export function OnboardingGuideScreen({ replayMode = false, onClose }: Onboardin
   }
 
   return (
-    <SafeAreaView style={[styles.screen, isWideWeb ? styles.screenWeb : null, { backgroundColor: palette.background }]}>
+    <SafeAreaView style={[styles.screen, isWideWeb ? styles.screenWeb : null, { backgroundColor: onboardingBackground }]}>
       <View style={[styles.topBar, isWideWeb ? styles.topBarWide : null, { maxWidth: maxContentWidth }]}>
         <Text style={[styles.brand, { color: palette.text }]}>Hellowhen</Text>
         <Pressable
@@ -98,24 +105,71 @@ export function OnboardingGuideScreen({ replayMode = false, onClose }: Onboardin
         </Pressable>
       </View>
 
+      <View
+        style={[
+          styles.appearanceWrap,
+          isWideWeb ? styles.appearanceWrapWide : null,
+          {
+            maxWidth: maxContentWidth,
+            backgroundColor: onboardingBackground,
+          },
+        ]}
+      >
+        <View
+          accessibilityRole="radiogroup"
+          accessibilityLabel={`Lab appearance mode. System is currently ${systemMode}.`}
+          style={[styles.appearanceControl, { borderColor: palette.border, backgroundColor: palette.surface }]}
+        >
+          {APPEARANCE_OPTIONS.map((option) => {
+            const isSelected = preference === option.value;
+
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
+                accessibilityLabel={`Use ${option.label.toLowerCase()} appearance`}
+                onPress={() => setPreference(option.value)}
+                style={({ pressed }) => [
+                  styles.appearanceOption,
+                  isSelected ? { backgroundColor: palette.text } : null,
+                  pressed ? styles.pressed : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.appearanceOptionText,
+                    { color: isSelected ? surfaceForPrimaryText : palette.muted },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       <ScrollView
+        style={{ backgroundColor: onboardingBackground }}
         contentContainerStyle={[
           styles.scrollContent,
           isWideWeb ? styles.scrollContentWide : null,
-          { maxWidth: maxContentWidth, paddingTop: isCompactHeight ? 12 : isWideWeb ? 24 : 24 },
+          {
+            backgroundColor: onboardingBackground,
+            maxWidth: maxContentWidth,
+            paddingTop: isCompactHeight ? 12 : isWideWeb ? 24 : 24,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.slideWrap, isWideWeb ? styles.slideWrapWide : null]}>
+        <View style={[styles.slideWrap, isWideWeb ? styles.slideWrapWide : null, { backgroundColor: onboardingBackground }]}>
           <OnboardingSlideIllustration
             slide={slide}
             large={isWideWeb}
-            frameHeight={mobileIllustrationHeight}
-            textColor={palette.text}
-            mutedColor={palette.muted}
-            surfaceColor={palette.surface}
-            surfaceAltColor={palette.surfaceAlt}
-            borderColor={palette.border}
+            frameSize={mobileIllustrationSize}
+            mode={palette.mode}
+            backgroundColor={onboardingBackground}
           />
 
           <Text style={[styles.caption, { color: palette.muted }]}>{slide.illustrationCaption}</Text>
@@ -178,7 +232,7 @@ export function OnboardingGuideScreen({ replayMode = false, onClose }: Onboardin
           styles.bottomBar,
           isWideWeb ? styles.bottomBarWide : null,
           {
-            backgroundColor: palette.background,
+            backgroundColor: onboardingBackground,
             borderTopColor: palette.border,
             maxWidth: maxContentWidth,
           },
@@ -238,6 +292,41 @@ const styles = StyleSheet.create({
   },
   topSkipText: {
     fontSize: 14,
+    fontWeight: "900",
+  },
+  appearanceWrap: {
+    width: "100%",
+    alignSelf: "center",
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    alignItems: "center",
+  },
+  appearanceWrapWide: {
+    paddingHorizontal: 0,
+    paddingBottom: 2,
+    alignItems: "flex-end",
+  },
+  appearanceControl: {
+    minHeight: 34,
+    borderWidth: 1,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 3,
+    gap: 3,
+  },
+  appearanceOption: {
+    minHeight: 28,
+    minWidth: 64,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null),
+  },
+  appearanceOptionText: {
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: "900",
   },
   scrollContent: {
