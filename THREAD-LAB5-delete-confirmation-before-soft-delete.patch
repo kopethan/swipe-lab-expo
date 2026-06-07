@@ -1,0 +1,206 @@
+diff --git a/features/thread-lab/ThreadLabScreen.tsx b/features/thread-lab/ThreadLabScreen.tsx
+index f2c6ddb..92c4870 100644
+--- a/features/thread-lab/ThreadLabScreen.tsx
++++ b/features/thread-lab/ThreadLabScreen.tsx
+@@ -2,6 +2,7 @@ import { Stack, router } from "expo-router";
+ import React, { useEffect, useMemo, useRef, useState } from "react";
+ import {
+   KeyboardAvoidingView,
++  Modal,
+   Platform,
+   Pressable,
+   ScrollView,
+@@ -626,6 +627,79 @@ function ThreadMenuScreen({
+   );
+ }
+ 
++function DeleteConfirmDialog({
++  kind,
++  visible,
++  onCancel,
++  onConfirm,
++}: {
++  kind: MessageKind;
++  visible: boolean;
++  onCancel: () => void;
++  onConfirm: () => void;
++}) {
++  const { palette } = useTheme();
++  const label = getMessageLabel(kind);
++
++  return (
++    <Modal
++      animationType="fade"
++      transparent
++      statusBarTranslucent
++      visible={visible}
++      onRequestClose={onCancel}
++    >
++      <View style={styles.modalOverlay}>
++        <View
++          style={[
++            styles.confirmDialog,
++            {
++              backgroundColor: palette.surface,
++              borderColor: palette.border,
++            },
++          ]}
++        >
++          <Text style={[styles.confirmTitle, { color: palette.text }]}>
++            Delete this {label}?
++          </Text>
++          <Text style={[styles.confirmText, { color: palette.muted }]}>
++            This will hide the {label} from the conversation. This cannot be
++            undone here.
++          </Text>
++          <View style={styles.confirmActions}>
++            <Pressable
++              onPress={onCancel}
++              accessibilityRole="button"
++              style={({ pressed }) => [
++                styles.confirmButton,
++                pressed ? styles.pressed : null,
++              ]}
++            >
++              <Text
++                style={[styles.confirmCancelText, { color: palette.muted }]}
++              >
++                Cancel
++              </Text>
++            </Pressable>
++            <Pressable
++              onPress={onConfirm}
++              accessibilityRole="button"
++              style={({ pressed }) => [
++                styles.confirmButton,
++                pressed ? styles.pressed : null,
++              ]}
++            >
++              <Text style={[styles.confirmDeleteText, { color: palette.text }]}>
++                Delete
++              </Text>
++            </Pressable>
++          </View>
++        </View>
++      </View>
++    </Modal>
++  );
++}
++
+ function MessagePreview({
+   kind,
+   message,
+@@ -1007,6 +1081,7 @@ export function ThreadLabScreen() {
+   const [privateDraft, setPrivateDraft] = useState("");
+   const [editDraft, setEditDraft] = useState("");
+   const [reportReason, setReportReason] = useState("");
++  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+ 
+   const participants = useMemo(
+     () => [threadLabScenario.owner, threadLabScenario.applicant],
+@@ -1053,8 +1128,13 @@ export function ThreadLabScreen() {
+     );
+   };
+ 
+-  const deleteSelectedMessage = () => {
++  const requestDeleteSelectedMessage = () => {
++    setDeleteConfirmVisible(true);
++  };
++
++  const confirmDeleteSelectedMessage = () => {
+     if (!actionTarget) {
++      setDeleteConfirmVisible(false);
+       return;
+     }
+     updateSelectedMessage((message) => ({
+@@ -1063,9 +1143,14 @@ export function ThreadLabScreen() {
+       deleted: true,
+       edited: false,
+     }));
++    setDeleteConfirmVisible(false);
+     setView(actionTarget.kind);
+   };
+ 
++  const cancelDeleteSelectedMessage = () => {
++    setDeleteConfirmVisible(false);
++  };
++
+   const startEditingSelectedMessage = () => {
+     if (!selectedMessage) {
+       return;
+@@ -1173,7 +1258,7 @@ export function ThreadLabScreen() {
+           message={selectedMessage}
+           participants={participants}
+           onBack={backToThread}
+-          onDelete={deleteSelectedMessage}
++          onDelete={requestDeleteSelectedMessage}
+           onEdit={startEditingSelectedMessage}
+           onReport={startReportSelectedMessage}
+         />
+@@ -1203,6 +1288,14 @@ export function ThreadLabScreen() {
+       ) : null}
+       {view === "details" ? <DetailsScreen onBack={backToThread} /> : null}
+       {view === "guide" ? <GuideScreen onBack={backToThread} /> : null}
++      {actionTarget ? (
++        <DeleteConfirmDialog
++          kind={actionTarget.kind}
++          visible={deleteConfirmVisible}
++          onCancel={cancelDeleteSelectedMessage}
++          onConfirm={confirmDeleteSelectedMessage}
++        />
++      ) : null}
+     </View>
+   );
+ }
+@@ -1571,6 +1664,51 @@ const styles = StyleSheet.create({
+     fontSize: 14,
+     fontWeight: "900",
+   },
++  modalOverlay: {
++    flex: 1,
++    alignItems: "center",
++    justifyContent: "center",
++    backgroundColor: "rgba(0, 0, 0, 0.45)",
++    paddingHorizontal: 24,
++  },
++  confirmDialog: {
++    width: "100%",
++    maxWidth: 340,
++    borderWidth: StyleSheet.hairlineWidth,
++    borderRadius: 24,
++    paddingHorizontal: 18,
++    paddingVertical: 18,
++    gap: 10,
++  },
++  confirmTitle: {
++    fontSize: 18,
++    fontWeight: "900",
++    letterSpacing: -0.2,
++  },
++  confirmText: {
++    fontSize: 13,
++    fontWeight: "700",
++    lineHeight: 19,
++  },
++  confirmActions: {
++    flexDirection: "row",
++    justifyContent: "flex-end",
++    gap: 18,
++    marginTop: 6,
++  },
++  confirmButton: {
++    minHeight: 40,
++    justifyContent: "center",
++    paddingHorizontal: 4,
++  },
++  confirmCancelText: {
++    fontSize: 14,
++    fontWeight: "900",
++  },
++  confirmDeleteText: {
++    fontSize: 14,
++    fontWeight: "900",
++  },
+   detailPageKicker: {
+     fontSize: 10,
+     fontWeight: "900",

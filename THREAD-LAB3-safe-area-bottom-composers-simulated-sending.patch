@@ -1,0 +1,799 @@
+diff --git a/app/_layout.tsx b/app/_layout.tsx
+index 1a09d01..afe7811 100644
+--- a/app/_layout.tsx
++++ b/app/_layout.tsx
+@@ -3,15 +3,18 @@ import "react-native-reanimated";
+ 
+ import { Stack } from "expo-router";
+ import { GestureHandlerRootView } from "react-native-gesture-handler";
++import { SafeAreaProvider } from "react-native-safe-area-context";
+ 
+ import { ThemeProvider } from "@/providers/ThemeProvider";
+ 
+ export default function Layout() {
+   return (
+     <GestureHandlerRootView style={{ flex: 1 }}>
+-      <ThemeProvider>
+-        <Stack />
+-      </ThemeProvider>
++      <SafeAreaProvider>
++        <ThemeProvider>
++          <Stack />
++        </ThemeProvider>
++      </SafeAreaProvider>
+     </GestureHandlerRootView>
+   );
+ }
+diff --git a/features/thread-lab/ThreadLabScreen.tsx b/features/thread-lab/ThreadLabScreen.tsx
+index 21dd8d5..f51b4be 100644
+--- a/features/thread-lab/ThreadLabScreen.tsx
++++ b/features/thread-lab/ThreadLabScreen.tsx
+@@ -1,13 +1,16 @@
+ import { Stack, router } from "expo-router";
+-import React, { useMemo, useState } from "react";
++import React, { useEffect, useMemo, useRef, useState } from "react";
+ import {
++  KeyboardAvoidingView,
+   Platform,
+   Pressable,
+   ScrollView,
+   StyleSheet,
+   Text,
++  TextInput,
+   View,
+ } from "react-native";
++import { useSafeAreaInsets } from "react-native-safe-area-context";
+ 
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+@@ -23,6 +26,20 @@ type ThreadLabView =
+   | "details"
+   | "guide";
+ 
++const currentUserId = threadLabScenario.owner.id;
++
++function buildLocalMessage(
++  body: string,
++  authorId = currentUserId,
++): ThreadMessage {
++  return {
++    id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
++    authorId,
++    body: body.trim(),
++    createdAtLabel: "now",
++  };
++}
++
+ function getParticipantName(
+   participants: ThreadParticipant[],
+   authorId: string,
+@@ -55,16 +72,27 @@ function ScreenHeader({
+   onMenu?: () => void;
+ }) {
+   const { mode, palette, toggleMode } = useTheme();
++  const insets = useSafeAreaInsets();
+ 
+   return (
+-    <View style={[styles.header, { borderBottomColor: palette.border }]}> 
++    <View
++      style={[
++        styles.header,
++        { borderBottomColor: palette.border, paddingTop: insets.top + 18 },
++      ]}
++    >
+       <View style={styles.headerTopRow}>
+         <Pressable
+           onPress={onBack ?? (() => router.back())}
+           accessibilityRole="button"
+-          style={({ pressed }) => [styles.textButton, pressed ? styles.pressed : null]}
++          style={({ pressed }) => [
++            styles.textButton,
++            pressed ? styles.pressed : null,
++          ]}
+         >
+-          <Text style={[styles.textButtonLabel, { color: palette.text }]}>‹ Labs</Text>
++          <Text style={[styles.textButtonLabel, { color: palette.text }]}>
++            ‹ Labs
++          </Text>
+         </Pressable>
+ 
+         {onMenu ? (
+@@ -72,17 +100,25 @@ function ScreenHeader({
+             onPress={onMenu}
+             accessibilityRole="button"
+             accessibilityLabel="Thread options"
+-            style={({ pressed }) => [styles.iconButton, pressed ? styles.pressed : null]}
++            style={({ pressed }) => [
++              styles.iconButton,
++              pressed ? styles.pressed : null,
++            ]}
+           >
+-            <Text style={[styles.iconButtonText, { color: palette.text }]}>⋯</Text>
++            <Text style={[styles.iconButtonText, { color: palette.text }]}>
++              ⋯
++            </Text>
+           </Pressable>
+         ) : (
+           <Pressable
+             onPress={toggleMode}
+             accessibilityRole="button"
+-            style={({ pressed }) => [styles.textButton, pressed ? styles.pressed : null]}
++            style={({ pressed }) => [
++              styles.textButton,
++              pressed ? styles.pressed : null,
++            ]}
+           >
+-            <Text style={[styles.textButtonLabel, { color: palette.text }]}> 
++            <Text style={[styles.textButtonLabel, { color: palette.text }]}>
+               {mode === "dark" ? "Light" : "Dark"}
+             </Text>
+           </Pressable>
+@@ -90,7 +126,9 @@ function ScreenHeader({
+       </View>
+ 
+       {eyebrow ? (
+-        <Text style={[styles.eyebrow, { color: palette.muted }]}>{eyebrow}</Text>
++        <Text style={[styles.eyebrow, { color: palette.muted }]}>
++          {eyebrow}
++        </Text>
+       ) : null}
+       <Text style={[styles.title, { color: palette.text }]}>{title}</Text>
+     </View>
+@@ -99,7 +137,11 @@ function ScreenHeader({
+ 
+ function FullBleedDivider() {
+   const { palette } = useTheme();
+-  return <View style={[styles.fullBleedDivider, { backgroundColor: palette.border }]} />;
++  return (
++    <View
++      style={[styles.fullBleedDivider, { backgroundColor: palette.border }]}
++    />
++  );
+ }
+ 
+ function RowButton({
+@@ -117,12 +159,19 @@ function RowButton({
+     <Pressable
+       onPress={onPress}
+       accessibilityRole="button"
+-      style={({ pressed }) => [styles.rowButton, pressed ? styles.pressed : null]}
++      style={({ pressed }) => [
++        styles.rowButton,
++        pressed ? styles.pressed : null,
++      ]}
+     >
+       <View style={styles.rowButtonTextBlock}>
+-        <Text style={[styles.rowButtonTitle, { color: palette.text }]}>{title}</Text>
++        <Text style={[styles.rowButtonTitle, { color: palette.text }]}>
++          {title}
++        </Text>
+         {subtitle ? (
+-          <Text style={[styles.rowButtonSubtitle, { color: palette.muted }]}>{subtitle}</Text>
++          <Text style={[styles.rowButtonSubtitle, { color: palette.muted }]}>
++            {subtitle}
++          </Text>
+         ) : null}
+       </View>
+       <Text style={[styles.chevron, { color: palette.muted }]}>›</Text>
+@@ -130,23 +179,38 @@ function RowButton({
+   );
+ }
+ 
+-function HomeScreen({ onOpen }: { onOpen: (view: "public" | "private") => void }) {
++function HomeScreen({
++  onOpen,
++}: {
++  onOpen: (view: "public" | "private") => void;
++}) {
+   const { palette } = useTheme();
+   const scenario = threadLabScenario;
+ 
+   return (
+     <>
+       <ScreenHeader title="Conversation lab" eyebrow="THREAD LAB" />
+-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
++      <ScrollView
++        showsVerticalScrollIndicator={false}
++        contentContainerStyle={styles.content}
++      >
+         <View style={styles.tradeIntro}>
+-          <Text style={[styles.homeTitle, { color: palette.text }]}>Public + private threads</Text>
+-          <Text style={[styles.homeTradeTitle, { color: palette.text }]}>{scenario.tradeTitle}</Text>
+-          <Text style={[styles.homeMeta, { color: palette.muted }]}>{scenario.tradeMeta}</Text>
++          <Text style={[styles.homeTitle, { color: palette.text }]}>
++            Public + private threads
++          </Text>
++          <Text style={[styles.homeTradeTitle, { color: palette.text }]}>
++            {scenario.tradeTitle}
++          </Text>
++          <Text style={[styles.homeMeta, { color: palette.muted }]}>
++            {scenario.tradeMeta}
++          </Text>
+         </View>
+ 
+         <FullBleedDivider />
+ 
+-        <Text style={[styles.sectionTitle, { color: palette.text }]}>Conversations</Text>
++        <Text style={[styles.sectionTitle, { color: palette.text }]}>
++          Conversations
++        </Text>
+ 
+         <RowButton
+           title="Public thread"
+@@ -178,56 +242,140 @@ function PublicMessageRow({
+ 
+   return (
+     <View style={styles.publicRow}>
+-      <View style={[styles.avatar, { backgroundColor: palette.surfaceAlt }]}> 
+-        <Text style={[styles.avatarText, { color: palette.text }]}>{initials}</Text>
++      <View style={[styles.avatar, { backgroundColor: palette.surfaceAlt }]}>
++        <Text style={[styles.avatarText, { color: palette.text }]}>
++          {initials}
++        </Text>
+       </View>
+       <View style={styles.publicBody}>
+         <View style={styles.messageMetaRow}>
+-          <Text style={[styles.messageAuthor, { color: palette.text }]}>{name}</Text>
+-          <Text style={[styles.messageTime, { color: palette.muted }]}>{message.createdAtLabel}</Text>
++          <Text style={[styles.messageAuthor, { color: palette.text }]}>
++            {name}
++          </Text>
++          <Text style={[styles.messageTime, { color: palette.muted }]}>
++            {message.createdAtLabel}
++          </Text>
+           {message.edited ? (
+-            <Text style={[styles.messageTime, { color: palette.muted }]}>Edited</Text>
++            <Text style={[styles.messageTime, { color: palette.muted }]}>
++              Edited
++            </Text>
+           ) : null}
+         </View>
+-        <Text style={[styles.publicMessageText, { color: palette.text }]}>{message.body}</Text>
++        <Text style={[styles.publicMessageText, { color: palette.text }]}>
++          {message.body}
++        </Text>
+       </View>
+       <Text style={[styles.moreText, { color: palette.muted }]}>⋯</Text>
+     </View>
+   );
+ }
+ 
++function ThreadComposer({
++  value,
++  placeholder,
++  onChangeText,
++  onSend,
++}: {
++  value: string;
++  placeholder: string;
++  onChangeText: (value: string) => void;
++  onSend: () => void;
++}) {
++  const { palette } = useTheme();
++  const insets = useSafeAreaInsets();
++  const canSend = value.trim().length > 0;
++
++  return (
++    <View
++      style={[
++        styles.bottomComposer,
++        {
++          borderTopColor: palette.border,
++          paddingBottom: Math.max(insets.bottom, 10),
++        },
++      ]}
++    >
++      <TextInput
++        value={value}
++        onChangeText={onChangeText}
++        placeholder={placeholder}
++        placeholderTextColor={palette.muted}
++        multiline
++        style={[styles.composerInput, { color: palette.text }]}
++      />
++      <Pressable
++        onPress={onSend}
++        disabled={!canSend}
++        accessibilityRole="button"
++        style={({ pressed }) => [
++          styles.sendButton,
++          pressed && canSend ? styles.pressed : null,
++          !canSend ? styles.disabled : null,
++        ]}
++      >
++        <Text style={[styles.sendText, { color: palette.text }]}>Send</Text>
++      </Pressable>
++    </View>
++  );
++}
++
+ function PublicThreadScreen({
++  messages,
++  draft,
+   onBack,
++  onChangeDraft,
+   onMenu,
++  onSend,
+ }: {
++  messages: ThreadMessage[];
++  draft: string;
+   onBack: () => void;
++  onChangeDraft: (value: string) => void;
+   onMenu: () => void;
++  onSend: () => void;
+ }) {
+-  const { palette } = useTheme();
+   const scenario = threadLabScenario;
++  const scrollRef = useRef<ScrollView>(null);
+   const participants = useMemo(
+     () => [scenario.owner, scenario.applicant],
+     [scenario.applicant, scenario.owner],
+   );
+ 
++  useEffect(() => {
++    const timeout = setTimeout(
++      () => scrollRef.current?.scrollToEnd({ animated: true }),
++      80,
++    );
++    return () => clearTimeout(timeout);
++  }, [messages.length]);
++
+   return (
+     <>
+       <ScreenHeader title="Public thread" onBack={onBack} onMenu={onMenu} />
+-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.threadContent}>
+-        <Text style={[styles.sectionTitle, { color: palette.text }]}>Conversations</Text>
+-        <View style={styles.plainComposer}>
+-          <Text style={[styles.plainComposerText, { color: palette.muted }]}>Write a public comment...</Text>
+-          <Text style={[styles.sendText, { color: palette.text }]}>Send</Text>
+-        </View>
+-        <FullBleedDivider />
+-
+-        {scenario.publicMessages.map((message) => (
+-          <React.Fragment key={message.id}>
+-            <PublicMessageRow message={message} participants={participants} />
+-            <FullBleedDivider />
+-          </React.Fragment>
+-        ))}
+-      </ScrollView>
++      <KeyboardAvoidingView
++        behavior={Platform.OS === "ios" ? "padding" : undefined}
++        style={styles.threadScreenBody}
++      >
++        <ScrollView
++          ref={scrollRef}
++          showsVerticalScrollIndicator={false}
++          contentContainerStyle={styles.threadMessagesContent}
++          keyboardShouldPersistTaps="handled"
++        >
++          {messages.map((message) => (
++            <React.Fragment key={message.id}>
++              <PublicMessageRow message={message} participants={participants} />
++              <FullBleedDivider />
++            </React.Fragment>
++          ))}
++        </ScrollView>
++        <ThreadComposer
++          value={draft}
++          onChangeText={onChangeDraft}
++          onSend={onSend}
++          placeholder="Write a public comment..."
++        />
++      </KeyboardAvoidingView>
+     </>
+   );
+ }
+@@ -245,7 +393,12 @@ function PrivateMessageBubble({
+   const name = getParticipantName(participants, message.authorId);
+ 
+   return (
+-    <View style={[styles.privateBubbleRow, mine ? styles.privateBubbleRowMine : styles.privateBubbleRowOther]}>
++    <View
++      style={[
++        styles.privateBubbleRow,
++        mine ? styles.privateBubbleRowMine : styles.privateBubbleRowOther,
++      ]}
++    >
+       <View
+         style={[
+           styles.privateBubble,
+@@ -255,13 +408,28 @@ function PrivateMessageBubble({
+           },
+         ]}
+       >
+-        <Text style={[styles.privateAuthor, { color: mine ? palette.background : palette.muted }]}>
++        <Text
++          style={[
++            styles.privateAuthor,
++            { color: mine ? palette.background : palette.muted },
++          ]}
++        >
+           {mine ? "You" : name}
+         </Text>
+-        <Text style={[styles.privateMessageText, { color: mine ? palette.background : palette.text }]}>
++        <Text
++          style={[
++            styles.privateMessageText,
++            { color: mine ? palette.background : palette.text },
++          ]}
++        >
+           {message.body}
+         </Text>
+-        <Text style={[styles.privateTime, { color: mine ? palette.background : palette.muted }]}>
++        <Text
++          style={[
++            styles.privateTime,
++            { color: mine ? palette.background : palette.muted },
++          ]}
++        >
+           {message.createdAtLabel}
+           {message.edited ? " · edited" : ""}
+         </Text>
+@@ -271,34 +439,65 @@ function PrivateMessageBubble({
+ }
+ 
+ function PrivateThreadScreen({
++  messages,
++  draft,
+   onBack,
++  onChangeDraft,
+   onMenu,
++  onSend,
+ }: {
++  messages: ThreadMessage[];
++  draft: string;
+   onBack: () => void;
++  onChangeDraft: (value: string) => void;
+   onMenu: () => void;
++  onSend: () => void;
+ }) {
+   const { palette } = useTheme();
+   const scenario = threadLabScenario;
++  const scrollRef = useRef<ScrollView>(null);
+   const participants = useMemo(
+     () => [scenario.owner, scenario.applicant],
+     [scenario.applicant, scenario.owner],
+   );
+ 
++  useEffect(() => {
++    const timeout = setTimeout(
++      () => scrollRef.current?.scrollToEnd({ animated: true }),
++      80,
++    );
++    return () => clearTimeout(timeout);
++  }, [messages.length]);
++
+   return (
+     <>
+       <ScreenHeader title="Private thread" onBack={onBack} onMenu={onMenu} />
+-      <View style={styles.privateScreenBody}>
+-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.privateMessagesContent}>
++      <KeyboardAvoidingView
++        behavior={Platform.OS === "ios" ? "padding" : undefined}
++        style={styles.threadScreenBody}
++      >
++        <ScrollView
++          ref={scrollRef}
++          showsVerticalScrollIndicator={false}
++          contentContainerStyle={styles.privateMessagesContent}
++          keyboardShouldPersistTaps="handled"
++        >
+           <Text style={[styles.dayLabel, { color: palette.muted }]}>Today</Text>
+-          {scenario.privateMessages.map((message) => (
+-            <PrivateMessageBubble key={message.id} message={message} participants={participants} />
++          {messages.map((message) => (
++            <PrivateMessageBubble
++              key={message.id}
++              message={message}
++              participants={participants}
++            />
+           ))}
+         </ScrollView>
+-        <View style={[styles.bottomComposer, { borderTopColor: palette.border }]}> 
+-          <Text style={[styles.bottomComposerText, { color: palette.muted }]}>Message...</Text>
+-          <Text style={[styles.sendText, { color: palette.text }]}>Send</Text>
+-        </View>
+-      </View>
++        <ThreadComposer
++          value={draft}
++          onChangeText={onChangeDraft}
++          onSend={onSend}
++          placeholder="Message..."
++        />
++      </KeyboardAvoidingView>
+     </>
+   );
+ }
+@@ -319,11 +518,24 @@ function ThreadMenuScreen({
+   return (
+     <>
+       <ScreenHeader title="Thread options" onBack={onBack} />
+-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+-        <Text style={[styles.sectionTitle, { color: palette.text }]}>What do you want to see?</Text>
+-        <RowButton title="See details" subtitle="Trade, proposal, or deal context" onPress={onOpenDetails} />
++      <ScrollView
++        showsVerticalScrollIndicator={false}
++        contentContainerStyle={styles.content}
++      >
++        <Text style={[styles.sectionTitle, { color: palette.text }]}>
++          What do you want to see?
++        </Text>
++        <RowButton
++          title="See details"
++          subtitle="Trade, proposal, or deal context"
++          onPress={onOpenDetails}
++        />
+         <FullBleedDivider />
+-        <RowButton title="See guide" subtitle="How this thread type works" onPress={onOpenGuide} />
++        <RowButton
++          title="See guide"
++          subtitle="How this thread type works"
++          onPress={onOpenGuide}
++        />
+         <FullBleedDivider />
+         <RowButton
+           title={kind === "public" ? "Report thread" : "Report problem"}
+@@ -343,33 +555,60 @@ function DetailsScreen({ onBack }: { onBack: () => void }) {
+   return (
+     <>
+       <ScreenHeader title="Details" onBack={onBack} />
+-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+-        <Text style={[styles.detailPageKicker, { color: palette.muted }]}>OPEN · TRADE</Text>
+-        <Text style={[styles.detailPageTitle, { color: palette.text }]}>{scenario.tradeTitle}</Text>
+-        <Text style={[styles.detailPageMeta, { color: palette.muted }]}>{scenario.tradeMeta}</Text>
++      <ScrollView
++        showsVerticalScrollIndicator={false}
++        contentContainerStyle={styles.content}
++      >
++        <Text style={[styles.detailPageKicker, { color: palette.muted }]}>
++          OPEN · TRADE
++        </Text>
++        <Text style={[styles.detailPageTitle, { color: palette.text }]}>
++          {scenario.tradeTitle}
++        </Text>
++        <Text style={[styles.detailPageMeta, { color: palette.muted }]}>
++          {scenario.tradeMeta}
++        </Text>
+ 
+         <FullBleedDivider />
+ 
+         <View style={styles.detailBlock}>
+-          <Text style={[styles.detailPageKicker, { color: palette.muted }]}>I NEED</Text>
+-          <Text style={[styles.detailBlockTitle, { color: palette.text }]}>{scenario.needTitle}</Text>
+-          <Text style={[styles.detailText, { color: palette.text }]}>{scenario.needDescription}</Text>
++          <Text style={[styles.detailPageKicker, { color: palette.muted }]}>
++            I NEED
++          </Text>
++          <Text style={[styles.detailBlockTitle, { color: palette.text }]}>
++            {scenario.needTitle}
++          </Text>
++          <Text style={[styles.detailText, { color: palette.text }]}>
++            {scenario.needDescription}
++          </Text>
+         </View>
+ 
+         <FullBleedDivider />
+ 
+         <View style={styles.detailBlock}>
+-          <Text style={[styles.detailPageKicker, { color: palette.muted }]}>I OFFER</Text>
+-          <Text style={[styles.detailBlockTitle, { color: palette.text }]}>{scenario.offerTitle}</Text>
+-          <Text style={[styles.detailText, { color: palette.text }]}>{scenario.offerDescription}</Text>
++          <Text style={[styles.detailPageKicker, { color: palette.muted }]}>
++            I OFFER
++          </Text>
++          <Text style={[styles.detailBlockTitle, { color: palette.text }]}>
++            {scenario.offerTitle}
++          </Text>
++          <Text style={[styles.detailText, { color: palette.text }]}>
++            {scenario.offerDescription}
++          </Text>
+         </View>
+ 
+         <FullBleedDivider />
+ 
+         <View style={styles.detailBlock}>
+-          <Text style={[styles.detailPageKicker, { color: palette.muted }]}>PRIVATE CONTEXT</Text>
+-          <Text style={[styles.detailText, { color: palette.text }]}>{scenario.proposalSummary}</Text>
+-          <Text style={[styles.detailText, { color: palette.muted }]}>{scenario.acceptedDealSummary}</Text>
++          <Text style={[styles.detailPageKicker, { color: palette.muted }]}>
++            PRIVATE CONTEXT
++          </Text>
++          <Text style={[styles.detailText, { color: palette.text }]}>
++            {scenario.proposalSummary}
++          </Text>
++          <Text style={[styles.detailText, { color: palette.muted }]}>
++            {scenario.acceptedDealSummary}
++          </Text>
+         </View>
+       </ScrollView>
+     </>
+@@ -382,12 +621,25 @@ function GuideScreen({ onBack }: { onBack: () => void }) {
+   return (
+     <>
+       <ScreenHeader title="Thread guide" onBack={onBack} />
+-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+-        <Text style={[styles.sectionTitle, { color: palette.text }]}>Public thread</Text>
+-        <Text style={[styles.guideText, { color: palette.muted }]}>Public comments are visible to people viewing the trade. Use them for simple questions and clarifications.</Text>
++      <ScrollView
++        showsVerticalScrollIndicator={false}
++        contentContainerStyle={styles.content}
++      >
++        <Text style={[styles.sectionTitle, { color: palette.text }]}>
++          Public thread
++        </Text>
++        <Text style={[styles.guideText, { color: palette.muted }]}>
++          Public comments are visible to people viewing the trade. Use them for
++          simple questions and clarifications.
++        </Text>
+         <FullBleedDivider />
+-        <Text style={[styles.sectionTitle, { color: palette.text }]}>Private thread</Text>
+-        <Text style={[styles.guideText, { color: palette.muted }]}>Private messages are for proposal and deal discussion between the two users. Details stay outside the chat by default.</Text>
++        <Text style={[styles.sectionTitle, { color: palette.text }]}>
++          Private thread
++        </Text>
++        <Text style={[styles.guideText, { color: palette.muted }]}>
++          Private messages are for proposal and deal discussion between the two
++          users. Details stay outside the chat by default.
++        </Text>
+         <FullBleedDivider />
+       </ScrollView>
+     </>
+@@ -398,6 +650,14 @@ export function ThreadLabScreen() {
+   const { palette } = useTheme();
+   const [view, setView] = useState<ThreadLabView>("home");
+   const [threadKind, setThreadKind] = useState<"public" | "private">("public");
++  const [publicMessages, setPublicMessages] = useState<ThreadMessage[]>(
++    threadLabScenario.publicMessages,
++  );
++  const [privateMessages, setPrivateMessages] = useState<ThreadMessage[]>(
++    threadLabScenario.privateMessages,
++  );
++  const [publicDraft, setPublicDraft] = useState("");
++  const [privateDraft, setPrivateDraft] = useState("");
+ 
+   const openThread = (kind: "public" | "private") => {
+     setThreadKind(kind);
+@@ -411,17 +671,69 @@ export function ThreadLabScreen() {
+ 
+   const backToThread = () => setView(threadKind);
+ 
++  const sendPublicMessage = () => {
++    const nextMessage = publicDraft.trim();
++    if (!nextMessage) {
++      return;
++    }
++    setPublicMessages((messages) => [
++      ...messages,
++      buildLocalMessage(nextMessage),
++    ]);
++    setPublicDraft("");
++  };
++
++  const sendPrivateMessage = () => {
++    const nextMessage = privateDraft.trim();
++    if (!nextMessage) {
++      return;
++    }
++    setPrivateMessages((messages) => [
++      ...messages,
++      buildLocalMessage(nextMessage),
++    ]);
++    setPrivateDraft("");
++  };
++
+   return (
+-    <View style={[styles.screen, { backgroundColor: palette.background }]}> 
++    <View style={[styles.screen, { backgroundColor: palette.background }]}>
+       <Stack.Screen options={{ title: "Thread Lab", headerShown: false }} />
+       {view === "home" ? <HomeScreen onOpen={openThread} /> : null}
+-      {view === "public" ? <PublicThreadScreen onBack={() => setView("home")} onMenu={() => openMenu("public")} /> : null}
+-      {view === "private" ? <PrivateThreadScreen onBack={() => setView("home")} onMenu={() => openMenu("private")} /> : null}
++      {view === "public" ? (
++        <PublicThreadScreen
++          messages={publicMessages}
++          draft={publicDraft}
++          onBack={() => setView("home")}
++          onChangeDraft={setPublicDraft}
++          onMenu={() => openMenu("public")}
++          onSend={sendPublicMessage}
++        />
++      ) : null}
++      {view === "private" ? (
++        <PrivateThreadScreen
++          messages={privateMessages}
++          draft={privateDraft}
++          onBack={() => setView("home")}
++          onChangeDraft={setPrivateDraft}
++          onMenu={() => openMenu("private")}
++          onSend={sendPrivateMessage}
++        />
++      ) : null}
+       {view === "public-menu" ? (
+-        <ThreadMenuScreen kind="public" onBack={backToThread} onOpenDetails={() => setView("details")} onOpenGuide={() => setView("guide")} />
++        <ThreadMenuScreen
++          kind="public"
++          onBack={backToThread}
++          onOpenDetails={() => setView("details")}
++          onOpenGuide={() => setView("guide")}
++        />
+       ) : null}
+       {view === "private-menu" ? (
+-        <ThreadMenuScreen kind="private" onBack={backToThread} onOpenDetails={() => setView("details")} onOpenGuide={() => setView("guide")} />
++        <ThreadMenuScreen
++          kind="private"
++          onBack={backToThread}
++          onOpenDetails={() => setView("details")}
++          onOpenGuide={() => setView("guide")}
++        />
+       ) : null}
+       {view === "details" ? <DetailsScreen onBack={backToThread} /> : null}
+       {view === "guide" ? <GuideScreen onBack={backToThread} /> : null}
+@@ -439,7 +751,6 @@ const styles = StyleSheet.create({
+     borderBottomWidth: StyleSheet.hairlineWidth,
+     paddingHorizontal: 18,
+     paddingBottom: 16,
+-    paddingTop: Platform.select({ ios: 18, default: 16 }),
+     gap: 7,
+   },
+   headerTopRow: {
+@@ -473,6 +784,9 @@ const styles = StyleSheet.create({
+   pressed: {
+     opacity: 0.66,
+   },
++  disabled: {
++    opacity: 0.45,
++  },
+   eyebrow: {
+     marginTop: 2,
+     fontSize: 10,
+@@ -550,6 +864,15 @@ const styles = StyleSheet.create({
+     fontSize: 28,
+     fontWeight: "700",
+   },
++  threadScreenBody: {
++    flex: 1,
++  },
++  threadMessagesContent: {
++    paddingHorizontal: 18,
++    paddingBottom: 20,
++    paddingTop: 6,
++    gap: 0,
++  },
+   plainComposer: {
+     minHeight: 48,
+     flexDirection: "row",
+@@ -667,11 +990,11 @@ const styles = StyleSheet.create({
+   bottomComposer: {
+     minHeight: 58,
+     flexDirection: "row",
+-    alignItems: "center",
++    alignItems: "flex-end",
+     justifyContent: "space-between",
+     borderTopWidth: StyleSheet.hairlineWidth,
+     paddingHorizontal: 18,
+-    paddingVertical: 12,
++    paddingTop: 10,
+     gap: 14,
+   },
+   bottomComposerText: {
+@@ -679,6 +1002,20 @@ const styles = StyleSheet.create({
+     fontSize: 13,
+     fontWeight: "800",
+   },
++  composerInput: {
++    flex: 1,
++    maxHeight: 104,
++    minHeight: 38,
++    paddingTop: 9,
++    paddingBottom: 8,
++    fontSize: 13,
++    fontWeight: "800",
++  },
++  sendButton: {
++    minHeight: 38,
++    justifyContent: "center",
++    paddingLeft: 8,
++  },
+   detailPageKicker: {
+     fontSize: 10,
+     fontWeight: "900",
