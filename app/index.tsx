@@ -46,7 +46,7 @@ export default function LabsIndexScreen() {
       },
       {
         title: "Thread Lab",
-        description: "Isolated public comment rows + private bubble thread environment for trade conversations.",
+        description: "Real entry flow for public comments and private bubble threads.",
         href: "/thread-lab",
         badge: "new",
       },
