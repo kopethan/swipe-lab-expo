@@ -434,11 +434,9 @@ const styles = StyleSheet.create({
   webStage: {
     // Prevent browser scroll/pinch from stealing the gesture.
     // (RN-web will pass this through to the DOM.)
-    // @ts-expect-error web-only
     touchAction: "none",
   },
   webCard: {
-    // @ts-expect-error web-only
     boxShadow: "0 24px 60px rgba(0,0,0,0.40)",
   },
 });

@@ -85,6 +85,6 @@ const styles = StyleSheet.create({
   note: {
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: "650",
+    fontWeight: "600",
   },
 });

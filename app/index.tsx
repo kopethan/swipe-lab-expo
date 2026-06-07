@@ -45,6 +45,12 @@ export default function LabsIndexScreen() {
         href: "/trade",
       },
       {
+        title: "Thread Lab",
+        description: "Isolated public comment rows + private bubble thread environment for trade conversations.",
+        href: "/thread-lab",
+        badge: "new",
+      },
+      {
         title: "Square Deck Lab",
         description: "Isolated square-card stack using one continuous diagonal swipe model.",
         href: "/square-deck",

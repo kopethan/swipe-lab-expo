@@ -278,8 +278,7 @@ function WalletDeckCard({
           elevation: it.depth === 0 ? 18 : 10,
         },
         Platform.OS === "web"
-          ? // @ts-expect-error web-only
-            ({ boxShadow: webShadow } as any)
+          ? ({ boxShadow: webShadow } as any)
           : null,
         cardStyle,
       ]}
@@ -873,7 +872,6 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
   },
   webStage: {
-    // @ts-expect-error web-only
     touchAction: "none",
   },
 });

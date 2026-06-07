@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   check: {
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: "650",
+    fontWeight: "600",
   },
   deckStage: {
     height: 520,

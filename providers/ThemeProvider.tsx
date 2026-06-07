@@ -16,6 +16,7 @@ export type ThemePalette = {
   text: string;
   muted: string;
   border: string;
+  danger: string;
 
   // Deck depth surfaces
   deckSurface0: string;
@@ -46,6 +47,7 @@ function resolvePalette(mode: ThemeMode): ThemePalette {
   const text = isLight ? "#0f0f0f" : "#f1f1f1";
   const muted = isLight ? "#606060" : "#a6a6a6";
   const border = isLight ? "#e5e5e5" : "#303030";
+  const danger = isLight ? "#b42318" : "#ff6b5f";
 
   // Match the main project's feed deck ramp (opaque only)
   const deckSurface0 = surface;
@@ -61,6 +63,7 @@ function resolvePalette(mode: ThemeMode): ThemePalette {
     text,
     muted,
     border,
+    danger,
     deckSurface0,
     deckSurface1,
     deckSurface2,

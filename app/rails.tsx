@@ -223,24 +223,26 @@ export default function RailSettingsTemplateScreen() {
     };
   }, [showRails]);
 
+  const webMouseMoveProps =
+    Platform.OS === "web"
+      ? {
+          onMouseMove: (e: any) => {
+            // Edge-hover hint: if pointer is near edges, keep rails visible.
+            const x = e?.nativeEvent?.locationX;
+            if (typeof x !== "number") return;
+            const edge = 88;
+            if (x <= edge) showRails("left");
+            else if (x >= W - edge) showRails("right");
+          },
+        }
+      : {};
+
   return (
-    <View
-      style={styles.page}
-      onMouseMove={
-        Platform.OS === "web"
-          ? (e: any) => {
-              // Edge-hover hint: if pointer is near edges, keep rails visible.
-              const x = e?.nativeEvent?.locationX;
-              if (typeof x !== "number") return;
-              const edge = 88;
-              if (x <= edge) showRails("left");
-              else if (x >= W - edge) showRails("right");
-            }
-          : undefined
-      }
-    >
+    <View style={styles.page} {...webMouseMoveProps}>
       <ScrollView
-        ref={(r) => (scrollRef.current = r)}
+        ref={(r) => {
+          scrollRef.current = r;
+        }}
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingVertical: 24 }]}
         showsVerticalScrollIndicator={false}

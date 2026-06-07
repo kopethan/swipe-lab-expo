@@ -30,6 +30,7 @@ const STATUS_LABELS: Record<TradeStatus, string> = {
   active: "Active",
   paused: "Paused",
   matched: "Matched",
+  expired: "Expired",
   closed: "Closed",
 };
 
