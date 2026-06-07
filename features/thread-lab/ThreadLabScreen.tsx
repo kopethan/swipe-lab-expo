@@ -138,6 +138,10 @@ function TradeDetailsPanel({
 }) {
   const { palette } = useTheme();
   const scenario = threadLabScenario;
+  const [agreementOpen, setAgreementOpen] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(true);
 
   return (
     <View
@@ -175,49 +179,101 @@ function TradeDetailsPanel({
         </Pressable>
       </View>
 
-      <View style={styles.detailZone}>
-        <Text style={[styles.detailKicker, { color: palette.muted }]}>
-          I NEED
-        </Text>
-        <Text style={[styles.detailTitle, { color: palette.text }]}>
-          {scenario.needTitle}
-        </Text>
-        <Text style={[styles.detailText, { color: palette.muted }]}>
-          {scenario.needDescription}
-        </Text>
-      </View>
-
-      <View
-        style={[styles.detailDivider, { backgroundColor: palette.border }]}
-      />
-
-      <View style={styles.detailZone}>
-        <Text style={[styles.detailKicker, { color: palette.muted }]}>
-          I OFFER
-        </Text>
-        <Text style={[styles.detailTitle, { color: palette.text }]}>
-          {scenario.offerTitle}
-        </Text>
-        <Text style={[styles.detailText, { color: palette.muted }]}>
-          {scenario.offerDescription}
-        </Text>
-      </View>
-
       {mode === "private" ? (
         <>
           <View
-            style={[styles.detailDivider, { backgroundColor: palette.border }]}
-          />
-          <View style={styles.detailZone}>
-            <Text style={[styles.detailKicker, { color: palette.muted }]}>
-              PRIVATE DEAL CONTEXT
+            style={[
+              styles.dealSummaryCard,
+              { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
+            ]}
+          >
+            <View style={styles.dealSummaryHeader}>
+              <View
+                style={[
+                  styles.statusPill,
+                  { borderColor: palette.border, backgroundColor: palette.surface },
+                ]}
+              >
+                <Text style={[styles.statusPillText, { color: palette.text }]}>
+                  Accepted deal
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.statusPill,
+                  { borderColor: palette.border, backgroundColor: palette.surface },
+                ]}
+              >
+                <Text style={[styles.statusPillText, { color: palette.text }]}>
+                  In progress
+                </Text>
+              </View>
+            </View>
+            <Text style={[styles.dealSummaryTitle, { color: palette.text }]}>
+              {scenario.tradeTitle}
             </Text>
-            <Text style={[styles.detailText, { color: palette.text }]}>
-              {scenario.proposalSummary}
+            <Text style={[styles.dealSummaryMeta, { color: palette.muted }]}>
+              Accepted deal snapshot: actions stay available without forcing the
+              full agreement into the conversation.
             </Text>
-            <Text style={[styles.detailText, { color: palette.muted }]}>
-              {scenario.acceptedDealSummary}
-            </Text>
+          </View>
+
+          <DealCollapsibleSection
+            title="Agreement"
+            body="Need, offer, and accepted proposal message are grouped here."
+            badge="Snapshot"
+            open={agreementOpen}
+            onToggle={() => setAgreementOpen((value) => !value)}
+          >
+            <View style={styles.detailZone}>
+              <Text style={[styles.detailKicker, { color: palette.muted }]}>
+                I NEED
+              </Text>
+              <Text style={[styles.detailTitle, { color: palette.text }]}>
+                {scenario.needTitle}
+              </Text>
+              <Text style={[styles.detailText, { color: palette.muted }]}>
+                {scenario.needDescription}
+              </Text>
+            </View>
+
+            <View
+              style={[styles.detailDivider, { backgroundColor: palette.border }]}
+            />
+
+            <View style={styles.detailZone}>
+              <Text style={[styles.detailKicker, { color: palette.muted }]}>
+                I OFFER
+              </Text>
+              <Text style={[styles.detailTitle, { color: palette.text }]}>
+                {scenario.offerTitle}
+              </Text>
+              <Text style={[styles.detailText, { color: palette.muted }]}>
+                {scenario.offerDescription}
+              </Text>
+            </View>
+
+            <View
+              style={[styles.detailDivider, { backgroundColor: palette.border }]}
+            />
+
+            <View style={styles.detailZone}>
+              <Text style={[styles.detailKicker, { color: palette.muted }]}>
+                ACCEPTED PROPOSAL MESSAGE
+              </Text>
+              <Text style={[styles.detailText, { color: palette.text }]}>
+                {scenario.acceptedDealSummary}
+              </Text>
+            </View>
+          </DealCollapsibleSection>
+
+          <DealCollapsibleSection
+            title="Safety checklist"
+            body="Open this before submitting, confirming, or reporting the deal."
+            badge={`${scenario.safetyNotes.length} checks`}
+            open={safetyOpen}
+            onToggle={() => setSafetyOpen((value) => !value)}
+          >
             <View style={styles.safetyList}>
               {scenario.safetyNotes.map((note) => (
                 <Text
@@ -228,9 +284,204 @@ function TradeDetailsPanel({
                 </Text>
               ))}
             </View>
+          </DealCollapsibleSection>
+
+          <DealCollapsibleSection
+            title="Progress"
+            body="Accepted, in progress, submitted, and completed states stay visible on demand."
+            badge="In progress"
+            open={progressOpen}
+            onToggle={() => setProgressOpen((value) => !value)}
+          >
+            <View style={styles.progressList}>
+              {["Accepted", "In progress", "Submitted", "Completed"].map(
+                (step, index) => (
+                  <View key={step} style={styles.progressStep}>
+                    <View
+                      style={[
+                        styles.progressDot,
+                        {
+                          borderColor: palette.border,
+                          backgroundColor:
+                            index <= 1 ? palette.text : palette.surface,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.progressDotText,
+                          {
+                            color:
+                              index <= 1 ? palette.background : palette.muted,
+                          },
+                        ]}
+                      >
+                        {index + 1}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.progressLabel,
+                        { color: index <= 1 ? palette.text : palette.muted },
+                      ]}
+                    >
+                      {step}
+                    </Text>
+                  </View>
+                ),
+              )}
+            </View>
+          </DealCollapsibleSection>
+
+          <DealCollapsibleSection
+            title="Safe actions"
+            body="Actions are shown only when your role and the current status allow them."
+            badge="Available"
+            open={actionsOpen}
+            onToggle={() => setActionsOpen((value) => !value)}
+          >
+            <View style={styles.actionRowWrap}>
+              {["Mark delivered", "Report problem", "Cancel accepted trade"].map(
+                (label, index) => (
+                  <View
+                    key={label}
+                    style={[
+                      styles.mockActionButton,
+                      {
+                        borderColor: palette.border,
+                        backgroundColor:
+                          index === 0 ? palette.text : palette.surface,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.mockActionText,
+                        {
+                          color:
+                            index === 0 ? palette.background : palette.text,
+                        },
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </View>
+                ),
+              )}
+            </View>
+          </DealCollapsibleSection>
+        </>
+      ) : (
+        <>
+          <View style={styles.detailZone}>
+            <Text style={[styles.detailKicker, { color: palette.muted }]}>
+              I NEED
+            </Text>
+            <Text style={[styles.detailTitle, { color: palette.text }]}>
+              {scenario.needTitle}
+            </Text>
+            <Text style={[styles.detailText, { color: palette.muted }]}>
+              {scenario.needDescription}
+            </Text>
+          </View>
+
+          <View
+            style={[styles.detailDivider, { backgroundColor: palette.border }]}
+          />
+
+          <View style={styles.detailZone}>
+            <Text style={[styles.detailKicker, { color: palette.muted }]}>
+              I OFFER
+            </Text>
+            <Text style={[styles.detailTitle, { color: palette.text }]}>
+              {scenario.offerTitle}
+            </Text>
+            <Text style={[styles.detailText, { color: palette.muted }]}>
+              {scenario.offerDescription}
+            </Text>
           </View>
         </>
-      ) : null}
+      )}
+    </View>
+  );
+}
+
+function DealCollapsibleSection({
+  title,
+  body,
+  badge,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  body: string;
+  badge: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const { palette } = useTheme();
+
+  return (
+    <View
+      style={[
+        styles.dealCollapsedSection,
+        { borderColor: palette.border, backgroundColor: palette.surface },
+      ]}
+    >
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        style={({ pressed }) => [
+          styles.dealCollapsedHeader,
+          pressed ? styles.pressed : null,
+        ]}
+      >
+        <View style={styles.dealCollapsedCopy}>
+          <View style={styles.dealCollapsedTitleRow}>
+            <Text style={[styles.dealCollapsedTitle, { color: palette.text }]}>
+              {title}
+            </Text>
+            <View
+              style={[
+                styles.dealCollapsedBadge,
+                {
+                  borderColor: palette.border,
+                  backgroundColor: open ? palette.text : palette.surfaceAlt,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.dealCollapsedBadgeText,
+                  { color: open ? palette.background : palette.muted },
+                ]}
+              >
+                {badge}
+              </Text>
+            </View>
+          </View>
+          <Text
+            style={[styles.dealCollapsedBody, { color: palette.muted }]}
+            numberOfLines={open ? 3 : 2}
+          >
+            {body}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.dealCollapsedIcon,
+            { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
+          ]}
+        >
+          <Text style={[styles.dealCollapsedIconText, { color: palette.text }]}>
+            {open ? "^" : "v"}
+          </Text>
+        </View>
+      </Pressable>
+      {open ? <View style={styles.dealCollapsedContent}>{children}</View> : null}
     </View>
   );
 }
@@ -832,6 +1083,91 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     lineHeight: 18,
   },
+  dealSummaryCard: {
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 13,
+    gap: 8,
+  },
+  dealSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  dealSummaryTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.25,
+    lineHeight: 23,
+  },
+  dealSummaryMeta: {
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19,
+  },
+  dealCollapsedSection: {
+    borderWidth: 1,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  dealCollapsedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 13,
+  },
+  dealCollapsedCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  dealCollapsedTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  dealCollapsedTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+    lineHeight: 22,
+  },
+  dealCollapsedBody: {
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19,
+  },
+  dealCollapsedBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  dealCollapsedBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.25,
+  },
+  dealCollapsedIcon: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderRadius: 17,
+  },
+  dealCollapsedIconText: {
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 16,
+  },
+  dealCollapsedContent: {
+    paddingHorizontal: 13,
+    paddingBottom: 13,
+    gap: 12,
+  },
   detailZone: {
     gap: 5,
   },
@@ -860,6 +1196,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 17,
+  },
+  progressList: {
+    gap: 10,
+  },
+  progressStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  progressDot: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderRadius: 14,
+  },
+  progressDotText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  progressLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  actionRowWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  mockActionButton: {
+    minHeight: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  mockActionText: {
+    fontSize: 12,
+    fontWeight: "900",
   },
   summaryStatusBox: {
     borderWidth: 1,
