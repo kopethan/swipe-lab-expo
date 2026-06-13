@@ -1,0 +1,381 @@
+diff --git a/features/auth-motion-lab/AuthMotionLabScreen.tsx b/features/auth-motion-lab/AuthMotionLabScreen.tsx
+index e98e76a..2ff9493 100644
+--- a/features/auth-motion-lab/AuthMotionLabScreen.tsx
++++ b/features/auth-motion-lab/AuthMotionLabScreen.tsx
+@@ -37,7 +37,7 @@ type FlowStepState = "idle" | "active" | "done" | "error";
+ type CurveIntensity = "soft" | "standard" | "deep";
+ type MotionSpeed = "calm" | "balanced" | "quick";
+ type GlowIntensity = "off" | "soft" | "strong";
+-type FieldStyle = "calmFill" | "innerWave" | "curvedField";
++type FieldStyle = "calmFill" | "innerWave" | "curvedField" | "ribbon";
+ 
+ type MotionTuning = {
+   curveIntensity: CurveIntensity;
+@@ -94,6 +94,7 @@ const glowChoices: TuningChoice<GlowIntensity>[] = [
+ ];
+ 
+ const fieldStyleChoices: TuningChoice<FieldStyle>[] = [
++  { value: "ribbon", label: "Ribbon" },
+   { value: "calmFill", label: "Calm fill" },
+   { value: "innerWave", label: "Inner wave" },
+   { value: "curvedField", label: "Clean curve" },
+@@ -103,7 +104,7 @@ const defaultMotionTuning: MotionTuning = {
+   curveIntensity: "standard",
+   speed: "balanced",
+   glow: "soft",
+-  fieldStyle: "innerWave",
++  fieldStyle: "ribbon",
+   shakeEnabled: true,
+   reducedMotion: false,
+ };
+@@ -425,6 +426,67 @@ function getMoodVariantMetrics(intensity: CurveIntensity) {
+   }
+ }
+ 
++function getRibbonMetrics(intensity: CurveIntensity) {
++  switch (intensity) {
++    case "soft":
++      return {
++        shellHeight: 62,
++        segmentHeight: 40,
++        curveDepth: 10,
++        segmentOverlap: 10,
++        segmentRotation: 8,
++        textAmplitude: 7,
++        textRotation: 5,
++      };
++    case "deep":
++      return {
++        shellHeight: 72,
++        segmentHeight: 48,
++        curveDepth: 18,
++        segmentOverlap: 14,
++        segmentRotation: 15,
++        textAmplitude: 13,
++        textRotation: 10,
++      };
++    case "standard":
++    default:
++      return {
++        shellHeight: 68,
++        segmentHeight: 44,
++        curveDepth: 14,
++        segmentOverlap: 12,
++        segmentRotation: 12,
++        textAmplitude: 10,
++        textRotation: 8,
++      };
++  }
++}
++
++function getRibbonColor(
++  state: MoodState,
++  palette: ReturnType<typeof useTheme>["palette"],
++  isTyping: boolean,
++  isFocused: boolean,
++) {
++  if (isTyping || isFocused || state === "submitting") {
++    return "#FFE064";
++  }
++
++  if (state === "smile") {
++    return "#08C86A";
++  }
++
++  if (state === "frown") {
++    return "#FF5259";
++  }
++
++  return palette.surfaceAlt;
++}
++
++function getRibbonTextColor() {
++  return "#050505";
++}
++
+ function getSpeedMultiplier(speed: MotionSpeed) {
+   switch (speed) {
+     case "calm":
+@@ -658,6 +720,7 @@ function AuthMoodInput({
+   const { palette } = useTheme();
+   const [isFocused, setIsFocused] = useState(false);
+   const [isTyping, setIsTyping] = useState(false);
++  const [fieldWidth, setFieldWidth] = useState(0);
+   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const visualState: MoodState =
+     isTyping && state !== "submitting" ? "straight" : state;
+@@ -804,7 +867,20 @@ function AuthMoodInput({
+     ]).start();
+   }, [shake, shakeKey, state, tuning]);
+ 
+-  const moodColor = getMoodColor(visualState, palette, isFocused, isTyping);
++  const isRibbonStyle = tuning.fieldStyle === "ribbon";
++  const ribbonMetrics = useMemo(
++    () => getRibbonMetrics(tuning.curveIntensity),
++    [tuning.curveIntensity],
++  );
++  const ribbonColor = getRibbonColor(
++    visualState,
++    palette,
++    isTyping,
++    isFocused,
++  );
++  const moodColor = isRibbonStyle
++    ? ribbonColor
++    : getMoodColor(visualState, palette, isFocused, isTyping);
+   const moodFillColor = getMoodFillColor(visualState, palette, isTyping);
+   const moodBorderColor = getMoodBorderColor(
+     visualState,
+@@ -813,6 +889,16 @@ function AuthMoodInput({
+     isTyping,
+   );
+   const variantMetrics = getMoodVariantMetrics(tuning.curveIntensity);
++  const showRibbonDisplay =
++    isRibbonStyle &&
++    !isTyping &&
++    !isFocused &&
++    value.length > 0 &&
++    (visualState === "smile" || visualState === "frown");
++  const showRibbonTyping =
++    isRibbonStyle &&
++    !showRibbonDisplay &&
++    (isTyping || isFocused || visualState === "submitting");
+   const showInnerWave = tuning.fieldStyle === "innerWave";
+   const showCurvedField = tuning.fieldStyle === "curvedField";
+   const overlayColor = getMoodOverlayColor(visualState, palette, isTyping);
+@@ -834,12 +920,53 @@ function AuthMoodInput({
+   });
+   const visibleHelper = state === "straight" && !isTyping ? undefined : helper;
+   const displayValue = getCurvedDisplayValue(field, value);
+-  const showCurvedText = false;
++  const showCurvedText = showRibbonDisplay;
+   const textCurveDirection = visualState === "smile" ? 1 : -1;
+-  const textCurveAmplitude = getTextCurveAmplitude(tuning.curveIntensity);
+-  const textCurveRotation = getTextCurveRotation(tuning.curveIntensity);
++  const textCurveAmplitude = isRibbonStyle
++    ? ribbonMetrics.textAmplitude
++    : getTextCurveAmplitude(tuning.curveIntensity);
++  const textCurveRotation = isRibbonStyle
++    ? ribbonMetrics.textRotation
++    : getTextCurveRotation(tuning.curveIntensity);
+   const textCharacters = Array.from(displayValue);
+   const textCenterIndex = Math.max((textCharacters.length - 1) / 2, 1);
++  const inputTextColor = showRibbonDisplay
++    ? "transparent"
++    : showRibbonTyping
++      ? getRibbonTextColor()
++      : palette.text;
++  const inputPlaceholderColor = showRibbonTyping
++    ? "rgba(5,5,5,0.52)"
++    : palette.muted;
++  const ribbonSegments = useMemo(() => {
++    if (!showRibbonDisplay || fieldWidth <= 0) {
++      return [];
++    }
++
++    const segmentCount = Math.max(20, Math.min(34, Math.round(fieldWidth / 12)));
++    const width = fieldWidth / segmentCount + ribbonMetrics.segmentOverlap;
++    const travelWidth = Math.max(fieldWidth - width, 1);
++    const direction = visualState === "smile" ? 1 : -1;
++    const edgeTop = (ribbonMetrics.shellHeight - ribbonMetrics.segmentHeight) / 2;
++    const baseTop =
++      direction === 1 ? edgeTop : edgeTop + ribbonMetrics.curveDepth;
++
++    return Array.from({ length: segmentCount }, (_, index) => {
++      const normalized =
++        segmentCount <= 1 ? 0 : (index / (segmentCount - 1)) * 2 - 1;
++      const centerWeight = Math.max(0, 1 - normalized * normalized);
++      const left = (index / Math.max(segmentCount - 1, 1)) * travelWidth;
++      const top = baseTop + direction * centerWeight * ribbonMetrics.curveDepth;
++      const rotate = -direction * normalized * ribbonMetrics.segmentRotation;
++
++      return { index, left, top, width, rotate };
++    });
++  }, [
++    fieldWidth,
++    ribbonMetrics,
++    showRibbonDisplay,
++    visualState,
++  ]);
+ 
+   useEffect(() => {
+     Animated.timing(textBendProgress, {
+@@ -863,8 +990,16 @@ function AuthMoodInput({
+       </View>
+ 
+       <View
++        onLayout={(event) => setFieldWidth(event.nativeEvent.layout.width)}
+         style={[
+           styles.inputShell,
++          isRibbonStyle
++            ? {
++                minHeight: ribbonMetrics.shellHeight,
++                borderRadius: 999,
++                paddingHorizontal: 18,
++              }
++            : null,
+           {
+             shadowColor: moodColor,
+             shadowOpacity:
+@@ -876,12 +1011,41 @@ function AuthMoodInput({
+           pointerEvents="none"
+           style={[
+             styles.inputFill,
++            isRibbonStyle ? styles.ribbonInputFill : null,
+             {
+-              backgroundColor: moodFillColor,
+-              borderColor: moodBorderColor,
++              backgroundColor: showRibbonDisplay
++                ? "transparent"
++                : showRibbonTyping
++                  ? ribbonColor
++                  : moodFillColor,
++              borderColor: showRibbonDisplay
++                ? "transparent"
++                : showRibbonTyping
++                  ? "rgba(5,5,5,0.08)"
++                  : moodBorderColor,
+             },
+           ]}
+         />
++        {showRibbonDisplay ? (
++          <View pointerEvents="none" style={styles.ribbonLayer}>
++            {ribbonSegments.map((segment) => (
++              <Animated.View
++                key={segment.index}
++                style={[
++                  styles.ribbonSegment,
++                  {
++                    left: segment.left,
++                    top: segment.top,
++                    width: segment.width,
++                    height: ribbonMetrics.segmentHeight,
++                    backgroundColor: ribbonColor,
++                    transform: [{ rotate: `${segment.rotate}deg` }],
++                  },
++                ]}
++              />
++            ))}
++          </View>
++        ) : null}
+         {showCurvedField ? (
+           <>
+             <Animated.View
+@@ -958,7 +1122,7 @@ function AuthMoodInput({
+           onFocus={handleFocus}
+           onBlur={handleBlur}
+           placeholder={field.placeholder}
+-          placeholderTextColor={palette.muted}
++          placeholderTextColor={showRibbonDisplay ? "transparent" : inputPlaceholderColor}
+           keyboardType={field.keyboardType}
+           secureTextEntry={field.secureTextEntry}
+           autoCapitalize="none"
+@@ -966,7 +1130,8 @@ function AuthMoodInput({
+           editable={state !== "submitting"}
+           style={[
+             styles.textInput,
+-            { color: palette.text },
++            isRibbonStyle ? styles.ribbonTextInput : null,
++            { color: inputTextColor },
+             Platform.OS === "web" ? styles.webTextInput : null,
+           ]}
+         />
+@@ -974,7 +1139,11 @@ function AuthMoodInput({
+         {displayValue.length > 0 ? (
+           <Animated.View
+             pointerEvents="none"
+-            style={[styles.curvedTextLayer, { opacity: textBendProgress }]}
++            style={[
++              styles.curvedTextLayer,
++              isRibbonStyle ? styles.ribbonTextLayer : null,
++              { opacity: textBendProgress },
++            ]}
+           >
+             <View style={styles.curvedTextRow}>
+               {textCharacters.map((char, index) => {
+@@ -995,7 +1164,7 @@ function AuthMoodInput({
+                     style={[
+                       styles.curvedTextChar,
+                       {
+-                        color: palette.text,
++                        color: isRibbonStyle ? getRibbonTextColor() : palette.text,
+                         transform: [
+                           {
+                             translateY: textBendProgress.interpolate({
+@@ -1324,9 +1493,9 @@ function AuthMotionTuningPanel({
+             Motion tuning
+           </Text>
+           <Text style={[styles.tuningIntro, { color: palette.muted }]}>
+-            Compare three field treatments: calm fill, an inner mood wave, and a
+-            cleaner curved-field layer. Reduced motion keeps the same states but
+-            removes shake, pulse, and long transitions.
++            Compare the ribbon mood input against calmer field treatments.
++            Reduced motion keeps the same validation states but removes shake,
++            pulse, and long transitions.
+           </Text>
+         </View>
+         <Pressable
+@@ -2288,6 +2457,21 @@ const styles = StyleSheet.create({
+     borderRadius: 18,
+     borderWidth: 1,
+   },
++  ribbonInputFill: {
++    borderRadius: 999,
++  },
++  ribbonLayer: {
++    position: "absolute",
++    top: 0,
++    right: 0,
++    bottom: 0,
++    left: 0,
++    overflow: "hidden",
++  },
++  ribbonSegment: {
++    position: "absolute",
++    borderRadius: 999,
++  },
+   inputCurveField: {
+     position: "absolute",
+     borderRadius: 999,
+@@ -2316,6 +2500,13 @@ const styles = StyleSheet.create({
+     fontWeight: "800",
+     zIndex: 2,
+   },
++  ribbonTextInput: {
++    minHeight: 58,
++    fontSize: 16,
++    lineHeight: 22,
++    fontWeight: "900",
++    letterSpacing: 0.2,
++  },
+   curvedTextLayer: {
+     position: "absolute",
+     top: 6,
+@@ -2326,16 +2517,24 @@ const styles = StyleSheet.create({
+     justifyContent: "center",
+     overflow: "hidden",
+   },
++  ribbonTextLayer: {
++    top: 8,
++    right: 18,
++    bottom: 8,
++    left: 18,
++  },
+   curvedTextRow: {
+     minHeight: 28,
+     flexDirection: "row",
+     alignItems: "center",
++    justifyContent: "center",
+     overflow: "hidden",
+   },
+   curvedTextChar: {
+-    fontSize: 14,
+-    lineHeight: 20,
+-    fontWeight: "800",
++    fontSize: 16,
++    lineHeight: 22,
++    fontWeight: "900",
++    letterSpacing: 0.2,
+   },
+   webTextInput: {
+     outlineStyle: "none",

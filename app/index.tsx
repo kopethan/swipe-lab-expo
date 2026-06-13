@@ -19,6 +19,12 @@ export default function LabsIndexScreen() {
         badge: "new",
       },
       {
+        title: "Auth Motion Lab",
+        description: "Isolated auth-page playground for straight, smile, and frown field states.",
+        href: "/auth-motion-lab",
+        badge: "new",
+      },
+      {
         title: "Action Bar",
         description: "Web docked action bar (bottom/center) + icon-collapse → panel morph.",
         href: "/action-bar",

@@ -1,0 +1,287 @@
+diff --git a/features/auth-motion-lab/AuthMotionLabScreen.tsx b/features/auth-motion-lab/AuthMotionLabScreen.tsx
+index 2ff9493..d073670 100644
+--- a/features/auth-motion-lab/AuthMotionLabScreen.tsx
++++ b/features/auth-motion-lab/AuthMotionLabScreen.tsx
+@@ -430,34 +430,34 @@ function getRibbonMetrics(intensity: CurveIntensity) {
+   switch (intensity) {
+     case "soft":
+       return {
+-        shellHeight: 62,
+-        segmentHeight: 40,
+-        curveDepth: 10,
+-        segmentOverlap: 10,
+-        segmentRotation: 8,
+-        textAmplitude: 7,
+-        textRotation: 5,
++        shellHeight: 54,
++        segmentHeight: 34,
++        curveDepth: 8,
++        segmentOverlap: 5,
++        segmentRotation: 3,
++        textAmplitude: 4,
++        textRotation: 1.8,
+       };
+     case "deep":
+       return {
+-        shellHeight: 72,
+-        segmentHeight: 48,
+-        curveDepth: 18,
+-        segmentOverlap: 14,
+-        segmentRotation: 15,
+-        textAmplitude: 13,
+-        textRotation: 10,
++        shellHeight: 64,
++        segmentHeight: 42,
++        curveDepth: 14,
++        segmentOverlap: 7,
++        segmentRotation: 7,
++        textAmplitude: 8,
++        textRotation: 4.4,
+       };
+     case "standard":
+     default:
+       return {
+-        shellHeight: 68,
+-        segmentHeight: 44,
+-        curveDepth: 14,
+-        segmentOverlap: 12,
+-        segmentRotation: 12,
+-        textAmplitude: 10,
+-        textRotation: 8,
++        shellHeight: 58,
++        segmentHeight: 38,
++        curveDepth: 11,
++        segmentOverlap: 6,
++        segmentRotation: 5,
++        textAmplitude: 6,
++        textRotation: 3,
+       };
+   }
+ }
+@@ -469,15 +469,15 @@ function getRibbonColor(
+   isFocused: boolean,
+ ) {
+   if (isTyping || isFocused || state === "submitting") {
+-    return "#FFE064";
++    return "#FFE56E";
+   }
+ 
+   if (state === "smile") {
+-    return "#08C86A";
++    return "#10C878";
+   }
+ 
+   if (state === "frown") {
+-    return "#FF5259";
++    return "#FF646C";
+   }
+ 
+   return palette.surfaceAlt;
+@@ -560,6 +560,28 @@ function getCurvedDisplayValue(field: FieldConfig, value: string) {
+   return value;
+ }
+ 
++function getRibbonDisplaySegments(value: string, isSecure: boolean) {
++  const characters = Array.from(value);
++
++  if (characters.length === 0) {
++    return [];
++  }
++
++  if (isSecure || characters.length <= 5) {
++    return [value];
++  }
++
++  const segmentCount = Math.min(5, Math.max(3, Math.ceil(characters.length / 5)));
++  const baseSize = Math.ceil(characters.length / segmentCount);
++  const segments: string[] = [];
++
++  for (let index = 0; index < characters.length; index += baseSize) {
++    segments.push(characters.slice(index, index + baseSize).join(""));
++  }
++
++  return segments;
++}
++
+ function getMoodColor(
+   state: MoodState,
+   palette: ReturnType<typeof useTheme>["palette"],
+@@ -929,7 +951,12 @@ function AuthMoodInput({
+     ? ribbonMetrics.textRotation
+     : getTextCurveRotation(tuning.curveIntensity);
+   const textCharacters = Array.from(displayValue);
++  const ribbonTextSegments = getRibbonDisplaySegments(
++    displayValue,
++    Boolean(field.secureTextEntry),
++  );
+   const textCenterIndex = Math.max((textCharacters.length - 1) / 2, 1);
++  const ribbonCenterIndex = Math.max((ribbonTextSegments.length - 1) / 2, 1);
+   const inputTextColor = showRibbonDisplay
+     ? "transparent"
+     : showRibbonTyping
+@@ -943,7 +970,7 @@ function AuthMoodInput({
+       return [];
+     }
+ 
+-    const segmentCount = Math.max(20, Math.min(34, Math.round(fieldWidth / 12)));
++    const segmentCount = Math.max(28, Math.min(44, Math.round(fieldWidth / 8)));
+     const width = fieldWidth / segmentCount + ribbonMetrics.segmentOverlap;
+     const travelWidth = Math.max(fieldWidth - width, 1);
+     const direction = visualState === "smile" ? 1 : -1;
+@@ -958,8 +985,10 @@ function AuthMoodInput({
+       const left = (index / Math.max(segmentCount - 1, 1)) * travelWidth;
+       const top = baseTop + direction * centerWeight * ribbonMetrics.curveDepth;
+       const rotate = -direction * normalized * ribbonMetrics.segmentRotation;
++      const isFirst = index === 0;
++      const isLast = index === segmentCount - 1;
+ 
+-      return { index, left, top, width, rotate };
++      return { index, left, top, width, rotate, isFirst, isLast };
+     });
+   }, [
+     fieldWidth,
+@@ -997,7 +1026,7 @@ function AuthMoodInput({
+             ? {
+                 minHeight: ribbonMetrics.shellHeight,
+                 borderRadius: 999,
+-                paddingHorizontal: 18,
++                paddingHorizontal: 16,
+               }
+             : null,
+           {
+@@ -1039,6 +1068,10 @@ function AuthMoodInput({
+                     width: segment.width,
+                     height: ribbonMetrics.segmentHeight,
+                     backgroundColor: ribbonColor,
++                    borderTopLeftRadius: segment.isFirst ? 999 : 0,
++                    borderBottomLeftRadius: segment.isFirst ? 999 : 0,
++                    borderTopRightRadius: segment.isLast ? 999 : 0,
++                    borderBottomRightRadius: segment.isLast ? 999 : 0,
+                     transform: [{ rotate: `${segment.rotate}deg` }],
+                   },
+                 ]}
+@@ -1131,7 +1164,7 @@ function AuthMoodInput({
+           style={[
+             styles.textInput,
+             isRibbonStyle ? styles.ribbonTextInput : null,
+-            { color: inputTextColor },
++            { color: inputTextColor, opacity: showRibbonDisplay ? 0 : 1 },
+             Platform.OS === "web" ? styles.webTextInput : null,
+           ]}
+         />
+@@ -1146,23 +1179,34 @@ function AuthMoodInput({
+             ]}
+           >
+             <View style={styles.curvedTextRow}>
+-              {textCharacters.map((char, index) => {
+-                const normalizedIndex =
+-                  textCharacters.length <= 1
++              {(isRibbonStyle ? ribbonTextSegments : textCharacters).map((part, index) => {
++                const normalizedIndex = isRibbonStyle
++                  ? ribbonTextSegments.length <= 1
++                    ? 0
++                    : (index - ribbonCenterIndex) / ribbonCenterIndex
++                  : textCharacters.length <= 1
+                     ? 0
+                     : (index - textCenterIndex) / textCenterIndex;
+-                const centerWeight = Math.max(0, 1 - Math.abs(normalizedIndex));
++                const centerWeight = isRibbonStyle
++                  ? Math.max(0, 1 - normalizedIndex * normalizedIndex)
++                  : Math.max(0, 1 - Math.abs(normalizedIndex));
+                 const translateY =
+                   textCurveDirection * textCurveAmplitude * centerWeight;
+                 const rotate =
+                   normalizedIndex * textCurveRotation * textCurveDirection;
++                const text = isRibbonStyle
++                  ? String(part)
++                  : String(part) === " "
++                    ? "\u00A0"
++                    : String(part);
+ 
+                 return (
+                   <Animated.Text
+-                    key={`${char}-${index}`}
++                    key={`${text}-${index}`}
+                     numberOfLines={1}
+                     style={[
+                       styles.curvedTextChar,
++                      isRibbonStyle ? styles.ribbonTextSegment : null,
+                       {
+                         color: isRibbonStyle ? getRibbonTextColor() : palette.text,
+                         transform: [
+@@ -1182,7 +1226,7 @@ function AuthMoodInput({
+                       },
+                     ]}
+                   >
+-                    {char === " " ? "\u00A0" : char}
++                    {text}
+                   </Animated.Text>
+                 );
+               })}
+@@ -2417,10 +2461,10 @@ const styles = StyleSheet.create({
+     lineHeight: 16,
+   },
+   previewFields: {
+-    gap: 14,
++    gap: 12,
+   },
+   fieldBlock: {
+-    gap: 7,
++    gap: 6,
+   },
+   fieldLabelRow: {
+     flexDirection: "row",
+@@ -2470,7 +2514,6 @@ const styles = StyleSheet.create({
+   },
+   ribbonSegment: {
+     position: "absolute",
+-    borderRadius: 999,
+   },
+   inputCurveField: {
+     position: "absolute",
+@@ -2501,11 +2544,12 @@ const styles = StyleSheet.create({
+     zIndex: 2,
+   },
+   ribbonTextInput: {
+-    minHeight: 58,
++    minHeight: 48,
+     fontSize: 16,
+     lineHeight: 22,
+     fontWeight: "900",
+-    letterSpacing: 0.2,
++    letterSpacing: 0.15,
++    textAlign: "center",
+   },
+   curvedTextLayer: {
+     position: "absolute",
+@@ -2518,13 +2562,13 @@ const styles = StyleSheet.create({
+     overflow: "hidden",
+   },
+   ribbonTextLayer: {
+-    top: 8,
++    top: 5,
+     right: 18,
+-    bottom: 8,
++    bottom: 5,
+     left: 18,
+   },
+   curvedTextRow: {
+-    minHeight: 28,
++    minHeight: 30,
+     flexDirection: "row",
+     alignItems: "center",
+     justifyContent: "center",
+@@ -2534,7 +2578,12 @@ const styles = StyleSheet.create({
+     fontSize: 16,
+     lineHeight: 22,
+     fontWeight: "900",
+-    letterSpacing: 0.2,
++    letterSpacing: 0.15,
++  },
++  ribbonTextSegment: {
++    fontSize: 16,
++    lineHeight: 22,
++    letterSpacing: 0.05,
+   },
+   webTextInput: {
+     outlineStyle: "none",
