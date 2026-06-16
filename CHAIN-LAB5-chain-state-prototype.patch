@@ -1,0 +1,487 @@
+diff --git a/features/chain-lab/ChainLabScreen.tsx b/features/chain-lab/ChainLabScreen.tsx
+index 38b3b8c..20154cb 100644
+--- a/features/chain-lab/ChainLabScreen.tsx
++++ b/features/chain-lab/ChainLabScreen.tsx
+@@ -25,6 +25,72 @@ type NodePlacement = Point & {
+   participant: ChainParticipant;
+ };
+ 
++type ChainStage = "suggested" | "waiting" | "ready" | "active" | "dismissed";
++
++type ChainStageConfig = {
++  label: string;
++  progressLabel: string;
++  title: string;
++  description: string;
++  centerLabel: string;
++  hint: string;
++};
++
++const CHAIN_STAGE_CONFIG: Record<ChainStage, ChainStageConfig> = {
++  suggested: {
++    label: "Suggested",
++    progressLabel: "0/3 interested",
++    title: "Review the chain",
++    description: "Nothing starts yet. First check what you receive, what you give, and who is linked to you.",
++    centerLabel: "match",
++    hint: chainLabScenario.helperText,
++  },
++  waiting: {
++    label: "Waiting",
++    progressLabel: "2/3 interested",
++    title: "Waiting for Alex",
++    description: "You and Sara are interested. Alex still needs to review their role before this can move forward.",
++    centerLabel: "wait",
++    hint: "Tap each person to see what they would receive and give.",
++  },
++  ready: {
++    label: "Ready",
++    progressLabel: "3/3 interested",
++    title: "Everyone is interested",
++    description: "All three people like the chain. The next step would turn this suggestion into a Chain Deal workspace.",
++    centerLabel: "ready",
++    hint: "Everyone has reviewed the loop. You can still inspect each role.",
++  },
++  active: {
++    label: "Active Chain Deal",
++    progressLabel: "3/3 confirmed",
++    title: "Chain Deal active",
++    description: "The chain is now a shared deal workspace. People can coordinate, submit progress, and complete safely.",
++    centerLabel: "deal",
++    hint: "Tap a person to review their active deal role.",
++  },
++  dismissed: {
++    label: "Dismissed",
++    progressLabel: "Not for me",
++    title: "Suggestion dismissed",
++    description: "In the real app, this chain match would leave your suggestions. In the lab, you can bring it back.",
++    centerLabel: "skip",
++    hint: "This state previews the declined suggestion experience.",
++  },
++};
++
++function getConfirmedParticipantIds(stage: ChainStage): ChainParticipantId[] {
++  if (stage === "waiting") {
++    return [chainLabScenario.currentUserId, "sara"];
++  }
++
++  if (stage === "ready" || stage === "active") {
++    return [...chainLabScenario.order];
++  }
++
++  return [];
++}
++
+ const AVATAR_SIZE = 68;
+ const AVATAR_SIZE_COMPACT = 62;
+ const NODE_TOUCH_WIDTH = 104;
+@@ -45,9 +111,11 @@ function getDisplayName(participant: ChainParticipant) {
+ 
+ function ScreenHeader({
+   optionsOpen,
++  statusLine,
+   onToggleOptions,
+ }: {
+   optionsOpen: boolean;
++  statusLine: string;
+   onToggleOptions: () => void;
+ }) {
+   const { palette } = useTheme();
+@@ -71,9 +139,7 @@ function ScreenHeader({
+ 
+         <View style={styles.headerTitleBlock}>
+           <Text style={[styles.headerTitle, { color: palette.text }]}>{chainLabScenario.title}</Text>
+-          <Text style={[styles.headerMeta, { color: palette.muted }]}> 
+-            {chainLabScenario.statusLabel} · {chainLabScenario.subtitle}
+-          </Text>
++          <Text style={[styles.headerMeta, { color: palette.muted }]}>{statusLine}</Text>
+         </View>
+ 
+         <Pressable
+@@ -164,11 +230,13 @@ function ParticipantNode({
+   placement,
+   selected,
+   currentUser,
++  joined,
+   onPress,
+ }: {
+   placement: NodePlacement;
+   selected: boolean;
+   currentUser: boolean;
++  joined: boolean;
+   onPress: () => void;
+ }) {
+   const { palette } = useTheme();
+@@ -240,7 +308,7 @@ function ParticipantNode({
+             {participant.initials}
+           </Text>
+         </View>
+-        {participant.joined ? (
++        {joined ? (
+           <View
+             style={[
+               styles.joinedDot,
+@@ -279,9 +347,13 @@ function ParticipantNode({
+ 
+ function ChainCircle({
+   selectedId,
++  confirmedIds,
++  centerLabel,
+   onSelect,
+ }: {
+   selectedId: ChainParticipantId;
++  confirmedIds: ChainParticipantId[];
++  centerLabel: string;
+   onSelect: (participantId: ChainParticipantId) => void;
+ }) {
+   const { palette } = useTheme();
+@@ -353,7 +425,7 @@ function ChainCircle({
+         style={[styles.loopCore, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}
+       >
+         <Text style={[styles.loopCoreIcon, { color: palette.text }]}>↻</Text>
+-        <Text style={[styles.loopCoreText, { color: palette.muted }]}>loop</Text>
++        <Text style={[styles.loopCoreText, { color: palette.muted }]}>{centerLabel}</Text>
+       </View>
+ 
+       {placements.map((placement, index) => {
+@@ -379,6 +451,7 @@ function ChainCircle({
+           placement={placement}
+           selected={placement.participant.id === selectedId}
+           currentUser={placement.participant.id === chainLabScenario.currentUserId}
++          joined={confirmedIds.includes(placement.participant.id)}
+           onPress={() => onSelect(placement.participant.id)}
+         />
+       ))}
+@@ -544,47 +617,150 @@ function SelectedParticipantCard({ participant }: { participant: ChainParticipan
+   );
+ }
+ 
+-function ActionFooter() {
++function ActionFooter({
++  stage,
++  onPrimaryPress,
++  onSecondaryPress,
++}: {
++  stage: ChainStage;
++  onPrimaryPress: () => void;
++  onSecondaryPress: () => void;
++}) {
+   const { palette } = useTheme();
+ 
++  const primaryLabelByStage: Record<ChainStage, string> = {
++    suggested: "I’m interested",
++    waiting: "Simulate Alex joining",
++    ready: "Start Chain Deal",
++    active: "Reset demo",
++    dismissed: "Show suggestion again",
++  };
++  const secondaryLabelByStage: Partial<Record<ChainStage, string>> = {
++    suggested: "Not for me",
++    waiting: "Reset demo",
++    ready: "Reset demo",
++  };
++  const secondaryLabel = secondaryLabelByStage[stage];
++
+   return (
+-    <View style={styles.actionsRow}>
+-      <Pressable
+-        accessibilityRole="button"
+-        style={({ pressed }) => [
+-          styles.primaryAction,
+-          { backgroundColor: palette.text },
+-          pressed ? styles.pressed : null,
+-        ]}
+-      >
+-        <Text style={[styles.primaryActionText, { color: palette.background }]}>I’m interested</Text>
+-      </Pressable>
+-      <Pressable
+-        accessibilityRole="button"
+-        style={({ pressed }) => [
+-          styles.secondaryAction,
+-          { borderColor: palette.border, backgroundColor: palette.surface },
+-          pressed ? styles.pressed : null,
+-        ]}
+-      >
+-        <Text style={[styles.secondaryActionText, { color: palette.text }]}>Not for me</Text>
+-      </Pressable>
++    <View style={styles.actionStack}>
++      <Text style={[styles.actionPrompt, { color: palette.muted }]}>
++        {stage === "active" ? "Prototype controls" : "Does this chain work for you?"}
++      </Text>
++      <View style={styles.actionsRow}>
++        <Pressable
++          onPress={onPrimaryPress}
++          accessibilityRole="button"
++          style={({ pressed }) => [
++            styles.primaryAction,
++            { backgroundColor: palette.text },
++            pressed ? styles.pressed : null,
++          ]}
++        >
++          <Text style={[styles.primaryActionText, { color: palette.background }]}>
++            {primaryLabelByStage[stage]}
++          </Text>
++        </Pressable>
++        {secondaryLabel ? (
++          <Pressable
++            onPress={onSecondaryPress}
++            accessibilityRole="button"
++            style={({ pressed }) => [
++              styles.secondaryAction,
++              { borderColor: palette.border, backgroundColor: palette.surface },
++              pressed ? styles.pressed : null,
++            ]}
++          >
++            <Text style={[styles.secondaryActionText, { color: palette.text }]}>{secondaryLabel}</Text>
++          </Pressable>
++        ) : null}
++      </View>
+     </View>
+   );
+ }
+ 
+-function ChainHint() {
++function ChainHint({ text }: { text: string }) {
+   const { palette } = useTheme();
+ 
+   return (
+     <View style={[styles.hintPill, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+-      <Text style={[styles.hintPillText, { color: palette.muted }]}> 
+-        {chainLabScenario.helperText}
++      <Text style={[styles.hintPillText, { color: palette.muted }]}>{text}</Text>
++    </View>
++  );
++}
++
++function ParticipantStatusPill({
++  participant,
++  confirmed,
++}: {
++  participant: ChainParticipant;
++  confirmed: boolean;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View
++      style={[
++        styles.participantStatusPill,
++        {
++          borderColor: confirmed ? palette.text : palette.border,
++          backgroundColor: confirmed ? palette.text : palette.surfaceAlt,
++        },
++      ]}
++    >
++      <Text
++        numberOfLines={1}
++        style={[styles.participantStatusName, { color: confirmed ? palette.background : palette.text }]}
++      >
++        {getDisplayName(participant)}
++      </Text>
++      <Text style={[styles.participantStatusMark, { color: confirmed ? palette.background : palette.muted }]}>
++        {confirmed ? "✓" : "…"}
+       </Text>
+     </View>
+   );
+ }
+ 
++function ChainStateCard({
++  stageConfig,
++  confirmedIds,
++}: {
++  stageConfig: ChainStageConfig;
++  confirmedIds: ChainParticipantId[];
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.stateCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++      <View style={styles.stateHeaderRow}>
++        <View style={styles.stateHeaderCopy}>
++          <Text style={[styles.stateEyebrow, { color: palette.muted }]}>{stageConfig.label}</Text>
++          <Text style={[styles.stateTitle, { color: palette.text }]}>{stageConfig.title}</Text>
++        </View>
++        <View style={[styles.stateProgressPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++          <Text style={[styles.stateProgressText, { color: palette.text }]}>{stageConfig.progressLabel}</Text>
++        </View>
++      </View>
++
++      <Text style={[styles.stateDescription, { color: palette.muted }]}>{stageConfig.description}</Text>
++
++      <View style={styles.participantStatusRow}>
++        {chainLabScenario.order.map((participantId) => {
++          const participant = getParticipant(participantId);
++
++          return (
++            <ParticipantStatusPill
++              key={participant.id}
++              participant={participant}
++              confirmed={confirmedIds.includes(participant.id)}
++            />
++          );
++        })}
++      </View>
++    </View>
++  );
++}
++
+ function LabOptionsPanel() {
+   const { mode, palette, toggleMode } = useTheme();
+ 
+@@ -635,15 +811,47 @@ export function ChainLabScreen() {
+   const { palette } = useTheme();
+   const { width } = useWindowDimensions();
+   const [selectedId, setSelectedId] = useState<ChainParticipantId>(chainLabScenario.currentUserId);
++  const [chainStage, setChainStage] = useState<ChainStage>("suggested");
+   const [optionsOpen, setOptionsOpen] = useState(false);
+   const selectedParticipant = getParticipant(selectedId);
++  const stageConfig = CHAIN_STAGE_CONFIG[chainStage];
++  const confirmedIds = useMemo(() => getConfirmedParticipantIds(chainStage), [chainStage]);
+   const isDesktop = Platform.OS === "web" && width >= 820;
+ 
++  function handlePrimaryAction() {
++    if (chainStage === "suggested") {
++      setChainStage("waiting");
++      return;
++    }
++
++    if (chainStage === "waiting") {
++      setChainStage("ready");
++      return;
++    }
++
++    if (chainStage === "ready") {
++      setChainStage("active");
++      return;
++    }
++
++    setChainStage("suggested");
++  }
++
++  function handleSecondaryAction() {
++    if (chainStage === "suggested") {
++      setChainStage("dismissed");
++      return;
++    }
++
++    setChainStage("suggested");
++  }
++
+   return (
+     <View style={[styles.screen, { backgroundColor: palette.background }]}>
+       <Stack.Screen options={{ title: "Chain Match Lab", headerShown: false }} />
+       <ScreenHeader
+         optionsOpen={optionsOpen}
++        statusLine={`${stageConfig.label} · ${stageConfig.progressLabel}`}
+         onToggleOptions={() => setOptionsOpen((open) => !open)}
+       />
+ 
+@@ -661,13 +869,23 @@ export function ChainLabScreen() {
+           ]}
+         >
+           <View style={[styles.mapPane, isDesktop ? styles.mapPaneDesktop : null]}>
+-            <ChainCircle selectedId={selectedId} onSelect={setSelectedId} />
+-            <ChainHint />
++            <ChainCircle
++              selectedId={selectedId}
++              confirmedIds={confirmedIds}
++              centerLabel={stageConfig.centerLabel}
++              onSelect={setSelectedId}
++            />
++            <ChainHint text={stageConfig.hint} />
+           </View>
+ 
+           <View style={[styles.detailsPane, isDesktop ? styles.detailsPaneDesktop : null]}>
++            <ChainStateCard stageConfig={stageConfig} confirmedIds={confirmedIds} />
+             <SelectedParticipantCard participant={selectedParticipant} />
+-            <ActionFooter />
++            <ActionFooter
++              stage={chainStage}
++              onPrimaryPress={handlePrimaryAction}
++              onSecondaryPress={handleSecondaryAction}
++            />
+           </View>
+         </View>
+       </ScrollView>
+@@ -1132,6 +1350,81 @@ const styles = StyleSheet.create({
+     fontSize: 12,
+     fontWeight: "900",
+   },
++  stateCard: {
++    borderRadius: 24,
++    borderWidth: 1,
++    gap: 12,
++    padding: 15,
++  },
++  stateHeaderRow: {
++    alignItems: "flex-start",
++    flexDirection: "row",
++    gap: 12,
++    justifyContent: "space-between",
++  },
++  stateHeaderCopy: {
++    flex: 1,
++    minWidth: 0,
++  },
++  stateEyebrow: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.9,
++    textTransform: "uppercase",
++  },
++  stateTitle: {
++    fontSize: 18,
++    fontWeight: "900",
++    letterSpacing: -0.1,
++    marginTop: 3,
++  },
++  stateProgressPill: {
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 10,
++    paddingVertical: 7,
++  },
++  stateProgressText: {
++    fontSize: 11,
++    fontWeight: "900",
++  },
++  stateDescription: {
++    fontSize: 13,
++    fontWeight: "700",
++    lineHeight: 19,
++  },
++  participantStatusRow: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 8,
++  },
++  participantStatusPill: {
++    alignItems: "center",
++    borderRadius: 999,
++    borderWidth: 1,
++    flexDirection: "row",
++    gap: 6,
++    paddingHorizontal: 10,
++    paddingVertical: 7,
++  },
++  participantStatusName: {
++    fontSize: 12,
++    fontWeight: "900",
++    maxWidth: 72,
++  },
++  participantStatusMark: {
++    fontSize: 13,
++    fontWeight: "900",
++    lineHeight: 14,
++  },
++  actionStack: {
++    gap: 8,
++  },
++  actionPrompt: {
++    fontSize: 12,
++    fontWeight: "900",
++    textAlign: "center",
++  },
+   actionsRow: {
+     flexDirection: "row",
+     gap: 10,

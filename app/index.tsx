@@ -57,6 +57,12 @@ export default function LabsIndexScreen() {
         badge: "new",
       },
       {
+        title: "Chain Match Lab",
+        description: "Interactive circular trade-chain selector with selected-person role details.",
+        href: "/chain-lab",
+        badge: "new",
+      },
+      {
         title: "Square Deck Lab",
         description: "Isolated square-card stack using one continuous diagonal swipe model.",
         href: "/square-deck",

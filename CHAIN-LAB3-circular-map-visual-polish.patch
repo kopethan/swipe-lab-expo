@@ -1,0 +1,462 @@
+diff --git a/features/chain-lab/ChainLabScreen.tsx b/features/chain-lab/ChainLabScreen.tsx
+index 0bb917e..80ae04e 100644
+--- a/features/chain-lab/ChainLabScreen.tsx
++++ b/features/chain-lab/ChainLabScreen.tsx
+@@ -25,8 +25,9 @@ type NodePlacement = Point & {
+   participant: ChainParticipant;
+ };
+ 
+-const NODE_SIZE = 82;
+-const NODE_SIZE_COMPACT = 74;
++const AVATAR_SIZE = 68;
++const AVATAR_SIZE_COMPACT = 62;
++const NODE_TOUCH_WIDTH = 104;
+ 
+ function getParticipant(participantId: ChainParticipantId) {
+   const participant = chainLabScenario.participants.find((item) => item.id === participantId);
+@@ -98,18 +99,31 @@ function ScreenHeader({
+   );
+ }
+ 
+-function ConnectionLine({ from, to, color }: { from: Point; to: Point; color: string }) {
++function ConnectionLine({
++  from,
++  to,
++  active,
++  color,
++  mutedColor,
++}: {
++  from: Point;
++  to: Point;
++  active: boolean;
++  color: string;
++  mutedColor: string;
++}) {
+   const dx = to.x - from.x;
+   const dy = to.y - from.y;
+   const length = Math.sqrt(dx * dx + dy * dy);
+   const angle = Math.atan2(dy, dx);
+-  const startOffset = NODE_SIZE * 0.44;
+-  const endOffset = NODE_SIZE * 0.48;
++  const startOffset = AVATAR_SIZE * 0.58;
++  const endOffset = AVATAR_SIZE * 0.62;
+   const visibleLength = Math.max(0, length - startOffset - endOffset);
+   const centerX = from.x + Math.cos(angle) * (startOffset + visibleLength / 2);
+   const centerY = from.y + Math.sin(angle) * (startOffset + visibleLength / 2);
+   const arrowX = from.x + Math.cos(angle) * (startOffset + visibleLength * 0.78);
+   const arrowY = from.y + Math.sin(angle) * (startOffset + visibleLength * 0.78);
++  const lineColor = active ? color : mutedColor;
+ 
+   return (
+     <>
+@@ -117,29 +131,34 @@ function ConnectionLine({ from, to, color }: { from: Point; to: Point; color: st
+         pointerEvents="none"
+         style={[
+           styles.connectionLine,
++          active ? styles.connectionLineActive : null,
+           {
+             left: centerX - visibleLength / 2,
+             top: centerY,
+             width: visibleLength,
+-            backgroundColor: color,
++            backgroundColor: lineColor,
++            opacity: active ? 0.95 : 0.36,
+             transform: [{ rotate: `${angle}rad` }],
+           },
+         ]}
+       />
+-      <Text
++      <View
+         pointerEvents="none"
+         style={[
+           styles.connectionArrow,
++          active ? styles.connectionArrowActive : null,
+           {
+-            left: arrowX - 7,
+-            top: arrowY - 11,
+-            color,
++            left: arrowX - 12,
++            top: arrowY - 12,
++            borderColor: lineColor,
++            backgroundColor: active ? color : mutedColor,
++            opacity: active ? 1 : 0.5,
+             transform: [{ rotate: `${angle}rad` }],
+           },
+         ]}
+       >
+-        {">"}
+-      </Text>
++        <Text style={[styles.connectionArrowText, { color: active ? "#ffffff" : color }]}>›</Text>
++      </View>
+     </>
+   );
+ }
+@@ -156,7 +175,7 @@ function ParticipantNode({
+   onPress: () => void;
+ }) {
+   const { palette } = useTheme();
+-  const nodeSize = currentUser ? NODE_SIZE : NODE_SIZE_COMPACT;
++  const avatarSize = currentUser ? AVATAR_SIZE : AVATAR_SIZE_COMPACT;
+   const participant = placement.participant;
+ 
+   return (
+@@ -167,37 +186,96 @@ function ParticipantNode({
+       style={({ pressed }) => [
+         styles.node,
+         {
+-          left: placement.x - nodeSize / 2,
+-          top: placement.y - nodeSize / 2,
+-          width: nodeSize,
+-          height: nodeSize,
+-          borderRadius: nodeSize / 2,
+-          borderColor: selected ? palette.text : palette.border,
+-          backgroundColor: selected ? palette.text : palette.surface,
++          left: placement.x - NODE_TOUCH_WIDTH / 2,
++          top: placement.y - avatarSize / 2 - 4,
++          width: NODE_TOUCH_WIDTH,
+         },
+-        currentUser ? styles.currentUserNode : null,
+         pressed ? styles.nodePressed : null,
+       ]}
+     >
+-      <Text style={[styles.nodeInitials, { color: selected ? palette.background : palette.text }]}>
+-        {participant.initials}
+-      </Text>
+-      <Text
+-        numberOfLines={1}
+-        style={[styles.nodeName, { color: selected ? palette.background : palette.text }]}
+-      >
+-        {participant.name}
+-      </Text>
+-      {participant.joined ? (
++      <View style={[styles.avatarStack, { width: avatarSize + 32, height: avatarSize + 32 }]}>
++        {selected ? (
++          <View
++            pointerEvents="none"
++            style={[
++              styles.selectedHalo,
++              {
++                width: avatarSize + 18,
++                height: avatarSize + 18,
++                borderRadius: (avatarSize + 18) / 2,
++                backgroundColor: palette.text,
++                left: 7,
++                top: 7,
++              },
++            ]}
++          />
++        ) : null}
++        {currentUser ? (
++          <View
++            pointerEvents="none"
++            style={[
++              styles.currentUserHalo,
++              {
++                width: avatarSize + 30,
++                height: avatarSize + 30,
++                borderRadius: (avatarSize + 30) / 2,
++                borderColor: palette.border,
++                left: 1,
++                top: 1,
++              },
++            ]}
++          />
++        ) : null}
+         <View
+           style={[
+-            styles.joinedDot,
+-            { borderColor: selected ? palette.text : palette.surface, backgroundColor: palette.text },
++            styles.avatarBubble,
++            {
++              width: avatarSize,
++              height: avatarSize,
++              borderRadius: avatarSize / 2,
++              borderColor: selected ? palette.background : currentUser ? palette.text : palette.border,
++              backgroundColor: selected ? palette.text : palette.surface,
++            },
++            currentUser ? styles.currentUserAvatar : null,
+           ]}
+         >
+-          <Text style={[styles.joinedDotText, { color: palette.background }]}>✓</Text>
++          <Text style={[styles.nodeInitials, { color: selected ? palette.background : palette.text }]}>
++            {participant.initials}
++          </Text>
+         </View>
+-      ) : null}
++        {participant.joined ? (
++          <View
++            style={[
++              styles.joinedDot,
++              {
++                borderColor: selected ? palette.text : palette.surface,
++                backgroundColor: palette.text,
++                bottom: 9,
++                right: 9,
++              },
++            ]}
++          >
++            <Text style={[styles.joinedDotText, { color: palette.background }]}>✓</Text>
++          </View>
++        ) : null}
++      </View>
++
++      <View
++        style={[
++          styles.nodeNamePill,
++          {
++            borderColor: selected ? palette.text : palette.border,
++            backgroundColor: selected ? palette.text : palette.surface,
++          },
++        ]}
++      >
++        <Text
++          numberOfLines={1}
++          style={[styles.nodeName, { color: selected ? palette.background : palette.text }]}
++        >
++          {currentUser ? "You" : participant.name}
++        </Text>
++      </View>
+     </Pressable>
+   );
+ }
+@@ -230,6 +308,21 @@ function ChainCircle({
+ 
+   return (
+     <View style={[styles.circleWrap, { width: diagramSize, height: diagramSize }]}>
++      <View
++        pointerEvents="none"
++        style={[
++          styles.orbitGlow,
++          {
++            left: center - radius - 28,
++            top: center - radius - 28,
++            width: radius * 2 + 56,
++            height: radius * 2 + 56,
++            borderRadius: radius + 28,
++            backgroundColor: palette.surface,
++            borderColor: palette.border,
++          },
++        ]}
++      />
+       <View
+         pointerEvents="none"
+         style={[
+@@ -244,19 +337,41 @@ function ChainCircle({
+           },
+         ]}
+       />
++      <View
++        pointerEvents="none"
++        style={[
++          styles.circleGhostInner,
++          {
++            left: center - radius * 0.62,
++            top: center - radius * 0.62,
++            width: radius * 1.24,
++            height: radius * 1.24,
++            borderRadius: radius * 0.62,
++            borderColor: palette.border,
++          },
++        ]}
++      />
++      <View
++        pointerEvents="none"
++        style={[styles.loopCore, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}
++      >
++        <Text style={[styles.loopCoreIcon, { color: palette.text }]}>↻</Text>
++        <Text style={[styles.loopCoreText, { color: palette.muted }]}>loop</Text>
++      </View>
+ 
+       {placements.map((placement, index) => {
+         const nextPlacement = placements[(index + 1) % placements.length];
++        const active =
++          placement.participant.id === selectedId || nextPlacement.participant.id === selectedId;
++
+         return (
+           <ConnectionLine
+             key={`${placement.participant.id}-${nextPlacement.participant.id}`}
+             from={placement}
+             to={nextPlacement}
+-            color={
+-              placement.participant.id === selectedId || nextPlacement.participant.id === selectedId
+-                ? palette.text
+-                : palette.border
+-            }
++            active={active}
++            color={palette.text}
++            mutedColor={palette.border}
+           />
+         );
+       })}
+@@ -610,7 +725,7 @@ const styles = StyleSheet.create({
+   mapPane: {
+     alignItems: "center",
+     justifyContent: "center",
+-    minHeight: 310,
++    minHeight: 334,
+   },
+   mapPaneDesktop: {
+     flex: 1,
+@@ -628,59 +743,143 @@ const styles = StyleSheet.create({
+     alignItems: "center",
+     justifyContent: "center",
+   },
++  orbitGlow: {
++    borderWidth: StyleSheet.hairlineWidth,
++    opacity: 0.8,
++    position: "absolute",
++    shadowColor: "#000",
++    shadowOpacity: 0.08,
++    shadowRadius: 28,
++    shadowOffset: { height: 18, width: 0 },
++  },
+   circleGhost: {
++    borderStyle: "dashed",
+     borderWidth: 1,
++    opacity: 0.84,
+     position: "absolute",
+   },
+-  connectionLine: {
+-    borderRadius: 999,
+-    height: 2,
+-    opacity: 0.9,
++  circleGhostInner: {
++    borderStyle: "dotted",
++    borderWidth: 1,
++    opacity: 0.34,
+     position: "absolute",
+   },
+-  connectionArrow: {
+-    fontSize: 22,
++  loopCore: {
++    alignItems: "center",
++    borderRadius: 28,
++    borderWidth: 1,
++    height: 56,
++    justifyContent: "center",
++    position: "absolute",
++    width: 56,
++  },
++  loopCoreIcon: {
++    fontSize: 20,
+     fontWeight: "900",
+     lineHeight: 22,
++  },
++  loopCoreText: {
++    fontSize: 9,
++    fontWeight: "900",
++    letterSpacing: 0.7,
++    marginTop: -1,
++    textTransform: "uppercase",
++  },
++  connectionLine: {
++    borderRadius: 999,
++    height: 2,
+     position: "absolute",
+   },
+-  node: {
++  connectionLineActive: {
++    height: 4,
++    shadowColor: "#000",
++    shadowOpacity: 0.12,
++    shadowRadius: 8,
++    shadowOffset: { height: 3, width: 0 },
++  },
++  connectionArrow: {
+     alignItems: "center",
++    borderRadius: 12,
+     borderWidth: 1,
++    height: 24,
+     justifyContent: "center",
+-    paddingHorizontal: 8,
+     position: "absolute",
++    width: 24,
++  },
++  connectionArrowActive: {
+     shadowColor: "#000",
+-    shadowOpacity: 0.18,
+-    shadowRadius: 16,
+-    shadowOffset: { height: 10, width: 0 },
+-    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null),
++    shadowOpacity: 0.16,
++    shadowRadius: 9,
++    shadowOffset: { height: 5, width: 0 },
+   },
+-  currentUserNode: {
+-    borderWidth: 2,
++  connectionArrowText: {
++    fontSize: 20,
++    fontWeight: "900",
++    lineHeight: 21,
++    marginTop: -1,
++  },
++  node: {
++    alignItems: "center",
++    gap: 7,
++    position: "absolute",
++    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null),
+   },
+   nodePressed: {
+     transform: [{ scale: 0.97 }],
+   },
++  avatarStack: {
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  avatarBubble: {
++    alignItems: "center",
++    borderWidth: 2,
++    justifyContent: "center",
++    shadowColor: "#000",
++    shadowOpacity: 0.16,
++    shadowRadius: 14,
++    shadowOffset: { height: 8, width: 0 },
++  },
++  currentUserAvatar: {
++    borderWidth: 3,
++  },
++  selectedHalo: {
++    opacity: 0.13,
++    position: "absolute",
++  },
++  currentUserHalo: {
++    borderStyle: "dashed",
++    borderWidth: 1,
++    opacity: 0.86,
++    position: "absolute",
++  },
+   nodeInitials: {
+-    fontSize: 14,
++    fontSize: 16,
+     fontWeight: "900",
++    letterSpacing: 0.3,
++  },
++  nodeNamePill: {
++    borderRadius: 999,
++    borderWidth: 1,
++    maxWidth: 92,
++    paddingHorizontal: 10,
++    paddingVertical: 5,
+   },
+   nodeName: {
+     fontSize: 12,
+     fontWeight: "900",
+-    marginTop: 4,
+-    maxWidth: 66,
++    maxWidth: 70,
++    textAlign: "center",
+   },
+   joinedDot: {
+     alignItems: "center",
+     borderRadius: 11,
+     borderWidth: 2,
+-    bottom: 3,
++    bottom: -1,
+     height: 22,
+     justifyContent: "center",
+     position: "absolute",
+-    right: 3,
++    right: -2,
+     width: 22,
+   },
+   joinedDotText: {

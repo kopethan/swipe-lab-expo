@@ -1,0 +1,372 @@
+diff --git a/features/chain-lab/ChainLabScreen.tsx b/features/chain-lab/ChainLabScreen.tsx
+index 80ae04e..38b3b8c 100644
+--- a/features/chain-lab/ChainLabScreen.tsx
++++ b/features/chain-lab/ChainLabScreen.tsx
+@@ -39,11 +39,8 @@ function getParticipant(participantId: ChainParticipantId) {
+   return participant;
+ }
+ 
+-function getConnectionLabel(participant: ChainParticipant) {
+-  const from = getParticipant(participant.receivesFromId).name;
+-  const to = getParticipant(participant.givesToId).name;
+-
+-  return `${from} -> ${participant.name} -> ${to}`;
++function getDisplayName(participant: ChainParticipant) {
++  return participant.id === chainLabScenario.currentUserId ? "You" : participant.name;
+ }
+ 
+ function ScreenHeader({
+@@ -399,22 +396,105 @@ function InfoChip({ label }: { label: string }) {
+   );
+ }
+ 
+-function RoleLine({
+-  label,
++function FlowNode({
++  participant,
++  selected,
++}: {
++  participant: ChainParticipant;
++  selected?: boolean;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View
++      style={[
++        styles.flowNode,
++        {
++          borderColor: selected ? palette.text : palette.border,
++          backgroundColor: selected ? palette.text : palette.surfaceAlt,
++        },
++      ]}
++    >
++      <Text
++        numberOfLines={1}
++        style={[styles.flowNodeText, { color: selected ? palette.background : palette.text }]}
++      >
++        {getDisplayName(participant)}
++      </Text>
++    </View>
++  );
++}
++
++function RoleFlow({
++  participant,
++  receivesFrom,
++  givesTo,
++}: {
++  participant: ChainParticipant;
++  receivesFrom: ChainParticipant;
++  givesTo: ChainParticipant;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.roleFlow, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++      <Text style={[styles.roleFlowLabel, { color: palette.muted }]}>CHAIN PATH</Text>
++      <View style={styles.roleFlowRow}>
++        <FlowNode participant={receivesFrom} />
++        <Text style={[styles.roleFlowArrow, { color: palette.muted }]}>→</Text>
++        <FlowNode participant={participant} selected />
++        <Text style={[styles.roleFlowArrow, { color: palette.muted }]}>→</Text>
++        <FlowNode participant={givesTo} />
++      </View>
++    </View>
++  );
++}
++
++function RoleExchangeBlock({
++  kind,
++  icon,
+   title,
+-  caption,
++  peerLabel,
++  peerName,
+ }: {
+-  label: string;
++  kind: "Receives" | "Gives";
++  icon: string;
+   title: string;
+-  caption: string;
++  peerLabel: string;
++  peerName: string;
+ }) {
+   const { palette } = useTheme();
+ 
+   return (
+-    <View style={styles.roleLine}>
+-      <Text style={[styles.roleLabel, { color: palette.muted }]}>{label}</Text>
+-      <Text style={[styles.roleTitle, { color: palette.text }]}>{title}</Text>
+-      <Text style={[styles.roleCaption, { color: palette.muted }]}>{caption}</Text>
++    <View style={[styles.exchangeBlock, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++      <View style={[styles.exchangeIcon, { backgroundColor: palette.text }]}>
++        <Text style={[styles.exchangeIconText, { color: palette.background }]}>{icon}</Text>
++      </View>
++      <View style={styles.exchangeCopy}>
++        <Text style={[styles.exchangeLabel, { color: palette.muted }]}>{kind}</Text>
++        <Text style={[styles.exchangeTitle, { color: palette.text }]}>{title}</Text>
++        <Text style={[styles.exchangeCaption, { color: palette.muted }]}>
++          {peerLabel} <Text style={[styles.exchangePeerName, { color: palette.text }]}>{peerName}</Text>
++        </Text>
++      </View>
++    </View>
++  );
++}
++
++function MatchFit({ participant }: { participant: ChainParticipant }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.matchFitCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++      <View style={styles.matchFitHeader}>
++        <Text style={[styles.matchFitTitle, { color: palette.text }]}>Match fit</Text>
++        <Text style={[styles.matchFitCaption, { color: palette.muted }]}>Why this role may work</Text>
++      </View>
++      <View style={styles.infoChipsRow}>
++        <InfoChip label={participant.timingLabel} />
++        <InfoChip label={participant.modeLabel} />
++        <InfoChip label={participant.effortLabel} />
++      </View>
+     </View>
+   );
+ }
+@@ -423,38 +503,43 @@ function SelectedParticipantCard({ participant }: { participant: ChainParticipan
+   const { palette } = useTheme();
+   const receivesFrom = getParticipant(participant.receivesFromId);
+   const givesTo = getParticipant(participant.givesToId);
++  const isCurrentUser = participant.id === chainLabScenario.currentUserId;
+ 
+   return (
+     <View style={[styles.detailCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+       <View style={styles.detailHeaderRow}>
+-        <View>
+-          <Text style={[styles.detailEyebrow, { color: palette.muted }]}>{participant.roleLabel}</Text>
+-          <Text style={[styles.detailTitle, { color: palette.text }]}>{participant.name}</Text>
+-        </View>
+         <View style={[styles.miniAvatar, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+           <Text style={[styles.miniAvatarText, { color: palette.text }]}>{participant.initials}</Text>
+         </View>
++        <View style={styles.detailHeaderCopy}>
++          <Text style={[styles.detailEyebrow, { color: palette.muted }]}>
++            {isCurrentUser ? "Your chain role" : "Selected participant"}
++          </Text>
++          <Text style={[styles.detailTitle, { color: palette.text }]}>{getDisplayName(participant)}</Text>
++          <Text style={[styles.detailSubtitle, { color: palette.muted }]}>{participant.roleLabel}</Text>
++        </View>
+       </View>
+ 
+-      <View style={[styles.connectionSummary, { borderColor: palette.border }]}>
+-        <Text style={[styles.connectionSummaryText, { color: palette.muted }]}>
+-          {getConnectionLabel(participant)}
+-        </Text>
+-      </View>
+-
+-      <RoleLine
+-        label="Receives"
+-        title={participant.needTitle}
+-        caption={`from ${receivesFrom.name}`}
+-      />
+-      <View style={[styles.inlineDivider, { backgroundColor: palette.border }]} />
+-      <RoleLine label="Gives" title={participant.offerTitle} caption={`to ${givesTo.name}`} />
++      <RoleFlow participant={participant} receivesFrom={receivesFrom} givesTo={givesTo} />
+ 
+-      <View style={styles.infoChipsRow}>
+-        <InfoChip label={participant.timingLabel} />
+-        <InfoChip label={participant.modeLabel} />
+-        <InfoChip label={participant.effortLabel} />
++      <View style={styles.exchangeStack}>
++        <RoleExchangeBlock
++          kind="Receives"
++          icon="↓"
++          title={participant.needTitle}
++          peerLabel="from"
++          peerName={getDisplayName(receivesFrom)}
++        />
++        <RoleExchangeBlock
++          kind="Gives"
++          icon="↑"
++          title={participant.offerTitle}
++          peerLabel="to"
++          peerName={getDisplayName(givesTo)}
++        />
+       </View>
++
++      <MatchFit participant={participant} />
+     </View>
+   );
+ }
+@@ -888,14 +973,19 @@ const styles = StyleSheet.create({
+     lineHeight: 13,
+   },
+   detailCard: {
+-    borderRadius: 24,
++    borderRadius: 26,
+     borderWidth: 1,
++    gap: 14,
+     padding: 16,
+   },
+   detailHeaderRow: {
+     alignItems: "center",
+     flexDirection: "row",
+-    justifyContent: "space-between",
++    gap: 12,
++  },
++  detailHeaderCopy: {
++    flex: 1,
++    minWidth: 0,
+   },
+   detailEyebrow: {
+     fontSize: 11,
+@@ -904,55 +994,127 @@ const styles = StyleSheet.create({
+     textTransform: "uppercase",
+   },
+   detailTitle: {
+-    fontSize: 24,
++    fontSize: 25,
+     fontWeight: "900",
+-    letterSpacing: -0.2,
+-    marginTop: 3,
++    letterSpacing: -0.25,
++    marginTop: 2,
++  },
++  detailSubtitle: {
++    fontSize: 13,
++    fontWeight: "800",
++    marginTop: 2,
+   },
+   miniAvatar: {
+     alignItems: "center",
+-    borderRadius: 22,
++    borderRadius: 24,
+     borderWidth: 1,
+-    height: 44,
++    height: 48,
+     justifyContent: "center",
+-    width: 44,
++    width: 48,
+   },
+   miniAvatarText: {
+-    fontSize: 13,
++    fontSize: 14,
+     fontWeight: "900",
+   },
+-  connectionSummary: {
+-    borderRadius: 16,
++  roleFlow: {
++    borderRadius: 18,
+     borderWidth: 1,
+-    marginTop: 14,
++    gap: 10,
+     paddingHorizontal: 12,
+-    paddingVertical: 10,
++    paddingVertical: 12,
+   },
+-  connectionSummaryText: {
+-    fontSize: 12,
+-    fontWeight: "800",
++  roleFlowLabel: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 0.9,
+   },
+-  roleLine: {
+-    gap: 4,
+-    paddingVertical: 14,
++  roleFlowRow: {
++    alignItems: "center",
++    flexDirection: "row",
++    gap: 7,
++  },
++  roleFlowArrow: {
++    fontSize: 15,
++    fontWeight: "900",
+   },
+-  roleLabel: {
++  flowNode: {
++    alignItems: "center",
++    borderRadius: 999,
++    borderWidth: 1,
++    flex: 1,
++    minWidth: 0,
++    paddingHorizontal: 10,
++    paddingVertical: 7,
++  },
++  flowNodeText: {
+     fontSize: 12,
+     fontWeight: "900",
+-    letterSpacing: 0.5,
++    maxWidth: "100%",
++  },
++  exchangeStack: {
++    gap: 10,
++  },
++  exchangeBlock: {
++    alignItems: "flex-start",
++    borderRadius: 20,
++    borderWidth: 1,
++    flexDirection: "row",
++    gap: 12,
++    padding: 14,
++  },
++  exchangeIcon: {
++    alignItems: "center",
++    borderRadius: 18,
++    height: 36,
++    justifyContent: "center",
++    width: 36,
++  },
++  exchangeIconText: {
++    fontSize: 20,
++    fontWeight: "900",
++    lineHeight: 22,
++  },
++  exchangeCopy: {
++    flex: 1,
++    gap: 3,
++    minWidth: 0,
++  },
++  exchangeLabel: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.6,
+     textTransform: "uppercase",
+   },
+-  roleTitle: {
++  exchangeTitle: {
+     fontSize: 18,
+     fontWeight: "900",
+-    letterSpacing: -0.1,
++    letterSpacing: -0.15,
++    lineHeight: 23,
+   },
+-  roleCaption: {
++  exchangeCaption: {
+     fontSize: 13,
+     fontWeight: "700",
++    lineHeight: 18,
+   },
+-  inlineDivider: {
+-    height: StyleSheet.hairlineWidth,
++  exchangePeerName: {
++    fontWeight: "900",
++  },
++  matchFitCard: {
++    borderRadius: 18,
++    borderWidth: 1,
++    gap: 10,
++    padding: 12,
++  },
++  matchFitHeader: {
++    gap: 2,
++  },
++  matchFitTitle: {
++    fontSize: 14,
++    fontWeight: "900",
++  },
++  matchFitCaption: {
++    fontSize: 12,
++    fontWeight: "700",
+   },
+   infoChipsRow: {
+     flexDirection: "row",
