@@ -25,6 +25,12 @@ export default function LabsIndexScreen() {
         badge: "new",
       },
       {
+        title: "Navigation Lab",
+        description: "Responsive Plans / Me / Trade shell with mobile bottom nav and desktop tabs.",
+        href: "/nav-lab",
+        badge: "new",
+      },
+      {
         title: "Action Bar",
         description: "Web docked action bar (bottom/center) + icon-collapse → panel morph.",
         href: "/action-bar",

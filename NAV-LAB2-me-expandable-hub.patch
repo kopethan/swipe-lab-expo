@@ -1,0 +1,441 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index b4bbbc3..76418c9 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+ import { meHubSections, navLabTabs, planPreviews, tradePreviews } from "./navLab.mockData";
+-import type { MeHubSection, NavLabTabId, PlanPreview, TradePreview } from "./navLab.types";
++import type { MeHubSection, MeHubSectionId, NavLabTabId, PlanPreview, TradePreview } from "./navLab.types";
+ 
+ const desktopBreakpoint = 820;
+ 
+@@ -47,7 +47,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>NAV-LAB1</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>NAV-LAB2</Text>
+         </View>
+ 
+         <Pressable
+@@ -61,7 +61,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>RESPONSIVE NAV SHELL</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>ME EXPANDABLE HUB</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -163,59 +163,210 @@ function SectionHeader({ label, title }: { label: string; title: string }) {
+   );
+ }
+ 
+-function MeSectionCard({ section, isDesktop }: { section: MeHubSection; isDesktop: boolean }) {
++function getSectionCount(section: MeHubSection) {
++  return section.items.reduce((sum, item) => sum + (item.count ?? 0), 0);
++}
++
++function SectionCountPill({ section }: { section: MeHubSection }) {
+   const { palette } = useTheme();
++  const count = getSectionCount(section);
++
++  if (count <= 0) {
++    return null;
++  }
+ 
+   return (
+-    <View
+-      style={[
+-        styles.meSection,
+-        isDesktop ? styles.meSectionDesktop : null,
+-        { backgroundColor: palette.surface, borderColor: palette.border },
+-      ]}
+-    >
+-      <View style={styles.meSectionHeader}>
++    <View style={[styles.sectionCountPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++      <Text style={[styles.sectionCountText, { color: palette.text }]}>{count}</Text>
++    </View>
++  );
++}
++
++function MeItemRows({ section }: { section: MeHubSection }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.itemList, { borderTopColor: palette.border }]}>
++      {section.items.map((item, index) => (
++        <View
++          key={item.id}
++          style={[
++            styles.meItemRow,
++            index > 0 ? { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth } : null,
++          ]}
++        >
++          <View style={styles.meItemTextBlock}>
++            <Text style={[styles.meItemLabel, { color: palette.text }]}>{item.label}</Text>
++            {item.subtitle ? (
++              <Text style={[styles.meItemSubtitle, { color: palette.muted }]}>{item.subtitle}</Text>
++            ) : null}
++          </View>
++          <View style={styles.meItemRight}>
++            {typeof item.count === "number" ? (
++              <View style={[styles.countPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++                <Text style={[styles.countPillText, { color: palette.text }]}>{item.count}</Text>
++              </View>
++            ) : null}
++            <Text style={[styles.rowChevron, { color: palette.muted }]}>›</Text>
++          </View>
++        </View>
++      ))}
++    </View>
++  );
++}
++
++function MobileMeAccordionCard({
++  section,
++  expanded,
++  onToggle,
++}: {
++  section: MeHubSection;
++  expanded: boolean;
++  onToggle: () => void;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.meSection, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++      <Pressable
++        onPress={onToggle}
++        accessibilityRole="button"
++        accessibilityState={{ expanded }}
++        style={({ pressed }) => [
++          styles.meAccordionHeader,
++          pressed ? styles.pressed : null,
++          Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++        ]}
++      >
+         <View style={styles.meSectionTitleBlock}>
+           <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{section.eyebrow}</Text>
+-          <Text style={[styles.meSectionTitle, { color: palette.text }]}>{section.title}</Text>
++          <View style={styles.meAccordionTitleRow}>
++            <Text style={[styles.meSectionTitle, { color: palette.text }]}>{section.title}</Text>
++            <SectionCountPill section={section} />
++          </View>
+         </View>
+-        <Text style={[styles.mockChevron, { color: palette.muted }]}>{isDesktop ? "" : "▾"}</Text>
+-      </View>
++        <Text style={[styles.mockChevron, { color: palette.muted }]}>{expanded ? "▾" : "▸"}</Text>
++      </Pressable>
+ 
+       <Text style={[styles.meSectionSummary, { color: palette.muted }]}>{section.summary}</Text>
+ 
+-      <View style={[styles.itemList, { borderTopColor: palette.border }]}>
+-        {section.items.map((item, index) => (
+-          <View
+-            key={item.id}
+-            style={[
+-              styles.meItemRow,
+-              index > 0 ? { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth } : null,
++      {expanded ? <MeItemRows section={section} /> : null}
++    </View>
++  );
++}
++
++function DesktopSectionTabs({
++  activeSectionId,
++  onChange,
++}: {
++  activeSectionId: MeHubSectionId;
++  onChange: (sectionId: MeHubSectionId) => void;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.desktopSectionTabs, { backgroundColor: palette.surfaceAlt, borderColor: palette.border }]}>
++      {meHubSections.map((section) => {
++        const isActive = activeSectionId === section.id;
++        return (
++          <Pressable
++            key={section.id}
++            onPress={() => onChange(section.id)}
++            accessibilityRole="tab"
++            accessibilityState={{ selected: isActive }}
++            style={({ pressed }) => [
++              styles.desktopSectionTab,
++              isActive ? { backgroundColor: palette.surface, borderColor: palette.border } : { borderColor: "transparent" },
++              pressed ? styles.pressed : null,
++              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+             ]}
+           >
+-            <View style={styles.meItemTextBlock}>
+-              <Text style={[styles.meItemLabel, { color: palette.text }]}>{item.label}</Text>
+-              {item.subtitle ? (
+-                <Text style={[styles.meItemSubtitle, { color: palette.muted }]}>{item.subtitle}</Text>
+-              ) : null}
+-            </View>
+-            <View style={styles.meItemRight}>
+-              {typeof item.count === "number" ? (
+-                <View style={[styles.countPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+-                  <Text style={[styles.countPillText, { color: palette.text }]}>{item.count}</Text>
+-                </View>
+-              ) : null}
+-              <Text style={[styles.rowChevron, { color: palette.muted }]}>›</Text>
++            <Text style={[styles.desktopSectionTabEyebrow, { color: palette.muted }]}>{section.eyebrow}</Text>
++            <View style={styles.desktopSectionTabTitleRow}>
++              <Text style={[styles.desktopSectionTabTitle, { color: isActive ? palette.text : palette.muted }]}>
++                {section.title}
++              </Text>
++              <SectionCountPill section={section} />
+             </View>
+-          </View>
+-        ))}
++          </Pressable>
++        );
++      })}
++    </View>
++  );
++}
++
++function DesktopMePanel({ section }: { section: MeHubSection }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.desktopMePanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++      <View style={styles.desktopMePanelHeader}>
++        <View style={styles.meSectionTitleBlock}>
++          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{section.eyebrow}</Text>
++          <Text style={[styles.desktopMePanelTitle, { color: palette.text }]}>{section.title}</Text>
++          <Text style={[styles.desktopMePanelSummary, { color: palette.muted }]}>{section.summary}</Text>
++        </View>
++        <SectionCountPill section={section} />
+       </View>
++      <MeItemRows section={section} />
+     </View>
+   );
+ }
+ 
++function MobileMeHub({
++  expandedSectionIds,
++  onToggleSection,
++}: {
++  expandedSectionIds: MeHubSectionId[];
++  onToggleSection: (sectionId: MeHubSectionId) => void;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <>
++      <View style={styles.mobileHubToolbar}>
++        <SectionHeader label="MOBILE ME HUB" title="Tap sections to expand or collapse" />
++        <View style={[styles.nextPatchPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++          <Text style={[styles.nextPatchPillText, { color: palette.muted }]}>Customize order in NAV-LAB3</Text>
++        </View>
++      </View>
++
++      <View style={styles.meStack}>
++        {meHubSections.map((section) => (
++          <MobileMeAccordionCard
++            key={section.id}
++            section={section}
++            expanded={expandedSectionIds.includes(section.id)}
++            onToggle={() => onToggleSection(section.id)}
++          />
++        ))}
++      </View>
++    </>
++  );
++}
++
++function DesktopMeHub({
++  activeSectionId,
++  onChangeSection,
++}: {
++  activeSectionId: MeHubSectionId;
++  onChangeSection: (sectionId: MeHubSectionId) => void;
++}) {
++  const activeSection = meHubSections.find((section) => section.id === activeSectionId) ?? meHubSections[0];
++
++  return (
++    <>
++      <SectionHeader label="DESKTOP ME HUB" title="Tabs instead of mobile accordions" />
++      <DesktopSectionTabs activeSectionId={activeSectionId} onChange={onChangeSection} />
++      <DesktopMePanel section={activeSection} />
++    </>
++  );
++}
++
+ function MeScreen({ isDesktop }: { isDesktop: boolean }) {
+   const { palette } = useTheme();
++  const [expandedSectionIds, setExpandedSectionIds] = useState<MeHubSectionId[]>(["activity"]);
++  const [activeDesktopSectionId, setActiveDesktopSectionId] = useState<MeHubSectionId>("activity");
+   const totalCount = useMemo(
+     () =>
+       meHubSections.reduce(
+@@ -225,6 +376,12 @@ function MeScreen({ isDesktop }: { isDesktop: boolean }) {
+     []
+   );
+ 
++  const toggleSection = (sectionId: MeHubSectionId) => {
++    setExpandedSectionIds((current) =>
++      current.includes(sectionId) ? current.filter((id) => id !== sectionId) : [...current, sectionId]
++    );
++  };
++
+   return (
+     <View style={styles.tabContent}>
+       <View style={[styles.profilePanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+@@ -241,16 +398,11 @@ function MeScreen({ isDesktop }: { isDesktop: boolean }) {
+         </View>
+       </View>
+ 
+-      <SectionHeader
+-        label={isDesktop ? "DESKTOP ME PREVIEW" : "MOBILE ME PREVIEW"}
+-        title={isDesktop ? "Columns instead of accordions" : "Expandable groups next"}
+-      />
+-
+-      <View style={isDesktop ? styles.meGrid : styles.meStack}>
+-        {meHubSections.map((section) => (
+-          <MeSectionCard key={section.id} section={section} isDesktop={isDesktop} />
+-        ))}
+-      </View>
++      {isDesktop ? (
++        <DesktopMeHub activeSectionId={activeDesktopSectionId} onChangeSection={setActiveDesktopSectionId} />
++      ) : (
++        <MobileMeHub expandedSectionIds={expandedSectionIds} onToggleSection={toggleSection} />
++      )}
+     </View>
+   );
+ }
+@@ -299,7 +451,7 @@ function PlansScreen() {
+       <View style={[styles.heroPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+         <Text style={[styles.heroEyebrow, { color: palette.muted }]}>FUTURE MAIN AREA</Text>
+         <Text style={[styles.heroTitle, { color: palette.text }]}>Plans are bigger goals.</Text>
+-        <Text style={[styles.heroCopy, { color: palette.muted }]}>A plan can contain needs, offers, people, and later trades. NAV-LAB1 keeps this as mock-only cards.</Text>
++        <Text style={[styles.heroCopy, { color: palette.muted }]}>A plan can contain needs, offers, people, and later trades. NAV-LAB2 still keeps this as mock-only cards.</Text>
+       </View>
+ 
+       <SectionHeader label="MOCK PLAN FEED" title="Expandable plan cards later" />
+@@ -636,6 +788,99 @@ const styles = StyleSheet.create({
+     fontWeight: "900",
+     letterSpacing: -0.3,
+   },
++  mobileHubToolbar: {
++    gap: 10,
++  },
++  nextPatchPill: {
++    alignSelf: "flex-start",
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 10,
++    paddingVertical: 6,
++  },
++  nextPatchPillText: {
++    fontSize: 11,
++    fontWeight: "800",
++  },
++  sectionCountPill: {
++    minWidth: 28,
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 8,
++    paddingVertical: 3,
++    alignItems: "center",
++  },
++  sectionCountText: {
++    fontSize: 11,
++    fontWeight: "900",
++  },
++  meAccordionHeader: {
++    flexDirection: "row",
++    alignItems: "flex-start",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  meAccordionTitleRow: {
++    marginTop: 4,
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 8,
++  },
++  desktopSectionTabs: {
++    flexDirection: "row",
++    borderRadius: 26,
++    borderWidth: 1,
++    padding: 6,
++    gap: 6,
++  },
++  desktopSectionTab: {
++    flex: 1,
++    minHeight: 82,
++    borderRadius: 20,
++    borderWidth: 1,
++    paddingHorizontal: 12,
++    paddingVertical: 11,
++    justifyContent: "space-between",
++  },
++  desktopSectionTabEyebrow: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 0.4,
++  },
++  desktopSectionTabTitleRow: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 8,
++  },
++  desktopSectionTabTitle: {
++    flex: 1,
++    fontSize: 16,
++    fontWeight: "900",
++    letterSpacing: -0.2,
++  },
++  desktopMePanel: {
++    borderRadius: 28,
++    borderWidth: 1,
++    padding: 18,
++  },
++  desktopMePanelHeader: {
++    flexDirection: "row",
++    alignItems: "flex-start",
++    gap: 14,
++  },
++  desktopMePanelTitle: {
++    marginTop: 5,
++    fontSize: 26,
++    fontWeight: "900",
++    letterSpacing: -0.5,
++  },
++  desktopMePanelSummary: {
++    marginTop: 8,
++    maxWidth: 680,
++    fontSize: 14,
++    lineHeight: 20,
++  },
+   meStack: {
+     gap: 12,
+   },
+diff --git a/features/nav-lab/navLab.types.ts b/features/nav-lab/navLab.types.ts
+index a39b483..d880d89 100644
+--- a/features/nav-lab/navLab.types.ts
++++ b/features/nav-lab/navLab.types.ts
+@@ -1,5 +1,7 @@
+ export type NavLabTabId = "plans" | "me" | "trade";
+ 
++export type MeHubSectionId = "activity" | "plans" | "tools" | "account";
++
+ export type NavLabTab = {
+   id: NavLabTabId;
+   label: string;
+@@ -14,7 +16,7 @@ export type MeHubItem = {
+ };
+ 
+ export type MeHubSection = {
+-  id: string;
++  id: MeHubSectionId;
+   title: string;
+   eyebrow: string;
+   summary: string;

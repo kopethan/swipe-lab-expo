@@ -1,0 +1,505 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index 045c9e0..8aeb467 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -13,8 +13,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
+ 
+ import { useTheme } from "@/providers/ThemeProvider";
+ 
+-import { meHubSections, navLabTabs, planPreviews, tradePreviews } from "./navLab.mockData";
+-import type { MeHubSection, MeHubSectionId, NavLabTabId, PlanPreview, TradePreview } from "./navLab.types";
++import { meHubSections, navLabTabs, planPreviews, tradeFilters, tradePreviews } from "./navLab.mockData";
++import type { MeHubSection, MeHubSectionId, NavLabTabId, PlanPreview, TradeFilterId, TradePreview } from "./navLab.types";
+ 
+ const desktopBreakpoint = 820;
+ const meOrderStorageKey = "hellowhen-nav-lab-me-section-order-v1";
+@@ -111,7 +111,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>NAV-LAB4</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>NAV-LAB5</Text>
+         </View>
+ 
+         <Pressable
+@@ -125,7 +125,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>PLANS EXPANDABLE FEED</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>TRADE SHELL FILTERS</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -781,7 +781,7 @@ function PlansScreen() {
+             <Text style={[styles.heroEyebrow, { color: palette.muted }]}>FUTURE MAIN AREA</Text>
+             <Text style={[styles.heroTitle, { color: palette.text }]}>Plans are bigger goals.</Text>
+             <Text style={[styles.heroCopy, { color: palette.muted }]}>
+-              A plan can contain needs, offers, people, and later trades. NAV-LAB4 turns this into expandable
++              A plan can contain needs, offers, people, and later trades. This lab keeps them as expandable
+               mock plan cards.
+             </Text>
+           </View>
+@@ -814,33 +814,141 @@ function PlansScreen() {
+   );
+ }
+ 
+-function FilterPreview() {
++function getFilteredTradeItems(activeFilterId: TradeFilterId) {
++  if (activeFilterId === "trades") {
++    return tradePreviews.filter((item) => item.type === "trade");
++  }
++
++  if (activeFilterId === "needs") {
++    return tradePreviews.filter((item) => item.type === "open_need");
++  }
++
++  if (activeFilterId === "offers") {
++    return tradePreviews.filter((item) => item.type === "open_offer");
++  }
++
++  return tradePreviews;
++}
++
++function getFilterCount(filterId: TradeFilterId) {
++  return getFilteredTradeItems(filterId).length;
++}
++
++function TradeFilterShell({
++  expanded,
++  activeFilterId,
++  onToggleExpanded,
++  onChangeFilter,
++}: {
++  expanded: boolean;
++  activeFilterId: TradeFilterId;
++  onToggleExpanded: () => void;
++  onChangeFilter: (filterId: TradeFilterId) => void;
++}) {
+   const { palette } = useTheme();
+-  const filters = ["All", "Trades", "Needs", "Offers"];
++  const activeFilter = tradeFilters.find((filter) => filter.id === activeFilterId) ?? tradeFilters[0];
+ 
+   return (
+     <View style={[styles.filterPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++      <Pressable
++        onPress={onToggleExpanded}
++        accessibilityRole="button"
++        accessibilityState={{ expanded }}
++        style={({ pressed }) => [
++          styles.filterHeaderButton,
++          pressed ? styles.pressed : null,
++          Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++        ]}
++      >
++        <View style={styles.filterHeaderTextBlock}>
++          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>COLLAPSIBLE FILTERS</Text>
++          <Text style={[styles.filterTitle, { color: palette.text }]}>{activeFilter.label}</Text>
++          <Text style={[styles.filterHelper, { color: palette.muted }]}>{activeFilter.helper}</Text>
++        </View>
++        <View style={styles.filterHeaderRight}>
++          <View style={[styles.filterCountPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++            <Text style={[styles.filterCountText, { color: palette.text }]}>{getFilterCount(activeFilterId)}</Text>
++          </View>
++          <Text style={[styles.mockChevron, { color: palette.muted }]}>{expanded ? "▾" : "▸"}</Text>
++        </View>
++      </Pressable>
++
++      {expanded ? (
++        <>
++          <View style={[styles.filterDivider, { backgroundColor: palette.border }]} />
++          <View style={styles.filterRow}>
++            {tradeFilters.map((filter) => {
++              const isActive = activeFilterId === filter.id;
++              return (
++                <Pressable
++                  key={filter.id}
++                  onPress={() => onChangeFilter(filter.id)}
++                  accessibilityRole="button"
++                  accessibilityState={{ selected: isActive }}
++                  style={({ pressed }) => [
++                    styles.filterChip,
++                    {
++                      borderColor: palette.border,
++                      backgroundColor: isActive ? palette.text : palette.surfaceAlt,
++                    },
++                    pressed ? styles.pressed : null,
++                    Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++                  ]}
++                >
++                  <Text style={[styles.filterChipText, { color: isActive ? palette.background : palette.text }]}>
++                    {filter.label} · {getFilterCount(filter.id)}
++                  </Text>
++                </Pressable>
++              );
++            })}
++          </View>
++          <Text style={[styles.filterFootnote, { color: palette.muted }]}>
++            Main navigation stays fixed. Needs and offers are explored from this Trade area instead of separate root tabs.
++          </Text>
++        </>
++      ) : null}
++    </View>
++  );
++}
++
++function StarterPlacementPreview() {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.starterPlacementPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+       <View style={styles.cardTopLine}>
+-        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>COLLAPSED FILTER PREVIEW</Text>
+-        <Text style={[styles.mockChevron, { color: palette.muted }]}>▸</Text>
++        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>STARTER PLACEMENT PREVIEW</Text>
++        <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++          <Text style={[styles.smallTagText, { color: palette.text }]}>IDEAS</Text>
++        </View>
+       </View>
+-      <View style={styles.filterRow}>
+-        {filters.map((filter, index) => (
+-          <View
+-            key={filter}
+-            style={[
+-              styles.filterChip,
+-              {
+-                borderColor: palette.border,
+-                backgroundColor: index === 0 ? palette.text : palette.surfaceAlt,
+-              },
+-            ]}
+-          >
+-            <Text style={[styles.filterChipText, { color: index === 0 ? palette.background : palette.text }]}>
+-              {filter}
+-            </Text>
+-          </View>
+-        ))}
++      <Text style={[styles.starterPlacementTitle, { color: palette.text }]}>Starter cards appear only as honest ideas.</Text>
++      <Text style={[styles.starterPlacementCopy, { color: palette.muted }]}>
++        In this lab, the All feed shows a starter card after real/mock feed items. Filtered views hide starter ideas so search-style browsing feels clean.
++      </Text>
++    </View>
++  );
++}
++
++function OpenItemCard({ item }: { item: TradePreview }) {
++  const { palette } = useTheme();
++  const isNeed = item.type === "open_need";
++
++  return (
++    <View style={[styles.openItemCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++      <View style={styles.cardTopLine}>
++        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{isNeed ? "OPEN NEED" : "OPEN OFFER"}</Text>
++        <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++          <Text style={[styles.smallTagText, { color: palette.text }]}>{isNeed ? "NEED" : "OFFER"}</Text>
++        </View>
++      </View>
++
++      <Text style={[styles.openItemTitle, { color: palette.text }]}>{item.title}</Text>
++      <Text style={[styles.tradeMeta, { color: palette.muted }]}>{item.meta}</Text>
++
++      <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
++        <Text style={[styles.footerMeta, { color: palette.muted }]}>Real open {isNeed ? "need" : "offer"} preview</Text>
++        <Text style={[styles.footerAction, { color: palette.text }]}>{item.footerLabel}</Text>
+       </View>
+     </View>
+   );
+@@ -850,8 +958,12 @@ function TradeCard({ trade }: { trade: TradePreview }) {
+   const { palette } = useTheme();
+   const isStarter = trade.type === "starter";
+ 
++  if (trade.type === "open_need" || trade.type === "open_offer") {
++    return <OpenItemCard item={trade} />;
++  }
++
+   return (
+-    <View style={[styles.tradeCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++    <View style={[styles.tradeCard, isStarter ? styles.starterTradeCard : null, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+       <View style={styles.cardTopLine}>
+         <Text style={[styles.cardEyebrow, { color: palette.muted }]}>
+           {isStarter ? "TRADE IDEA" : "OPEN TRADE"}
+@@ -861,6 +973,10 @@ function TradeCard({ trade }: { trade: TradePreview }) {
+         </View>
+       </View>
+ 
++      {isStarter && trade.placementNote ? (
++        <Text style={[styles.starterPlacementNote, { color: palette.muted }]}>{trade.placementNote}</Text>
++      ) : null}
++
+       <View style={styles.exchangeBlock}>
+         <View style={styles.exchangeSide}>
+           <Text style={[styles.exchangeLabel, { color: palette.muted }]}>I need</Text>
+@@ -877,7 +993,7 @@ function TradeCard({ trade }: { trade: TradePreview }) {
+ 
+       <Text style={[styles.tradeMeta, { color: palette.muted }]}>{trade.meta}</Text>
+       <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
+-        <Text style={[styles.footerMeta, { color: palette.muted }]}>{isStarter ? "Starter deck" : "Real feed item"}</Text>
++        <Text style={[styles.footerMeta, { color: palette.muted }]}>{isStarter ? "Starter idea card" : "Real trade preview"}</Text>
+         <Text style={[styles.footerAction, { color: palette.text }]}>{trade.footerLabel}</Text>
+       </View>
+     </View>
+@@ -886,19 +1002,51 @@ function TradeCard({ trade }: { trade: TradePreview }) {
+ 
+ function TradeScreen() {
+   const { palette } = useTheme();
++  const [filtersExpanded, setFiltersExpanded] = useState(false);
++  const [activeFilterId, setActiveFilterId] = useState<TradeFilterId>("all");
++  const visibleItems = useMemo(() => getFilteredTradeItems(activeFilterId), [activeFilterId]);
++  const showStarterPlacementPreview = activeFilterId === "all";
+ 
+   return (
+     <View style={styles.tabContent}>
+       <View style={[styles.heroPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+-        <Text style={[styles.heroEyebrow, { color: palette.muted }]}>FUTURE TRADE AREA</Text>
+-        <Text style={[styles.heroTitle, { color: palette.text }]}>Trade keeps the deck identity.</Text>
+-        <Text style={[styles.heroCopy, { color: palette.muted }]}>Needs and offers can move into filters, create menus, and Me instead of staying in the main nav.</Text>
++        <View style={styles.plansHeroTopRow}>
++          <View style={styles.heroTextBlock}>
++            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>FUTURE TRADE AREA</Text>
++            <Text style={[styles.heroTitle, { color: palette.text }]}>Trade keeps the deck identity.</Text>
++            <Text style={[styles.heroCopy, { color: palette.muted }]}>
++              Needs and offers move into collapsible filters, create menus, and Me instead of staying in the main nav.
++            </Text>
++          </View>
++          <Pressable
++            accessibilityRole="button"
++            style={({ pressed }) => [
++              styles.createPlanButton,
++              { borderColor: palette.border, backgroundColor: palette.text },
++              pressed ? styles.pressed : null,
++              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++            ]}
++          >
++            <Text style={[styles.createPlanButtonText, { color: palette.background }]}>+ Create</Text>
++          </Pressable>
++        </View>
+       </View>
+ 
+-      <FilterPreview />
+-      <SectionHeader label="MOCK TRADE FEED" title="Real trades plus starter ideas" />
++      <TradeFilterShell
++        expanded={filtersExpanded}
++        activeFilterId={activeFilterId}
++        onToggleExpanded={() => setFiltersExpanded((current) => !current)}
++        onChangeFilter={setActiveFilterId}
++      />
++
++      {showStarterPlacementPreview ? <StarterPlacementPreview /> : null}
++
++      <SectionHeader
++        label="MOCK TRADE FEED"
++        title={activeFilterId === "all" ? "Real items plus starter ideas" : `${visibleItems.length} filtered items`}
++      />
+       <View style={styles.cardStack}>
+-        {tradePreviews.map((trade) => (
++        {visibleItems.map((trade) => (
+           <TradeCard key={trade.id} trade={trade} />
+         ))}
+       </View>
+@@ -1621,6 +1769,46 @@ const styles = StyleSheet.create({
+     padding: 14,
+     gap: 12,
+   },
++  filterHeaderButton: {
++    flexDirection: "row",
++    alignItems: "flex-start",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  filterHeaderTextBlock: {
++    flex: 1,
++  },
++  filterTitle: {
++    marginTop: 6,
++    fontSize: 20,
++    fontWeight: "900",
++    letterSpacing: -0.3,
++  },
++  filterHelper: {
++    marginTop: 5,
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  filterHeaderRight: {
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 8,
++  },
++  filterCountPill: {
++    minWidth: 34,
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 9,
++    paddingVertical: 5,
++    alignItems: "center",
++  },
++  filterCountText: {
++    fontSize: 12,
++    fontWeight: "900",
++  },
++  filterDivider: {
++    height: StyleSheet.hairlineWidth,
++  },
+   filterRow: {
+     flexDirection: "row",
+     flexWrap: "wrap",
+@@ -1636,6 +1824,46 @@ const styles = StyleSheet.create({
+     fontSize: 12,
+     fontWeight: "900",
+   },
++  filterFootnote: {
++    fontSize: 12,
++    lineHeight: 17,
++  },
++  starterPlacementPanel: {
++    borderRadius: 22,
++    borderWidth: 1,
++    padding: 14,
++    gap: 10,
++  },
++  starterPlacementTitle: {
++    fontSize: 17,
++    fontWeight: "900",
++    letterSpacing: -0.2,
++  },
++  starterPlacementCopy: {
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  openItemCard: {
++    borderRadius: 24,
++    borderWidth: 1,
++    padding: 16,
++  },
++  openItemTitle: {
++    marginTop: 16,
++    fontSize: 22,
++    lineHeight: 28,
++    fontWeight: "900",
++    letterSpacing: -0.4,
++  },
++  starterTradeCard: {
++    borderStyle: "dashed",
++  },
++  starterPlacementNote: {
++    marginTop: 12,
++    fontSize: 12,
++    lineHeight: 17,
++    fontWeight: "800",
++  },
+   tradeCard: {
+     borderRadius: 26,
+     borderWidth: 1,
+diff --git a/features/nav-lab/navLab.mockData.ts b/features/nav-lab/navLab.mockData.ts
+index 7527155..429527b 100644
+--- a/features/nav-lab/navLab.mockData.ts
++++ b/features/nav-lab/navLab.mockData.ts
+@@ -1,4 +1,4 @@
+-import type { MeHubSection, NavLabTab, PlanPreview, TradePreview } from "./navLab.types";
++import type { MeHubSection, NavLabTab, PlanPreview, TradeFilter, TradePreview } from "./navLab.types";
+ 
+ export const navLabTabs: NavLabTab[] = [
+   {
+@@ -104,6 +104,29 @@ export const planPreviews: PlanPreview[] = [
+   },
+ ];
+ 
++export const tradeFilters: TradeFilter[] = [
++  {
++    id: "all",
++    label: "All",
++    helper: "Trades, open needs, open offers, and starter ideas together.",
++  },
++  {
++    id: "trades",
++    label: "Trades",
++    helper: "Need plus offer exchange cards only.",
++  },
++  {
++    id: "needs",
++    label: "Needs",
++    helper: "Open needs from people who are still deciding what they can offer.",
++  },
++  {
++    id: "offers",
++    label: "Offers",
++    helper: "Open offers from people ready to help first.",
++  },
++];
++
+ export const tradePreviews: TradePreview[] = [
+   {
+     id: "landing-photos",
+@@ -113,6 +136,28 @@ export const tradePreviews: TradePreview[] = [
+     meta: "Remote · Creative · 7 days left",
+     footerLabel: "Open trade",
+   },
++  {
++    id: "french-walk-video",
++    type: "trade",
++    needTitle: "Practice French on a walk",
++    offerTitle: "Basic video editing help",
++    meta: "Paris · Social · This week",
++    footerLabel: "Open trade",
++  },
++  {
++    id: "open-need-admin-letter",
++    type: "open_need",
++    title: "Explain a French admin letter",
++    meta: "Open need · Local / remote · Flexible",
++    footerLabel: "Offer help",
++  },
++  {
++    id: "open-offer-product-photos",
++    type: "open_offer",
++    title: "I can take simple product photos outdoors",
++    meta: "Open offer · Creative · Weekend",
++    footerLabel: "Use this offer",
++  },
+   {
+     id: "starter-tripod-photos",
+     type: "starter",
+@@ -120,5 +165,13 @@ export const tradePreviews: TradePreview[] = [
+     offerTitle: "Edit five photos",
+     meta: "Starter idea · Object / access",
+     footerLabel: "Create your version",
++    placementNote: "Preview: appears after a few real items when the feed is quiet.",
++  },
++  {
++    id: "open-need-quiet-table",
++    type: "open_need",
++    title: "Find a quiet table for a video call",
++    meta: "Open need · Access · Today",
++    footerLabel: "Offer a place",
+   },
+ ];
+diff --git a/features/nav-lab/navLab.types.ts b/features/nav-lab/navLab.types.ts
+index 66ca872..2da1011 100644
+--- a/features/nav-lab/navLab.types.ts
++++ b/features/nav-lab/navLab.types.ts
+@@ -36,11 +36,23 @@ export type PlanPreview = {
+   nextStep: string;
+ };
+ 
++export type TradeFilterId = "all" | "trades" | "needs" | "offers";
++
++export type TradeFilter = {
++  id: TradeFilterId;
++  label: string;
++  helper: string;
++};
++
++export type TradeFeedItemType = "trade" | "open_need" | "open_offer" | "starter";
++
+ export type TradePreview = {
+   id: string;
+-  type: "trade" | "starter";
+-  needTitle: string;
+-  offerTitle: string;
++  type: TradeFeedItemType;
++  needTitle?: string;
++  offerTitle?: string;
++  title?: string;
+   meta: string;
+   footerLabel: string;
++  placementNote?: string;
+ };

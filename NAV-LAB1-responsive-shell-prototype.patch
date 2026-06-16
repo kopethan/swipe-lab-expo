@@ -1,0 +1,1078 @@
+diff --git a/app/index.tsx b/app/index.tsx
+index 0adead1..08165be 100644
+--- a/app/index.tsx
++++ b/app/index.tsx
+@@ -24,6 +24,12 @@ export default function LabsIndexScreen() {
+         href: "/auth-motion-lab",
+         badge: "new",
+       },
++      {
++        title: "Navigation Lab",
++        description: "Responsive Plans / Me / Trade shell with mobile bottom nav and desktop tabs.",
++        href: "/nav-lab",
++        badge: "new",
++      },
+       {
+         title: "Action Bar",
+         description: "Web docked action bar (bottom/center) + icon-collapse → panel morph.",
+diff --git a/app/nav-lab.tsx b/app/nav-lab.tsx
+new file mode 100644
+index 0000000..8e8e7bd
+--- /dev/null
++++ b/app/nav-lab.tsx
+@@ -0,0 +1,5 @@
++import { NavLabScreen } from "@/features/nav-lab";
++
++export default function NavLabRoute() {
++  return <NavLabScreen />;
++}
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+new file mode 100644
+index 0000000..b4bbbc3
+--- /dev/null
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -0,0 +1,878 @@
++import { Stack, router } from "expo-router";
++import React, { useMemo, useState } from "react";
++import {
++  Platform,
++  Pressable,
++  ScrollView,
++  StyleSheet,
++  Text,
++  useWindowDimensions,
++  View,
++} from "react-native";
++import { useSafeAreaInsets } from "react-native-safe-area-context";
++
++import { useTheme } from "@/providers/ThemeProvider";
++
++import { meHubSections, navLabTabs, planPreviews, tradePreviews } from "./navLab.mockData";
++import type { MeHubSection, NavLabTabId, PlanPreview, TradePreview } from "./navLab.types";
++
++const desktopBreakpoint = 820;
++
++function getTabTitle(tabId: NavLabTabId) {
++  return navLabTabs.find((tab) => tab.id === tabId)?.label ?? "Me";
++}
++
++function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop: boolean }) {
++  const { mode, palette, toggleMode } = useTheme();
++  const insets = useSafeAreaInsets();
++  const active = navLabTabs.find((tab) => tab.id === activeTab) ?? navLabTabs[1];
++
++  return (
++    <View
++      style={[
++        styles.header,
++        {
++          paddingTop: insets.top + (isDesktop ? 18 : 14),
++          borderBottomColor: palette.border,
++        },
++      ]}
++    >
++      <View style={styles.headerTopRow}>
++        <Pressable
++          onPress={() => router.back()}
++          accessibilityRole="button"
++          style={({ pressed }) => [styles.textButton, pressed ? styles.pressed : null]}
++        >
++          <Text style={[styles.textButtonLabel, { color: palette.text }]}>{"< Labs"}</Text>
++        </Pressable>
++
++        <View style={styles.headerPill}>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>NAV-LAB1</Text>
++        </View>
++
++        <Pressable
++          onPress={toggleMode}
++          accessibilityRole="button"
++          style={({ pressed }) => [styles.textButton, pressed ? styles.pressed : null]}
++        >
++          <Text style={[styles.textButtonLabel, { color: palette.text }]}>Mode: {mode}</Text>
++        </Pressable>
++      </View>
++
++      <View style={styles.headerTitleRow}>
++        <View style={styles.headerTitleBlock}>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>RESPONSIVE NAV SHELL</Text>
++          <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
++          <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
++        </View>
++      </View>
++    </View>
++  );
++}
++
++function TopTabs({ activeTab, onChange }: { activeTab: NavLabTabId; onChange: (tab: NavLabTabId) => void }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.topTabsWrap, { borderBottomColor: palette.border }]}>
++      <View style={[styles.topTabs, { backgroundColor: palette.surfaceAlt, borderColor: palette.border }]}>
++        {navLabTabs.map((tab) => {
++          const isActive = activeTab === tab.id;
++          return (
++            <Pressable
++              key={tab.id}
++              onPress={() => onChange(tab.id)}
++              accessibilityRole="tab"
++              accessibilityState={{ selected: isActive }}
++              style={({ pressed }) => [
++                styles.topTabButton,
++                isActive ? { backgroundColor: palette.surface } : null,
++                pressed ? styles.pressed : null,
++                Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++              ]}
++            >
++              <Text style={[styles.topTabLabel, { color: isActive ? palette.text : palette.muted }]}>
++                {tab.label}
++              </Text>
++            </Pressable>
++          );
++        })}
++      </View>
++    </View>
++  );
++}
++
++function BottomTabs({ activeTab, onChange }: { activeTab: NavLabTabId; onChange: (tab: NavLabTabId) => void }) {
++  const { palette } = useTheme();
++  const insets = useSafeAreaInsets();
++
++  return (
++    <View
++      style={[
++        styles.bottomTabs,
++        {
++          paddingBottom: Math.max(insets.bottom, 10),
++          borderTopColor: palette.border,
++          backgroundColor: palette.surface,
++        },
++      ]}
++    >
++      {navLabTabs.map((tab) => {
++        const isActive = activeTab === tab.id;
++        return (
++          <Pressable
++            key={tab.id}
++            onPress={() => onChange(tab.id)}
++            accessibilityRole="tab"
++            accessibilityState={{ selected: isActive }}
++            style={({ pressed }) => [
++              styles.bottomTabButton,
++              pressed ? styles.pressed : null,
++              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++            ]}
++          >
++            <View
++              style={[
++                styles.bottomTabIndicator,
++                { backgroundColor: isActive ? palette.text : "transparent" },
++              ]}
++            />
++            <Text
++              style={[
++                styles.bottomTabLabel,
++                { color: isActive ? palette.text : palette.muted },
++                isActive ? styles.bottomTabLabelActive : null,
++              ]}
++            >
++              {tab.label}
++            </Text>
++          </Pressable>
++        );
++      })}
++    </View>
++  );
++}
++
++function SectionHeader({ label, title }: { label: string; title: string }) {
++  const { palette } = useTheme();
++  return (
++    <View style={styles.sectionHeader}>
++      <Text style={[styles.sectionLabel, { color: palette.muted }]}>{label}</Text>
++      <Text style={[styles.sectionTitle, { color: palette.text }]}>{title}</Text>
++    </View>
++  );
++}
++
++function MeSectionCard({ section, isDesktop }: { section: MeHubSection; isDesktop: boolean }) {
++  const { palette } = useTheme();
++
++  return (
++    <View
++      style={[
++        styles.meSection,
++        isDesktop ? styles.meSectionDesktop : null,
++        { backgroundColor: palette.surface, borderColor: palette.border },
++      ]}
++    >
++      <View style={styles.meSectionHeader}>
++        <View style={styles.meSectionTitleBlock}>
++          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{section.eyebrow}</Text>
++          <Text style={[styles.meSectionTitle, { color: palette.text }]}>{section.title}</Text>
++        </View>
++        <Text style={[styles.mockChevron, { color: palette.muted }]}>{isDesktop ? "" : "▾"}</Text>
++      </View>
++
++      <Text style={[styles.meSectionSummary, { color: palette.muted }]}>{section.summary}</Text>
++
++      <View style={[styles.itemList, { borderTopColor: palette.border }]}>
++        {section.items.map((item, index) => (
++          <View
++            key={item.id}
++            style={[
++              styles.meItemRow,
++              index > 0 ? { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth } : null,
++            ]}
++          >
++            <View style={styles.meItemTextBlock}>
++              <Text style={[styles.meItemLabel, { color: palette.text }]}>{item.label}</Text>
++              {item.subtitle ? (
++                <Text style={[styles.meItemSubtitle, { color: palette.muted }]}>{item.subtitle}</Text>
++              ) : null}
++            </View>
++            <View style={styles.meItemRight}>
++              {typeof item.count === "number" ? (
++                <View style={[styles.countPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++                  <Text style={[styles.countPillText, { color: palette.text }]}>{item.count}</Text>
++                </View>
++              ) : null}
++              <Text style={[styles.rowChevron, { color: palette.muted }]}>›</Text>
++            </View>
++          </View>
++        ))}
++      </View>
++    </View>
++  );
++}
++
++function MeScreen({ isDesktop }: { isDesktop: boolean }) {
++  const { palette } = useTheme();
++  const totalCount = useMemo(
++    () =>
++      meHubSections.reduce(
++        (sum, section) => sum + section.items.reduce((inner, item) => inner + (item.count ?? 0), 0),
++        0
++      ),
++    []
++  );
++
++  return (
++    <View style={styles.tabContent}>
++      <View style={[styles.profilePanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++        <View style={[styles.avatar, { backgroundColor: palette.surfaceAlt, borderColor: palette.border }]}>
++          <Text style={[styles.avatarText, { color: palette.text }]}>K</Text>
++        </View>
++        <View style={styles.profileTextBlock}>
++          <Text style={[styles.profileTitle, { color: palette.text }]}>Kopy</Text>
++          <Text style={[styles.profileSubtitle, { color: palette.muted }]}>Paris · Hellowhen member</Text>
++        </View>
++        <View style={[styles.profileStatPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++          <Text style={[styles.profileStatValue, { color: palette.text }]}>{totalCount}</Text>
++          <Text style={[styles.profileStatLabel, { color: palette.muted }]}>mock items</Text>
++        </View>
++      </View>
++
++      <SectionHeader
++        label={isDesktop ? "DESKTOP ME PREVIEW" : "MOBILE ME PREVIEW"}
++        title={isDesktop ? "Columns instead of accordions" : "Expandable groups next"}
++      />
++
++      <View style={isDesktop ? styles.meGrid : styles.meStack}>
++        {meHubSections.map((section) => (
++          <MeSectionCard key={section.id} section={section} isDesktop={isDesktop} />
++        ))}
++      </View>
++    </View>
++  );
++}
++
++function PlanCard({ plan }: { plan: PlanPreview }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.planCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++      <View style={styles.cardTopLine}>
++        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>
++          {plan.category.toUpperCase()} · {plan.status.toUpperCase()}
++        </Text>
++        <Text style={[styles.mockChevron, { color: palette.muted }]}>▾</Text>
++      </View>
++      <Text style={[styles.planTitle, { color: palette.text }]}>{plan.title}</Text>
++
++      <View style={styles.planColumns}>
++        <View style={styles.planColumn}>
++          <Text style={[styles.planColumnTitle, { color: palette.text }]}>Needs</Text>
++          {plan.needs.map((need) => (
++            <Text key={need} style={[styles.bulletText, { color: palette.muted }]}>• {need}</Text>
++          ))}
++        </View>
++        <View style={styles.planColumn}>
++          <Text style={[styles.planColumnTitle, { color: palette.text }]}>Offers</Text>
++          {plan.offers.map((offer) => (
++            <Text key={offer} style={[styles.bulletText, { color: palette.muted }]}>• {offer}</Text>
++          ))}
++        </View>
++      </View>
++
++      <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
++        <Text style={[styles.footerMeta, { color: palette.muted }]}>{plan.interestedCount} people interested</Text>
++        <Text style={[styles.footerAction, { color: palette.text }]}>View plan</Text>
++      </View>
++    </View>
++  );
++}
++
++function PlansScreen() {
++  const { palette } = useTheme();
++
++  return (
++    <View style={styles.tabContent}>
++      <View style={[styles.heroPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++        <Text style={[styles.heroEyebrow, { color: palette.muted }]}>FUTURE MAIN AREA</Text>
++        <Text style={[styles.heroTitle, { color: palette.text }]}>Plans are bigger goals.</Text>
++        <Text style={[styles.heroCopy, { color: palette.muted }]}>A plan can contain needs, offers, people, and later trades. NAV-LAB1 keeps this as mock-only cards.</Text>
++      </View>
++
++      <SectionHeader label="MOCK PLAN FEED" title="Expandable plan cards later" />
++      <View style={styles.cardStack}>
++        {planPreviews.map((plan) => (
++          <PlanCard key={plan.id} plan={plan} />
++        ))}
++      </View>
++    </View>
++  );
++}
++
++function FilterPreview() {
++  const { palette } = useTheme();
++  const filters = ["All", "Trades", "Needs", "Offers"];
++
++  return (
++    <View style={[styles.filterPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++      <View style={styles.cardTopLine}>
++        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>COLLAPSED FILTER PREVIEW</Text>
++        <Text style={[styles.mockChevron, { color: palette.muted }]}>▸</Text>
++      </View>
++      <View style={styles.filterRow}>
++        {filters.map((filter, index) => (
++          <View
++            key={filter}
++            style={[
++              styles.filterChip,
++              {
++                borderColor: palette.border,
++                backgroundColor: index === 0 ? palette.text : palette.surfaceAlt,
++              },
++            ]}
++          >
++            <Text style={[styles.filterChipText, { color: index === 0 ? palette.background : palette.text }]}>
++              {filter}
++            </Text>
++          </View>
++        ))}
++      </View>
++    </View>
++  );
++}
++
++function TradeCard({ trade }: { trade: TradePreview }) {
++  const { palette } = useTheme();
++  const isStarter = trade.type === "starter";
++
++  return (
++    <View style={[styles.tradeCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++      <View style={styles.cardTopLine}>
++        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>
++          {isStarter ? "TRADE IDEA" : "OPEN TRADE"}
++        </Text>
++        <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++          <Text style={[styles.smallTagText, { color: palette.text }]}>{isStarter ? "IDEA" : "LIVE"}</Text>
++        </View>
++      </View>
++
++      <View style={styles.exchangeBlock}>
++        <View style={styles.exchangeSide}>
++          <Text style={[styles.exchangeLabel, { color: palette.muted }]}>I need</Text>
++          <Text style={[styles.exchangeTitle, { color: palette.text }]}>{trade.needTitle}</Text>
++        </View>
++        <View style={[styles.exchangeDivider, { backgroundColor: palette.border }]} />
++        <Text style={[styles.exchangeIcon, { color: palette.muted }]}>↔</Text>
++        <View style={[styles.exchangeDivider, { backgroundColor: palette.border }]} />
++        <View style={styles.exchangeSide}>
++          <Text style={[styles.exchangeLabel, { color: palette.muted }]}>I offer</Text>
++          <Text style={[styles.exchangeTitle, { color: palette.text }]}>{trade.offerTitle}</Text>
++        </View>
++      </View>
++
++      <Text style={[styles.tradeMeta, { color: palette.muted }]}>{trade.meta}</Text>
++      <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
++        <Text style={[styles.footerMeta, { color: palette.muted }]}>{isStarter ? "Starter deck" : "Real feed item"}</Text>
++        <Text style={[styles.footerAction, { color: palette.text }]}>{trade.footerLabel}</Text>
++      </View>
++    </View>
++  );
++}
++
++function TradeScreen() {
++  const { palette } = useTheme();
++
++  return (
++    <View style={styles.tabContent}>
++      <View style={[styles.heroPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++        <Text style={[styles.heroEyebrow, { color: palette.muted }]}>FUTURE TRADE AREA</Text>
++        <Text style={[styles.heroTitle, { color: palette.text }]}>Trade keeps the deck identity.</Text>
++        <Text style={[styles.heroCopy, { color: palette.muted }]}>Needs and offers can move into filters, create menus, and Me instead of staying in the main nav.</Text>
++      </View>
++
++      <FilterPreview />
++      <SectionHeader label="MOCK TRADE FEED" title="Real trades plus starter ideas" />
++      <View style={styles.cardStack}>
++        {tradePreviews.map((trade) => (
++          <TradeCard key={trade.id} trade={trade} />
++        ))}
++      </View>
++    </View>
++  );
++}
++
++function ActiveContent({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop: boolean }) {
++  if (activeTab === "plans") {
++    return <PlansScreen />;
++  }
++  if (activeTab === "trade") {
++    return <TradeScreen />;
++  }
++  return <MeScreen isDesktop={isDesktop} />;
++}
++
++export function NavLabScreen() {
++  const { palette } = useTheme();
++  const { width } = useWindowDimensions();
++  const [activeTab, setActiveTab] = useState<NavLabTabId>("me");
++  const isDesktop = Platform.OS === "web" && width >= desktopBreakpoint;
++
++  return (
++    <View style={[styles.screen, { backgroundColor: palette.background }]}>
++      <Stack.Screen options={{ title: "Navigation Lab", headerShown: false }} />
++      <View style={[styles.shell, isDesktop ? styles.desktopShell : null]}>
++        <LabHeader activeTab={activeTab} isDesktop={isDesktop} />
++        {isDesktop ? <TopTabs activeTab={activeTab} onChange={setActiveTab} /> : null}
++        <ScrollView
++          showsVerticalScrollIndicator={false}
++          contentContainerStyle={[
++            styles.scrollContent,
++            isDesktop ? styles.scrollContentDesktop : null,
++            !isDesktop ? styles.scrollContentMobile : null,
++          ]}
++        >
++          <ActiveContent activeTab={activeTab} isDesktop={isDesktop} />
++        </ScrollView>
++        {!isDesktop ? <BottomTabs activeTab={activeTab} onChange={setActiveTab} /> : null}
++      </View>
++    </View>
++  );
++}
++
++const styles = StyleSheet.create({
++  screen: {
++    flex: 1,
++  },
++  shell: {
++    flex: 1,
++  },
++  desktopShell: {
++    width: "100%",
++    maxWidth: 1120,
++    alignSelf: "center",
++  },
++  header: {
++    paddingHorizontal: 18,
++    paddingBottom: 16,
++    borderBottomWidth: StyleSheet.hairlineWidth,
++  },
++  headerTopRow: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  textButton: {
++    minHeight: 36,
++    justifyContent: "center",
++    paddingHorizontal: 2,
++  },
++  textButtonLabel: {
++    fontSize: 13,
++    fontWeight: "800",
++  },
++  pressed: {
++    opacity: 0.68,
++  },
++  headerPill: {
++    borderRadius: 999,
++    paddingHorizontal: 10,
++    paddingVertical: 5,
++    backgroundColor: "rgba(128,128,128,0.12)",
++  },
++  headerPillText: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.5,
++  },
++  headerTitleRow: {
++    marginTop: 16,
++    flexDirection: "row",
++  },
++  headerTitleBlock: {
++    flex: 1,
++  },
++  eyebrow: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.7,
++  },
++  title: {
++    marginTop: 6,
++    fontSize: 31,
++    fontWeight: "900",
++    letterSpacing: -0.8,
++  },
++  subtitle: {
++    marginTop: 6,
++    maxWidth: 680,
++    fontSize: 14,
++    lineHeight: 20,
++  },
++  topTabsWrap: {
++    paddingHorizontal: 18,
++    paddingVertical: 14,
++    borderBottomWidth: StyleSheet.hairlineWidth,
++  },
++  topTabs: {
++    alignSelf: "center",
++    width: "100%",
++    maxWidth: 520,
++    flexDirection: "row",
++    borderRadius: 999,
++    borderWidth: 1,
++    padding: 4,
++    gap: 4,
++  },
++  topTabButton: {
++    flex: 1,
++    minHeight: 42,
++    alignItems: "center",
++    justifyContent: "center",
++    borderRadius: 999,
++  },
++  topTabLabel: {
++    fontSize: 14,
++    fontWeight: "900",
++  },
++  bottomTabs: {
++    flexDirection: "row",
++    borderTopWidth: StyleSheet.hairlineWidth,
++    paddingTop: 8,
++    paddingHorizontal: 10,
++  },
++  bottomTabButton: {
++    flex: 1,
++    minHeight: 52,
++    alignItems: "center",
++    justifyContent: "center",
++    gap: 6,
++  },
++  bottomTabIndicator: {
++    width: 26,
++    height: 3,
++    borderRadius: 999,
++  },
++  bottomTabLabel: {
++    fontSize: 13,
++    fontWeight: "700",
++  },
++  bottomTabLabelActive: {
++    fontWeight: "900",
++  },
++  scrollContent: {
++    padding: 18,
++  },
++  scrollContentDesktop: {
++    paddingBottom: 48,
++  },
++  scrollContentMobile: {
++    paddingBottom: 28,
++  },
++  tabContent: {
++    gap: 16,
++  },
++  profilePanel: {
++    borderRadius: 26,
++    borderWidth: 1,
++    padding: 16,
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 12,
++  },
++  avatar: {
++    width: 54,
++    height: 54,
++    borderRadius: 27,
++    borderWidth: 1,
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  avatarText: {
++    fontSize: 22,
++    fontWeight: "900",
++  },
++  profileTextBlock: {
++    flex: 1,
++  },
++  profileTitle: {
++    fontSize: 22,
++    fontWeight: "900",
++    letterSpacing: -0.3,
++  },
++  profileSubtitle: {
++    marginTop: 3,
++    fontSize: 13,
++  },
++  profileStatPill: {
++    borderWidth: 1,
++    borderRadius: 18,
++    paddingHorizontal: 12,
++    paddingVertical: 8,
++    alignItems: "center",
++  },
++  profileStatValue: {
++    fontSize: 18,
++    fontWeight: "900",
++  },
++  profileStatLabel: {
++    marginTop: 1,
++    fontSize: 10,
++    fontWeight: "800",
++  },
++  sectionHeader: {
++    gap: 5,
++  },
++  sectionLabel: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.7,
++  },
++  sectionTitle: {
++    fontSize: 20,
++    fontWeight: "900",
++    letterSpacing: -0.3,
++  },
++  meStack: {
++    gap: 12,
++  },
++  meGrid: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 12,
++  },
++  meSection: {
++    borderRadius: 22,
++    borderWidth: 1,
++    padding: 14,
++  },
++  meSectionDesktop: {
++    flexGrow: 1,
++    flexBasis: "48%",
++  },
++  meSectionHeader: {
++    flexDirection: "row",
++    alignItems: "flex-start",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  meSectionTitleBlock: {
++    flex: 1,
++  },
++  cardEyebrow: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.5,
++  },
++  meSectionTitle: {
++    marginTop: 4,
++    fontSize: 19,
++    fontWeight: "900",
++    letterSpacing: -0.2,
++  },
++  mockChevron: {
++    fontSize: 18,
++    fontWeight: "900",
++  },
++  meSectionSummary: {
++    marginTop: 10,
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  itemList: {
++    marginTop: 14,
++    borderTopWidth: StyleSheet.hairlineWidth,
++  },
++  meItemRow: {
++    minHeight: 58,
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 12,
++    paddingVertical: 10,
++  },
++  meItemTextBlock: {
++    flex: 1,
++  },
++  meItemLabel: {
++    fontSize: 15,
++    fontWeight: "900",
++  },
++  meItemSubtitle: {
++    marginTop: 3,
++    fontSize: 12,
++    lineHeight: 16,
++  },
++  meItemRight: {
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 8,
++  },
++  countPill: {
++    minWidth: 30,
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 8,
++    paddingVertical: 4,
++    alignItems: "center",
++  },
++  countPillText: {
++    fontSize: 12,
++    fontWeight: "900",
++  },
++  rowChevron: {
++    fontSize: 21,
++    fontWeight: "900",
++  },
++  heroPanel: {
++    borderRadius: 26,
++    borderWidth: 1,
++    padding: 18,
++  },
++  heroEyebrow: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.6,
++  },
++  heroTitle: {
++    marginTop: 8,
++    fontSize: 25,
++    fontWeight: "900",
++    letterSpacing: -0.5,
++  },
++  heroCopy: {
++    marginTop: 8,
++    fontSize: 14,
++    lineHeight: 20,
++    maxWidth: 680,
++  },
++  cardStack: {
++    gap: 12,
++  },
++  planCard: {
++    borderRadius: 24,
++    borderWidth: 1,
++    padding: 16,
++  },
++  cardTopLine: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  planTitle: {
++    marginTop: 8,
++    fontSize: 22,
++    fontWeight: "900",
++    letterSpacing: -0.4,
++  },
++  planColumns: {
++    marginTop: 16,
++    flexDirection: "row",
++    gap: 14,
++  },
++  planColumn: {
++    flex: 1,
++    gap: 5,
++  },
++  planColumnTitle: {
++    marginBottom: 2,
++    fontSize: 13,
++    fontWeight: "900",
++  },
++  bulletText: {
++    fontSize: 13,
++    lineHeight: 18,
++  },
++  cardFooter: {
++    marginTop: 16,
++    paddingTop: 12,
++    borderTopWidth: StyleSheet.hairlineWidth,
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  footerMeta: {
++    flex: 1,
++    fontSize: 12,
++    fontWeight: "700",
++  },
++  footerAction: {
++    fontSize: 13,
++    fontWeight: "900",
++  },
++  filterPanel: {
++    borderRadius: 22,
++    borderWidth: 1,
++    padding: 14,
++    gap: 12,
++  },
++  filterRow: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 8,
++  },
++  filterChip: {
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 13,
++    paddingVertical: 8,
++  },
++  filterChipText: {
++    fontSize: 12,
++    fontWeight: "900",
++  },
++  tradeCard: {
++    borderRadius: 26,
++    borderWidth: 1,
++    padding: 16,
++  },
++  smallTag: {
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 9,
++    paddingVertical: 4,
++  },
++  smallTagText: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 0.4,
++  },
++  exchangeBlock: {
++    marginTop: 18,
++    alignItems: "center",
++    gap: 12,
++  },
++  exchangeSide: {
++    width: "100%",
++    alignItems: "center",
++    gap: 5,
++  },
++  exchangeLabel: {
++    fontSize: 12,
++    fontWeight: "900",
++  },
++  exchangeTitle: {
++    textAlign: "center",
++    fontSize: 19,
++    fontWeight: "900",
++    letterSpacing: -0.3,
++  },
++  exchangeDivider: {
++    width: "64%",
++    height: StyleSheet.hairlineWidth,
++  },
++  exchangeIcon: {
++    fontSize: 22,
++    fontWeight: "900",
++  },
++  tradeMeta: {
++    marginTop: 14,
++    textAlign: "center",
++    fontSize: 12,
++    fontWeight: "700",
++  },
++});
+diff --git a/features/nav-lab/index.ts b/features/nav-lab/index.ts
+new file mode 100644
+index 0000000..be0d2e7
+--- /dev/null
++++ b/features/nav-lab/index.ts
+@@ -0,0 +1 @@
++export { NavLabScreen } from "./NavLabScreen";
+diff --git a/features/nav-lab/navLab.mockData.ts b/features/nav-lab/navLab.mockData.ts
+new file mode 100644
+index 0000000..b06f328
+--- /dev/null
++++ b/features/nav-lab/navLab.mockData.ts
+@@ -0,0 +1,106 @@
++import type { MeHubSection, NavLabTab, PlanPreview, TradePreview } from "./navLab.types";
++
++export const navLabTabs: NavLabTab[] = [
++  {
++    id: "plans",
++    label: "Plans",
++    tagline: "Find people around bigger goals.",
++  },
++  {
++    id: "me",
++    label: "Me",
++    tagline: "Your activity, tools, and account in one calm hub.",
++  },
++  {
++    id: "trade",
++    label: "Trade",
++    tagline: "Find one exchange at a time.",
++  },
++];
++
++export const meHubSections: MeHubSection[] = [
++  {
++    id: "activity",
++    title: "Activity",
++    eyebrow: "What you are doing",
++    summary: "Trades, proposals, needs, and offers stay together here instead of becoming separate main tabs.",
++    items: [
++      { id: "my-trades", label: "My trades", count: 4, subtitle: "Open and accepted exchanges" },
++      { id: "proposals", label: "Proposals", count: 2, subtitle: "Private requests and replies" },
++      { id: "my-needs", label: "My needs", count: 7, subtitle: "Things you are looking for" },
++      { id: "my-offers", label: "My offers", count: 5, subtitle: "Skills, time, access, or objects" },
++    ],
++  },
++  {
++    id: "plans",
++    title: "Plans",
++    eyebrow: "Bigger goals",
++    summary: "Created and joined plans can become the future home for multi-step social projects.",
++    items: [
++      { id: "created-plans", label: "Created plans", count: 3, subtitle: "Your public or private goals" },
++      { id: "joined-plans", label: "Joined plans", count: 1, subtitle: "Plans where you offered help" },
++    ],
++  },
++  {
++    id: "tools",
++    title: "Tools",
++    eyebrow: "Personal utilities",
++    summary: "Private organization tools stay close to the user without feeling like old account settings.",
++    items: [
++      { id: "saved-library", label: "Saved Library", count: 12, subtitle: "Saved people, trades, needs, and offers" },
++      { id: "agenda", label: "Agenda", subtitle: "Private follow-ups and reminders" },
++      { id: "notifications", label: "Notifications", count: 3, subtitle: "Updates that need attention" },
++    ],
++  },
++  {
++    id: "account",
++    title: "Account",
++    eyebrow: "Profile and settings",
++    summary: "The account area becomes a smaller section instead of the whole identity of the tab.",
++    items: [
++      { id: "public-profile", label: "Public profile", subtitle: "How others see you" },
++      { id: "settings", label: "Settings", subtitle: "Language, privacy, and preferences" },
++      { id: "support", label: "Support", subtitle: "Help, safety, and feedback" },
++    ],
++  },
++];
++
++export const planPreviews: PlanPreview[] = [
++  {
++    id: "launch-app-paris",
++    category: "Startup",
++    title: "Launch my app in Paris",
++    status: "Open",
++    needs: ["5 app testers", "French copy review", "Landing page feedback"],
++    offers: ["Product photo editing", "UX feedback"],
++    interestedCount: 3,
++  },
++  {
++    id: "practice-french-locally",
++    category: "Social",
++    title: "Practice French locally",
++    status: "Open",
++    needs: ["Conversation walk", "Cafe practice partner"],
++    offers: ["English conversation", "Portrait photos"],
++    interestedCount: 4,
++  },
++];
++
++export const tradePreviews: TradePreview[] = [
++  {
++    id: "landing-photos",
++    type: "trade",
++    needTitle: "Landing page feedback",
++    offerTitle: "Product photos",
++    meta: "Remote · Creative · 7 days left",
++    footerLabel: "Open trade",
++  },
++  {
++    id: "starter-tripod-photos",
++    type: "starter",
++    needTitle: "Borrow a tripod for one day",
++    offerTitle: "Edit five photos",
++    meta: "Starter idea · Object / access",
++    footerLabel: "Create your version",
++  },
++];
+diff --git a/features/nav-lab/navLab.types.ts b/features/nav-lab/navLab.types.ts
+new file mode 100644
+index 0000000..a39b483
+--- /dev/null
++++ b/features/nav-lab/navLab.types.ts
+@@ -0,0 +1,41 @@
++export type NavLabTabId = "plans" | "me" | "trade";
++
++export type NavLabTab = {
++  id: NavLabTabId;
++  label: string;
++  tagline: string;
++};
++
++export type MeHubItem = {
++  id: string;
++  label: string;
++  count?: number;
++  subtitle?: string;
++};
++
++export type MeHubSection = {
++  id: string;
++  title: string;
++  eyebrow: string;
++  summary: string;
++  items: MeHubItem[];
++};
++
++export type PlanPreview = {
++  id: string;
++  category: string;
++  title: string;
++  status: string;
++  needs: string[];
++  offers: string[];
++  interestedCount: number;
++};
++
++export type TradePreview = {
++  id: string;
++  type: "trade" | "starter";
++  needTitle: string;
++  offerTitle: string;
++  meta: string;
++  footerLabel: string;
++};
