@@ -23,17 +23,87 @@ export type MeHubSection = {
   items: MeHubItem[];
 };
 
+export type PlanMode = "local" | "online" | "mixed";
+
+export type PlanStatus = "draft" | "open" | "full" | "started" | "completed" | "cancelled";
+
+export type PlanPlaceKind = "local_place" | "online_place";
+
+export type PlaceLibrarySource = "my_place" | "starter_place";
+
+export type PlaceLibraryFilterId = "all" | "offline" | "online";
+
+export type PlaceLibraryFilter = {
+  id: PlaceLibraryFilterId;
+  label: string;
+  helper: string;
+};
+
+export type PlaceLibraryVisibility = "public" | "private" | "verified_later";
+
+export type PlaceLibraryItem = {
+  id: string;
+  source: PlaceLibrarySource;
+  kind: PlanPlaceKind;
+  title: string;
+  category: string;
+  categoryLabel: string;
+  addressOrPlatform: string;
+  areaLabel: string;
+  description: string;
+  imageLabels: string[];
+  ownerName: string;
+  visibility: PlaceLibraryVisibility;
+  accessLabel: string;
+  defaultTimeLabel: string;
+  defaultDurationLabel?: string;
+  defaultNote: string;
+  tags?: string[];
+  multilingualNote?: string;
+  safetyLabel?: string;
+  useLabel: string;
+};
+
+export type PlaceLibraryGroup = {
+  id: PlaceLibrarySource;
+  label: string;
+  helper: string;
+};
+
+export type PlanPlacePreview = {
+  id: string;
+  libraryPlaceId?: string;
+  placeSource?: PlaceLibrarySource;
+  kind: PlanPlaceKind;
+  order: number;
+  title: string;
+  addressOrPlatform: string;
+  timeLabel: string;
+  endTimeLabel?: string;
+  durationLabel?: string;
+  note: string;
+  meetingInstruction?: string;
+  imageLabel: string;
+};
+
 export type PlanPreview = {
   id: string;
   category: string;
   title: string;
-  status: string;
+  status: PlanStatus;
+  mode: PlanMode;
   summary: string;
-  needs: string[];
-  offers: string[];
-  interestedCount: number;
+  ownerName: string;
+  startLabel: string;
+  finalEndLabel?: string;
+  joinDeadlineLabel?: string;
+  durationLabel?: string;
+  placeSummary: string;
+  places: PlanPlacePreview[];
   joinedCount: number;
-  nextStep: string;
+  joinedPreview: string[];
+  capacityLabel: string;
+  joinLabel: string;
 };
 
 export type TradeFilterId = "all" | "trades" | "needs" | "offers";

@@ -1,0 +1,331 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index a104fcd..c8bbd14 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -334,7 +334,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB6</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB7</Text>
+         </View>
+ 
+         <Pressable
+@@ -348,7 +348,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>PLAN FEED POLISH</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>PLACE LIBRARY MODEL</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -1265,7 +1265,7 @@ function PlanDetailPage({
+             {joined ? (isCurrentUserPlan(plan) ? "This is your open plan." : "You joined this open plan.") : "Join freely without owner approval."}
+           </Text>
+           <Text style={[styles.detailHelpText, { color: palette.muted }]}>
+-            PLAN-LAB6 keeps joining local, then polishes the Plans feed with Explore / Joined / Created views, empty states, and responsive deck spacing.
++            PLAN-LAB7 adds a reusable Place Library model for My places and Starter places while keeping the current Plan UI lab-only.
+           </Text>
+         </View>
+         <View style={styles.planActionsInline}>
+@@ -1584,9 +1584,9 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB6 · CREATE FLOW</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB7 · CREATE FLOW</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+-          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only: choose a goal, local/online mode, ordered places, image labels, notes, and preview the deck card.</Text>
++          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The next wizard can choose from My places, Starter places, or create a new place before arranging the plan route.</Text>
+         </View>
+         <CreateStepIndicator activeStepId={activeStep.id} onSelect={(stepId) => onChangeStepIndex(planCreateSteps.findIndex((step) => step.id === stepId))} />
+       </View>
+diff --git a/features/nav-lab/navLab.mockData.ts b/features/nav-lab/navLab.mockData.ts
+index 05e54b3..bb3eaff 100644
+--- a/features/nav-lab/navLab.mockData.ts
++++ b/features/nav-lab/navLab.mockData.ts
+@@ -1,4 +1,4 @@
+-import type { MeHubSection, NavLabTab, PlanPreview, TradeFilter, TradePreview } from "./navLab.types";
++import type { MeHubSection, NavLabTab, PlaceLibraryFilter, PlaceLibraryGroup, PlaceLibraryItem, PlanPreview, TradeFilter, TradePreview } from "./navLab.types";
+ 
+ export const navLabTabs: NavLabTab[] = [
+   {
+@@ -65,6 +65,171 @@ export const meHubSections: MeHubSection[] = [
+   },
+ ];
+ 
++export const placeLibraryFilters: PlaceLibraryFilter[] = [
++  {
++    id: "all",
++    label: "All places",
++    helper: "Offline and online places together.",
++  },
++  {
++    id: "offline",
++    label: "Offline",
++    helper: "Local addresses, public places, routes, cafes, parks, and meeting points.",
++  },
++  {
++    id: "online",
++    label: "Online",
++    helper: "Platforms, calls, community rooms, files, and online session spaces.",
++  },
++];
++
++export const placeLibraryGroups: PlaceLibraryGroup[] = [
++  {
++    id: "my_place",
++    label: "My places",
++    helper: "Reusable offline and online places created by the user.",
++  },
++  {
++    id: "starter_place",
++    label: "Starter places",
++    helper: "Template places users can copy into their own plans before creating official places.",
++  },
++];
++
++export const myPlaceLibrary: PlaceLibraryItem[] = [
++  {
++    id: "my-republique-cafe",
++    source: "my_place",
++    kind: "local_place",
++    title: "Cafe near Republique",
++    category: "offline-cafe",
++    categoryLabel: "Offline · Cafe",
++    addressOrPlatform: "Paris 11e",
++    areaLabel: "Republique",
++    description: "A casual cafe meeting point for small open plans, first hellos, and calm table conversations.",
++    imageLabels: ["Cafe front", "Small table", "Street corner"],
++    ownerName: "Kopy",
++    visibility: "public",
++    accessLabel: "Public place",
++    defaultTimeLabel: "15:00",
++    defaultNote: "Meet, say hello, and choose a small table.",
++    useLabel: "Use this place",
++  },
++  {
++    id: "my-canal-walk",
++    source: "my_place",
++    kind: "local_place",
++    title: "Canal Saint-Martin walk",
++    category: "offline-walk",
++    categoryLabel: "Offline · Walk",
++    addressOrPlatform: "Paris 10e",
++    areaLabel: "Canal Saint-Martin",
++    description: "A simple public walking route for language practice, photos, and low-pressure social plans.",
++    imageLabels: ["Canal view", "Bridge", "Walking path"],
++    ownerName: "Kopy",
++    visibility: "public",
++    accessLabel: "Public route",
++    defaultTimeLabel: "16:00",
++    defaultNote: "Walk, take photos, and continue the conversation.",
++    useLabel: "Add to plan",
++  },
++  {
++    id: "my-discord-lobby",
++    source: "my_place",
++    kind: "online_place",
++    title: "Discord lobby",
++    category: "online-community",
++    categoryLabel: "Online · Community",
++    addressOrPlatform: "Discord",
++    areaLabel: "Online",
++    description: "A reusable online lobby for intros, quick coordination, and sharing links before a remote plan starts.",
++    imageLabels: ["Discord visual", "Voice room", "Welcome channel"],
++    ownerName: "Kopy",
++    visibility: "private",
++    accessLabel: "Access note hidden",
++    defaultTimeLabel: "20:30",
++    defaultNote: "Quick intro and link sharing before the review.",
++    useLabel: "Use online place",
++  },
++];
++
++export const starterPlaceLibrary: PlaceLibraryItem[] = [
++  {
++    id: "starter-study-cafe",
++    source: "starter_place",
++    kind: "local_place",
++    title: "Study cafe table",
++    category: "offline-cafe",
++    categoryLabel: "Offline · Starter cafe",
++    addressOrPlatform: "Choose a cafe area",
++    areaLabel: "Local starter",
++    description: "A starter offline place for people who want to open a calm study, feedback, or coworking plan.",
++    imageLabels: ["Cafe table", "Notebook", "Quiet corner"],
++    ownerName: "Hellowhen",
++    visibility: "verified_later",
++    accessLabel: "Starter template",
++    defaultTimeLabel: "Afternoon",
++    defaultNote: "Meet at a public cafe and keep the plan light.",
++    useLabel: "Start from this",
++  },
++  {
++    id: "starter-public-park",
++    source: "starter_place",
++    kind: "local_place",
++    title: "Public park walk",
++    category: "offline-walk",
++    categoryLabel: "Offline · Starter walk",
++    addressOrPlatform: "Choose a park",
++    areaLabel: "Local starter",
++    description: "A starter public place for walking, language practice, photos, or casual social plans.",
++    imageLabels: ["Park path", "Open bench", "Green area"],
++    ownerName: "Hellowhen",
++    visibility: "verified_later",
++    accessLabel: "Starter template",
++    defaultTimeLabel: "Weekend",
++    defaultNote: "Walk in a public place and keep the meeting simple.",
++    useLabel: "Start from this",
++  },
++  {
++    id: "starter-google-meet",
++    source: "starter_place",
++    kind: "online_place",
++    title: "Google Meet session",
++    category: "online-call",
++    categoryLabel: "Online · Starter call",
++    addressOrPlatform: "Google Meet",
++    areaLabel: "Online starter",
++    description: "A starter online place for remote introductions, feedback sessions, and small group calls.",
++    imageLabels: ["Meet visual", "Call screen", "Online room"],
++    ownerName: "Hellowhen",
++    visibility: "verified_later",
++    accessLabel: "Starter template",
++    defaultTimeLabel: "Evening",
++    defaultNote: "Open the call, welcome people, and keep the session focused.",
++    useLabel: "Start from this",
++  },
++  {
++    id: "starter-figma-review",
++    source: "starter_place",
++    kind: "online_place",
++    title: "Figma review room",
++    category: "online-creative",
++    categoryLabel: "Online · Starter creative",
++    addressOrPlatform: "Figma",
++    areaLabel: "Online starter",
++    description: "A starter online place for design review, product feedback, and visual brainstorming plans.",
++    imageLabels: ["Figma board", "Comment pins", "Review notes"],
++    ownerName: "Hellowhen",
++    visibility: "verified_later",
++    accessLabel: "Starter template",
++    defaultTimeLabel: "Flexible",
++    defaultNote: "Share the board and ask people to leave short visual comments.",
++    useLabel: "Start from this",
++  },
++];
++
++export const placeLibraryItems: PlaceLibraryItem[] = [...myPlaceLibrary, ...starterPlaceLibrary];
++
+ export const planPreviews: PlanPreview[] = [
+   {
+     id: "paris-creative-afternoon",
+@@ -83,6 +248,8 @@ export const planPreviews: PlanPreview[] = [
+     places: [
+       {
+         id: "republique-cafe",
++        libraryPlaceId: "my-republique-cafe",
++        placeSource: "my_place",
+         kind: "local_place",
+         order: 1,
+         title: "Cafe near Republique",
+@@ -93,6 +260,8 @@ export const planPreviews: PlanPreview[] = [
+       },
+       {
+         id: "canal-walk",
++        libraryPlaceId: "my-canal-walk",
++        placeSource: "my_place",
+         kind: "local_place",
+         order: 2,
+         title: "Canal Saint-Martin walk",
+@@ -130,6 +299,8 @@ export const planPreviews: PlanPreview[] = [
+     places: [
+       {
+         id: "discord-intro",
++        libraryPlaceId: "my-discord-lobby",
++        placeSource: "my_place",
+         kind: "online_place",
+         order: 1,
+         title: "Discord lobby",
+@@ -140,6 +311,8 @@ export const planPreviews: PlanPreview[] = [
+       },
+       {
+         id: "figma-review",
++        libraryPlaceId: "starter-figma-review",
++        placeSource: "starter_place",
+         kind: "online_place",
+         order: 2,
+         title: "Figma board",
+@@ -150,6 +323,8 @@ export const planPreviews: PlanPreview[] = [
+       },
+       {
+         id: "meet-wrap",
++        libraryPlaceId: "starter-google-meet",
++        placeSource: "starter_place",
+         kind: "online_place",
+         order: 3,
+         title: "Wrap-up call",
+@@ -187,6 +362,8 @@ export const planPreviews: PlanPreview[] = [
+       },
+       {
+         id: "luxembourg-gardens",
++        libraryPlaceId: "starter-public-park",
++        placeSource: "starter_place",
+         kind: "local_place",
+         order: 2,
+         title: "Luxembourg Gardens",
+diff --git a/features/nav-lab/navLab.types.ts b/features/nav-lab/navLab.types.ts
+index eea2153..3372a59 100644
+--- a/features/nav-lab/navLab.types.ts
++++ b/features/nav-lab/navLab.types.ts
+@@ -29,8 +29,47 @@ export type PlanStatus = "draft" | "open" | "full" | "started" | "completed" | "
+ 
+ export type PlanPlaceKind = "local_place" | "online_place";
+ 
++export type PlaceLibrarySource = "my_place" | "starter_place";
++
++export type PlaceLibraryFilterId = "all" | "offline" | "online";
++
++export type PlaceLibraryFilter = {
++  id: PlaceLibraryFilterId;
++  label: string;
++  helper: string;
++};
++
++export type PlaceLibraryVisibility = "public" | "private" | "verified_later";
++
++export type PlaceLibraryItem = {
++  id: string;
++  source: PlaceLibrarySource;
++  kind: PlanPlaceKind;
++  title: string;
++  category: string;
++  categoryLabel: string;
++  addressOrPlatform: string;
++  areaLabel: string;
++  description: string;
++  imageLabels: string[];
++  ownerName: string;
++  visibility: PlaceLibraryVisibility;
++  accessLabel: string;
++  defaultTimeLabel: string;
++  defaultNote: string;
++  useLabel: string;
++};
++
++export type PlaceLibraryGroup = {
++  id: PlaceLibrarySource;
++  label: string;
++  helper: string;
++};
++
+ export type PlanPlacePreview = {
+   id: string;
++  libraryPlaceId?: string;
++  placeSource?: PlaceLibrarySource;
+   kind: PlanPlaceKind;
+   order: number;
+   title: string;

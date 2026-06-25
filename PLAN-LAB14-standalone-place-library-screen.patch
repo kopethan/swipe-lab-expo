@@ -1,0 +1,585 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index 26f4564..d12750f 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -384,6 +384,35 @@ function getPlacePickerFilterLabel(filterId: PlaceLibraryFilterId) {
+   return placeLibraryFilters.find((filter) => filter.id === filterId)?.label ?? "All places";
+ }
+ 
++function getPlaceLibrarySourceTitle(sourceId: PlaceLibrarySource) {
++  return sourceId === "starter_place" ? "Starter places" : "My places";
++}
++
++function getPlaceLibrarySourceHelper(sourceId: PlaceLibrarySource) {
++  return sourceId === "starter_place"
++    ? "Starter places are reusable templates for local and online plans. Later they can become verified official places."
++    : "Your reusable offline and online places. Create them separately, then pick them inside the Create Plan wizard.";
++}
++
++function getPlaceLibraryVisibleItems(sourceId: PlaceLibrarySource, filterId: PlaceLibraryFilterId, userPlaces: PlaceLibraryItem[], searchText: string) {
++  return getPlacePickerItems(sourceId, filterId, userPlaces, searchText);
++}
++
++function createPlaceDraftFromLibraryItem(place: PlaceLibraryItem): PlaceCreateDraft {
++  return {
++    kind: place.kind,
++    title: place.title,
++    categoryLabel: place.categoryLabel,
++    addressOrPlatform: place.addressOrPlatform,
++    areaLabel: place.areaLabel,
++    description: place.description,
++    imageLabelsText: place.imageLabels.join(", "),
++    accessLabel: place.accessLabel,
++    defaultTimeLabel: place.defaultTimeLabel,
++    defaultNote: place.defaultNote,
++  };
++}
++
+ function createInitialPlanDraft(): PlanCreateDraft {
+   return {
+     title: "Saturday creative plan",
+@@ -504,7 +533,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB13</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB14</Text>
+         </View>
+ 
+         <Pressable
+@@ -518,7 +547,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>CREATE PLAN WIZARD REDESIGN</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>STANDALONE PLACE LIBRARY</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -1484,7 +1513,7 @@ function PlanDetailPage({
+         <View style={styles.heroTextBlock}>
+           <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LAB RULES</Text>
+           <Text style={[styles.detailActionTitle, { color: palette.text }]}>Independent open-plan prototype.</Text>
+-          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB13 keeps this independent from Trade, Needs, Offers, and Agenda while the detail page matches the clean summary and visual place-card deck style.</Text>
++          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB14 keeps Plans independent while giving reusable offline and online places their own standalone library surface.</Text>
+         </View>
+       </View>
+     </View>
+@@ -1800,10 +1829,14 @@ function CreatePlaceFormPrototype({
+   draft,
+   onChangeDraft,
+   onSave,
++  saveLabel = "Save to My places + add",
++  helperText = "Prototype only: this saves to local My places state, not the real database or upload system.",
+ }: {
+   draft: PlaceCreateDraft;
+   onChangeDraft: (draft: PlaceCreateDraft) => void;
+   onSave: () => void;
++  saveLabel?: string;
++  helperText?: string;
+ }) {
+   const { palette } = useTheme();
+   const saveDisabled = !canSavePlaceDraft(draft);
+@@ -1867,8 +1900,8 @@ function CreatePlaceFormPrototype({
+       </View>
+ 
+       <View style={styles.createPlaceFormFooter}>
+-        <Text style={[styles.detailHelpText, { color: palette.muted }]}>Prototype only: this saves to local My places state, not the real database or upload system.</Text>
+-        <PlanActionButton label="Save to My places + add" primary disabled={saveDisabled} onPress={onSave} />
++        <Text style={[styles.detailHelpText, { color: palette.muted }]}>{helperText}</Text>
++        <PlanActionButton label={saveLabel} primary disabled={saveDisabled} onPress={onSave} />
+       </View>
+     </View>
+   );
+@@ -2001,6 +2034,302 @@ function PlacePickerPanel({
+   );
+ }
+ 
++
++function PlaceLibrarySourceFilterTabs({
++  activeSourceId,
++  onChange,
++}: {
++  activeSourceId: PlaceLibrarySource;
++  onChange: (sourceId: PlaceLibrarySource) => void;
++}) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={styles.placePickerSourceRow}>
++      {placeLibraryGroups.map((source) => {
++        const isActive = source.id === activeSourceId;
++        return (
++          <Pressable
++            key={source.id}
++            onPress={() => onChange(source.id)}
++            accessibilityRole="button"
++            accessibilityState={{ selected: isActive }}
++            style={({ pressed }) => [
++              styles.placePickerSourceChip,
++              {
++                borderColor: palette.border,
++                backgroundColor: isActive ? palette.text : palette.surfaceAlt,
++              },
++              pressed ? styles.pressed : null,
++              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++            ]}
++          >
++            <Text style={[styles.placePickerSourceLabel, { color: isActive ? palette.background : palette.text }]}>{source.label}</Text>
++          </Pressable>
++        );
++      })}
++    </View>
++  );
++}
++
++function StandalonePlaceLibraryCard({
++  place,
++  sourceId,
++  onEdit,
++  onDelete,
++  onCopyStarter,
++}: {
++  place: PlaceLibraryItem;
++  sourceId: PlaceLibrarySource;
++  onEdit: () => void;
++  onDelete: () => void;
++  onCopyStarter: () => void;
++}) {
++  const { palette } = useTheme();
++  const kindLabel = place.kind === "online_place" ? "ONLINE" : "OFFLINE";
++  const isStarter = sourceId === "starter_place";
++
++  return (
++    <View style={[styles.placeLibraryCard, styles.standalonePlaceCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++      <View style={[styles.placeLibraryImage, { borderColor: palette.border, backgroundColor: place.kind === "online_place" ? palette.deckSurface2 : palette.deckSurface1 }]}>
++        <View style={styles.planThumbTopRow}>
++          <Text style={[styles.planDeckThumbKind, { color: palette.muted }]}>{kindLabel}</Text>
++          <Text style={[styles.planDeckThumbOrder, { color: palette.muted }]}>{isStarter ? "STARTER" : "MINE"}</Text>
++        </View>
++        <Text numberOfLines={2} style={[styles.placeLibraryImageText, { color: palette.text }]}>{place.imageLabels[0] ?? "Place image"}</Text>
++      </View>
++
++      <View style={styles.placeLibraryBody}>
++        <View style={styles.placeLibraryHeaderRow}>
++          <View style={styles.heroTextBlock}>
++            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{place.categoryLabel}</Text>
++            <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>{place.title}</Text>
++            <Text style={[styles.placeLibraryMeta, { color: palette.muted }]}>{place.addressOrPlatform} · {place.accessLabel}</Text>
++          </View>
++          <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++            <Text style={[styles.smallTagText, { color: palette.text }]}>{place.visibility.replace("_", " ").toUpperCase()}</Text>
++          </View>
++        </View>
++        <Text numberOfLines={3} style={[styles.placeLibraryDescription, { color: palette.muted }]}>{place.description}</Text>
++        <View style={styles.standalonePlaceMetaGrid}>
++          <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++            <Text style={[styles.nextStepLabel, { color: palette.muted }]}>AREA</Text>
++            <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.areaLabel}</Text>
++          </View>
++          <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++            <Text style={[styles.nextStepLabel, { color: palette.muted }]}>DEFAULT</Text>
++            <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.defaultTimeLabel}</Text>
++          </View>
++        </View>
++        <View style={styles.standalonePlaceActions}>
++          {isStarter ? (
++            <PlanActionButton label="Copy to My places" primary onPress={onCopyStarter} />
++          ) : (
++            <>
++              <PlanActionButton label="Edit" onPress={onEdit} />
++              <PlanActionButton label="Delete" onPress={onDelete} />
++            </>
++          )}
++        </View>
++      </View>
++    </View>
++  );
++}
++
++function PlaceLibraryScreen({
++  userPlaces,
++  isDesktop,
++  onBack,
++  onCreatePlace,
++  onUpdatePlace,
++  onDeletePlace,
++}: {
++  userPlaces: PlaceLibraryItem[];
++  isDesktop: boolean;
++  onBack: () => void;
++  onCreatePlace: (place: PlaceLibraryItem) => void;
++  onUpdatePlace: (place: PlaceLibraryItem) => void;
++  onDeletePlace: (placeId: string) => void;
++}) {
++  const { palette } = useTheme();
++  const [sourceId, setSourceId] = useState<PlaceLibrarySource>("my_place");
++  const [filterId, setFilterId] = useState<PlaceLibraryFilterId>("all");
++  const [searchText, setSearchText] = useState("");
++  const [createFormOpen, setCreateFormOpen] = useState(false);
++  const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
++  const [draft, setDraft] = useState<PlaceCreateDraft>(() => createInitialPlaceDraft("local"));
++  const visibleItems = useMemo(
++    () => getPlaceLibraryVisibleItems(sourceId, filterId, userPlaces, searchText),
++    [sourceId, filterId, userPlaces, searchText]
++  );
++  const activeFilter = placeLibraryFilters.find((filter) => filter.id === filterId) ?? placeLibraryFilters[0];
++  const myOfflineCount = userPlaces.filter((place) => place.kind === "local_place").length;
++  const myOnlineCount = userPlaces.filter((place) => place.kind === "online_place").length;
++
++  const resetForm = () => {
++    setCreateFormOpen(false);
++    setEditingPlaceId(null);
++    setDraft(createInitialPlaceDraft("local"));
++  };
++
++  const startCreatePlace = (kind: PlanPlaceKind = "local_place") => {
++    setSourceId("my_place");
++    setCreateFormOpen(true);
++    setEditingPlaceId(null);
++    setDraft(createInitialPlaceDraft(kind === "online_place" ? "online" : "local"));
++  };
++
++  const startEditPlace = (place: PlaceLibraryItem) => {
++    setSourceId("my_place");
++    setCreateFormOpen(true);
++    setEditingPlaceId(place.id);
++    setDraft(createPlaceDraftFromLibraryItem(place));
++  };
++
++  const savePlace = () => {
++    if (!canSavePlaceDraft(draft)) {
++      return;
++    }
++
++    const nextPlace = createLibraryPlaceFromDraft(draft);
++    const placeToSave = editingPlaceId ? { ...nextPlace, id: editingPlaceId, source: "my_place" as const } : nextPlace;
++
++    if (editingPlaceId) {
++      onUpdatePlace(placeToSave);
++    } else {
++      onCreatePlace(placeToSave);
++    }
++
++    setSourceId("my_place");
++    resetForm();
++  };
++
++  const copyStarterPlace = (place: PlaceLibraryItem) => {
++    const copiedDraft = createPlaceDraftFromLibraryItem(place);
++    const copiedPlace = createLibraryPlaceFromDraft({
++      ...copiedDraft,
++      title: `${place.title} copy`,
++      accessLabel: place.kind === "online_place" ? "Access note hidden" : "Public place",
++    });
++    onCreatePlace(copiedPlace);
++    setSourceId("my_place");
++  };
++
++  return (
++    <View style={styles.tabContent}>
++      <View style={[styles.detailHeaderPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++        <View style={styles.detailTopBar}>
++          <Pressable
++            onPress={onBack}
++            accessibilityRole="button"
++            style={({ pressed }) => [
++              styles.detailBackButton,
++              { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
++              pressed ? styles.pressed : null,
++              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++            ]}
++          >
++            <Text style={[styles.detailBackText, { color: palette.text }]}>‹ Plans</Text>
++          </Pressable>
++          <View style={styles.detailStatusRow}>
++            <PlanModeBadge label={`${userPlaces.length} mine`} />
++            <PlanModeBadge label={`${starterPlaceLibrary.length} starters`} />
++          </View>
++        </View>
++
++        <View style={styles.plansHeroTopRow}>
++          <View style={styles.heroTextBlock}>
++            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLACE LIBRARY</Text>
++            <Text style={[styles.detailTitle, { color: palette.text }]}>Reusable places for open plans.</Text>
++            <Text style={[styles.detailSummary, { color: palette.muted }]}>Create offline and online places separately, then choose them inside the Create Plan wizard. This stays local to the lab prototype.</Text>
++          </View>
++          <View style={styles.plansHeroActionRow}>
++            <PlanActionButton label="Offline place" onPress={() => startCreatePlace("local_place")} />
++            <PlanActionButton label="Online place" primary onPress={() => startCreatePlace("online_place")} />
++          </View>
++        </View>
++
++        <View style={styles.standalonePlaceStatsRow}>
++          <PlanMiniStat label="my offline" value={myOfflineCount} />
++          <PlanMiniStat label="my online" value={myOnlineCount} />
++          <PlanMiniStat label="starters" value={starterPlaceLibrary.length} />
++          <PlanMiniStat label="filter" value={activeFilter.label} />
++        </View>
++      </View>
++
++      {createFormOpen ? (
++        <View style={[styles.createStepPanel, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++          <View style={styles.detailSectionHeader}>
++            <View>
++              <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{editingPlaceId ? "EDIT MY PLACE" : "CREATE MY PLACE"}</Text>
++              <Text style={[styles.detailSectionTitle, { color: palette.text }]}>{editingPlaceId ? "Update reusable place" : "Save a standalone place"}</Text>
++            </View>
++            <PlanActionButton label="Close form" onPress={resetForm} />
++          </View>
++          <CreatePlaceFormPrototype
++            draft={draft}
++            onChangeDraft={setDraft}
++            onSave={savePlace}
++            saveLabel={editingPlaceId ? "Update My place" : "Save to My places"}
++            helperText="Standalone library prototype: this changes local My places only. Real uploads, map previews, verification, and database saving come later."
++          />
++        </View>
++      ) : null}
++
++      <View style={[styles.placePickerPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++        <View style={styles.placePickerHeaderRow}>
++          <View style={styles.heroTextBlock}>
++            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{getPlaceLibrarySourceTitle(sourceId).toUpperCase()}</Text>
++            <Text style={[styles.placePickerTitle, { color: palette.text }]}>{getPlaceLibrarySourceTitle(sourceId)}</Text>
++            <Text style={[styles.placePickerHelper, { color: palette.muted }]}>{getPlaceLibrarySourceHelper(sourceId)}</Text>
++          </View>
++          <View style={[styles.placePickerCountPill, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++            <Text style={[styles.planFeedFilterCountValue, { color: palette.text }]}>{visibleItems.length}</Text>
++            <Text style={[styles.planFeedFilterCountLabel, { color: palette.muted }]}>visible</Text>
++          </View>
++        </View>
++
++        <PlaceLibrarySourceFilterTabs activeSourceId={sourceId} onChange={setSourceId} />
++        <PlacePickerFilterTabs activeFilterId={filterId} onChange={setFilterId} />
++        <TextInput
++          value={searchText}
++          onChangeText={setSearchText}
++          placeholder="Search saved places, starters, platforms, or areas"
++          placeholderTextColor={palette.muted}
++          style={[styles.placePickerSearchInput, { color: palette.text, borderColor: palette.border, backgroundColor: palette.surface }]}
++        />
++
++        <View style={[styles.placePickerActiveNote, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++          <Text style={[styles.nextStepLabel, { color: palette.muted }]}>{getPlacePickerFilterLabel(filterId).toUpperCase()}</Text>
++          <Text style={[styles.nextStepMeta, { color: palette.muted }]}>{activeFilter.helper}</Text>
++        </View>
++
++        {visibleItems.length === 0 ? (
++          <View style={[styles.placePickerEmptyCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++            <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>No places in this view</Text>
++            <Text style={[styles.placeLibraryDescription, { color: palette.muted }]}>Create a My place, change filters, or copy a Starter place into your library.</Text>
++            <PlanActionButton label="Create place" primary onPress={() => startCreatePlace()} />
++          </View>
++        ) : (
++          <View style={[styles.placeLibraryList, isDesktop ? styles.standalonePlaceGrid : null]}>
++            {visibleItems.map((place) => (
++              <View key={place.id} style={isDesktop ? styles.standalonePlaceGridItem : null}>
++                <StandalonePlaceLibraryCard
++                  place={place}
++                  sourceId={sourceId}
++                  onEdit={() => startEditPlace(place)}
++                  onDelete={() => onDeletePlace(place.id)}
++                  onCopyStarter={() => copyStarterPlace(place)}
++                />
++              </View>
++            ))}
++          </View>
++        )}
++      </View>
++    </View>
++  );
++}
++
+ function DraftPlaceEditor({
+   place,
+   canRemove,
+@@ -2288,7 +2617,7 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB13 · DETAIL VISUAL PARITY</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB14 · STANDALONE PLACE LIBRARY</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+           <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard preview and detail page now share the same summary and visual place-card language.</Text>
+         </View>
+@@ -2496,6 +2825,7 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
+   const [expandedPlanIds, setExpandedPlanIds] = useState<string[]>([planPreviews[0]?.id ?? ""]);
+   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+   const [createModeOpen, setCreateModeOpen] = useState(false);
++  const [placeLibraryOpen, setPlaceLibraryOpen] = useState(false);
+   const [createStepIndex, setCreateStepIndex] = useState(0);
+   const [createDraft, setCreateDraft] = useState<PlanCreateDraft>(() => createInitialPlanDraft());
+   const [joinedPlanIds, setJoinedPlanIds] = useState<string[]>([]);
+@@ -2521,9 +2851,17 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
+     setCreateDraft(draft ?? createInitialPlanDraft());
+     setCreateStepIndex(0);
+     setSelectedPlanId(null);
++    setPlaceLibraryOpen(false);
+     setCreateModeOpen(true);
+   };
+ 
++  const openPlaceLibrary = () => {
++    setJoinCandidateId(null);
++    setSelectedPlanId(null);
++    setCreateModeOpen(false);
++    setPlaceLibraryOpen(true);
++  };
++
+   const closeCreateFlow = () => {
+     setCreateModeOpen(false);
+   };
+@@ -2573,6 +2911,14 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
+     setUserPlaces((current) => [place, ...current.filter((item) => item.id !== place.id)]);
+   };
+ 
++  const updateReusablePlace = (place: PlaceLibraryItem) => {
++    setUserPlaces((current) => current.map((item) => (item.id === place.id ? place : item)));
++  };
++
++  const deleteReusablePlace = (placeId: string) => {
++    setUserPlaces((current) => current.filter((item) => item.id !== placeId));
++  };
++
+   const createPlan = () => {
+     const createdPlan = buildPlanPreviewFromDraft(createDraft);
+     setPlans((current) => [createdPlan, ...current]);
+@@ -2583,6 +2929,19 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
+     setSelectedPlanId(createdPlan.id);
+   };
+ 
++  if (placeLibraryOpen) {
++    return (
++      <PlaceLibraryScreen
++        userPlaces={userPlaces}
++        isDesktop={isDesktop}
++        onBack={() => setPlaceLibraryOpen(false)}
++        onCreatePlace={createReusablePlace}
++        onUpdatePlace={updateReusablePlace}
++        onDeletePlace={deleteReusablePlace}
++      />
++    );
++  }
++
+   if (createModeOpen) {
+     return (
+       <PlanCreateFlow
+@@ -2626,21 +2985,35 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
+             <Text style={[styles.heroTitle, { color: palette.text }]}>Plans are open activities.</Text>
+             <Text style={[styles.heroCopy, { color: palette.muted }]}>
+               A plan is separate from trades: choose local places or online platform places, order them,
+-              publish the plan, filter the feed, open detail pages, and let people join freely with local mock state.
++              publish the plan, manage reusable places, filter the feed, open detail pages, and let people join freely with local mock state.
+             </Text>
+           </View>
+-          <Pressable
+-            onPress={() => openCreateFlow()}
+-            accessibilityRole="button"
+-            style={({ pressed }) => [
+-              styles.createPlanButton,
+-              { borderColor: palette.border, backgroundColor: palette.text },
+-              pressed ? styles.pressed : null,
+-              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+-            ]}
+-          >
+-            <Text style={[styles.createPlanButtonText, { color: palette.background }]}>+ Create</Text>
+-          </Pressable>
++          <View style={styles.plansHeroActionRow}>
++            <Pressable
++              onPress={openPlaceLibrary}
++              accessibilityRole="button"
++              style={({ pressed }) => [
++                styles.createPlanButton,
++                { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
++                pressed ? styles.pressed : null,
++                Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++              ]}
++            >
++              <Text style={[styles.createPlanButtonText, { color: palette.text }]}>My places</Text>
++            </Pressable>
++            <Pressable
++              onPress={() => openCreateFlow()}
++              accessibilityRole="button"
++              style={({ pressed }) => [
++                styles.createPlanButton,
++                { borderColor: palette.border, backgroundColor: palette.text },
++                pressed ? styles.pressed : null,
++                Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++              ]}
++            >
++              <Text style={[styles.createPlanButtonText, { color: palette.background }]}>+ Create</Text>
++            </Pressable>
++          </View>
+         </View>
+       </View>
+ 
+@@ -3474,6 +3847,19 @@ const styles = StyleSheet.create({
+     fontSize: 13,
+     fontWeight: "900",
+   },
++  plansHeroActionRow: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "flex-end",
++    flexWrap: "wrap",
++    gap: 8,
++  },
++  standalonePlaceStatsRow: {
++    marginTop: 16,
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 10,
++  },
+   cardStack: {
+     gap: 12,
+   },
+@@ -4410,6 +4796,37 @@ const styles = StyleSheet.create({
+     gap: 12,
+     alignItems: "stretch",
+   },
++  standalonePlaceCard: {
++    minHeight: 166,
++  },
++  standalonePlaceGrid: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    alignItems: "stretch",
++  },
++  standalonePlaceGridItem: {
++    flexGrow: 1,
++    flexBasis: 360,
++    maxWidth: "49%",
++  },
++  standalonePlaceMetaGrid: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 8,
++  },
++  standalonePlaceMetaPill: {
++    flexGrow: 1,
++    flexBasis: 120,
++    borderRadius: 14,
++    borderWidth: 1,
++    paddingHorizontal: 10,
++    paddingVertical: 8,
++  },
++  standalonePlaceActions: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 8,
++  },
+   placeLibraryImage: {
+     width: 112,
+     minHeight: 112,
+diff --git a/features/nav-lab/navLab.mockData.ts b/features/nav-lab/navLab.mockData.ts
+index bb3eaff..7b99ccc 100644
+--- a/features/nav-lab/navLab.mockData.ts
++++ b/features/nav-lab/navLab.mockData.ts
+@@ -39,6 +39,7 @@ export const meHubSections: MeHubSection[] = [
+     items: [
+       { id: "created-plans", label: "Created plans", count: 3, subtitle: "Your open activities and drafts" },
+       { id: "joined-plans", label: "Joined plans", count: 1, subtitle: "Plans you joined freely" },
++      { id: "my-places", label: "My places", count: 3, subtitle: "Reusable offline and online places" },
+     ],
+   },
+   {

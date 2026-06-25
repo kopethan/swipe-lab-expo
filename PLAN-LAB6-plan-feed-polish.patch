@@ -1,0 +1,509 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index 071a87d..a104fcd 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -93,6 +93,14 @@ function getPlanModeLabel(plan: PlanPreview) {
+ 
+ const planCurrentUserName = "Kopy";
+ 
++type PlanFeedFilterId = "explore" | "joined" | "created";
++
++const planFeedFilters: { id: PlanFeedFilterId; label: string; helper: string }[] = [
++  { id: "explore", label: "Explore", helper: "All open, online, local, mixed, and draft plan examples." },
++  { id: "joined", label: "Joined", helper: "Plans you joined freely in this local lab session." },
++  { id: "created", label: "Created", helper: "Mock plans created by Kopy inside this prototype." },
++];
++
+ function isCurrentUserPlan(plan: PlanPreview) {
+   return plan.ownerName === planCurrentUserName;
+ }
+@@ -131,6 +139,54 @@ function addCurrentUserToJoinedPreview(joinedPreview: string[]) {
+   return [...namedItems, planCurrentUserName, ...compactCountItems];
+ }
+ 
++function isPlanCreatedByCurrentUser(plan: PlanPreview) {
++  return plan.ownerName === planCurrentUserName;
++}
++
++function getPlanFeedFilterLabel(filterId: PlanFeedFilterId) {
++  return planFeedFilters.find((filter) => filter.id === filterId)?.label ?? "Explore";
++}
++
++function getFilteredPlans(plans: PlanPreview[], filterId: PlanFeedFilterId, joinedPlanIds: string[]) {
++  if (filterId === "created") {
++    return plans.filter(isPlanCreatedByCurrentUser);
++  }
++
++  if (filterId === "joined") {
++    return plans.filter((plan) => joinedPlanIds.includes(plan.id));
++  }
++
++  return plans;
++}
++
++function getPlanFeedCount(plans: PlanPreview[], filterId: PlanFeedFilterId, joinedPlanIds: string[]) {
++  return getFilteredPlans(plans, filterId, joinedPlanIds).length;
++}
++
++function getPlanFeedEmptyTitle(filterId: PlanFeedFilterId) {
++  if (filterId === "joined") {
++    return "No joined plans yet";
++  }
++
++  if (filterId === "created") {
++    return "No created plans yet";
++  }
++
++  return "No plans to explore";
++}
++
++function getPlanFeedEmptyCopy(filterId: PlanFeedFilterId) {
++  if (filterId === "joined") {
++    return "Join an open plan from Explore and it will appear here in this local prototype.";
++  }
++
++  if (filterId === "created") {
++    return "Create a mock local, online, or mixed plan and it will appear in this view.";
++  }
++
++  return "The Plans feed is empty in this lab state. Create a mock plan to test the deck flow.";
++}
++
+ type PlanCreateStepId = "goal" | "mode" | "places" | "media" | "preview";
+ 
+ type PlanCreateDraft = {
+@@ -152,6 +208,7 @@ const planCreateSteps: { id: PlanCreateStepId; label: string; helper: string }[]
+   { id: "preview", label: "Preview", helper: "Create the mock plan." },
+ ];
+ 
++
+ function getPlanModeDisplay(mode: PlanMode) {
+   return mode === "mixed" ? "Mixed" : mode === "online" ? "Online" : "Local";
+ }
+@@ -277,7 +334,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB5</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB6</Text>
+         </View>
+ 
+         <Pressable
+@@ -291,7 +348,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>PLAN JOIN FLOW</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>PLAN FEED POLISH</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -868,6 +925,14 @@ function PlanModeBadge({ label }: { label: string }) {
+   );
+ }
+ 
++function getPlaceVisualKindLabel(place?: PlanPlacePreview) {
++  if (!place) {
++    return "VISUAL";
++  }
++
++  return place.kind === "online_place" ? "ONLINE PLATFORM" : "PLACE PHOTO";
++}
++
+ function PlanDeckImageStrip({ places, modeLabel }: { places: PlanPlacePreview[]; modeLabel: string }) {
+   const { palette } = useTheme();
+   const [primaryPlace, ...secondaryPlaces] = places;
+@@ -876,7 +941,12 @@ function PlanDeckImageStrip({ places, modeLabel }: { places: PlanPlacePreview[];
+   return (
+     <View style={styles.planDeckMediaGrid}>
+       <View style={[styles.planDeckHeroImage, { borderColor: palette.border, backgroundColor: palette.deckSurface1 }]}>
+-        <Text style={[styles.planDeckImageEyebrow, { color: palette.muted }]}>{modeLabel.toUpperCase()}</Text>
++        <View style={styles.planDeckImageTopRow}>
++          <Text style={[styles.planDeckImageEyebrow, { color: palette.muted }]}>{modeLabel.toUpperCase()}</Text>
++          <View style={[styles.planVisualKindPill, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++            <Text style={[styles.planVisualKindText, { color: palette.text }]}>{getPlaceVisualKindLabel(primaryPlace)}</Text>
++          </View>
++        </View>
+         <Text style={[styles.planDeckImageTitle, { color: palette.text }]}>{primaryPlace?.imageLabel ?? "Plan image"}</Text>
+         <Text style={[styles.planDeckImageMeta, { color: palette.muted }]}>1 · {primaryPlace?.title ?? "First place"}</Text>
+       </View>
+@@ -884,7 +954,12 @@ function PlanDeckImageStrip({ places, modeLabel }: { places: PlanPlacePreview[];
+       <View style={styles.planDeckThumbColumn}>
+         {visibleSecondaryPlaces.map((place) => (
+           <View key={place.id} style={[styles.planDeckThumbImage, { borderColor: palette.border, backgroundColor: palette.deckSurface2 }]}>
+-            <Text style={[styles.planDeckThumbOrder, { color: palette.muted }]}>{place.order}</Text>
++            <View style={styles.planThumbTopRow}>
++              <Text style={[styles.planDeckThumbOrder, { color: palette.muted }]}>{place.order}</Text>
++              <Text style={[styles.planDeckThumbKind, { color: palette.muted }]}>
++                {place.kind === "online_place" ? "WEB" : "LOCAL"}
++              </Text>
++            </View>
+             <Text numberOfLines={2} style={[styles.planDeckThumbLabel, { color: palette.text }]}>{place.imageLabel}</Text>
+           </View>
+         ))}
+@@ -1190,7 +1265,7 @@ function PlanDetailPage({
+             {joined ? (isCurrentUserPlan(plan) ? "This is your open plan." : "You joined this open plan.") : "Join freely without owner approval."}
+           </Text>
+           <Text style={[styles.detailHelpText, { color: palette.muted }]}>
+-            PLAN-LAB5 adds a confirmation sheet, joined state, and joined-count update. No messages, approvals, backend, or Trade links.
++            PLAN-LAB6 keeps joining local, then polishes the Plans feed with Explore / Joined / Created views, empty states, and responsive deck spacing.
+           </Text>
+         </View>
+         <View style={styles.planActionsInline}>
+@@ -1509,7 +1584,7 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB5 · CREATE FLOW</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB6 · CREATE FLOW</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+           <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only: choose a goal, local/online mode, ordered places, image labels, notes, and preview the deck card.</Text>
+         </View>
+@@ -1597,7 +1672,85 @@ function createDraftFromPlan(plan: PlanPreview): PlanCreateDraft {
+   };
+ }
+ 
+-function PlansScreen() {
++function PlanFeedFilters({
++  plans,
++  activeFilterId,
++  joinedPlanIds,
++  onChange,
++}: {
++  plans: PlanPreview[];
++  activeFilterId: PlanFeedFilterId;
++  joinedPlanIds: string[];
++  onChange: (filterId: PlanFeedFilterId) => void;
++}) {
++  const { palette } = useTheme();
++  const activeFilter = planFeedFilters.find((filter) => filter.id === activeFilterId) ?? planFeedFilters[0];
++
++  return (
++    <View style={[styles.planFeedFilterPanel, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++      <View style={styles.planFeedFilterHeader}>
++        <View style={styles.heroTextBlock}>
++          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PLAN FEED VIEWS</Text>
++          <Text style={[styles.planFeedFilterTitle, { color: palette.text }]}>{activeFilter.label}</Text>
++          <Text style={[styles.planFeedFilterHelper, { color: palette.muted }]}>{activeFilter.helper}</Text>
++        </View>
++        <View style={[styles.planFeedFilterCount, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++          <Text style={[styles.planFeedFilterCountValue, { color: palette.text }]}>
++            {getPlanFeedCount(plans, activeFilterId, joinedPlanIds)}
++          </Text>
++          <Text style={[styles.planFeedFilterCountLabel, { color: palette.muted }]}>visible</Text>
++        </View>
++      </View>
++
++      <View style={styles.planFeedFilterTabs}>
++        {planFeedFilters.map((filter) => {
++          const isActive = filter.id === activeFilterId;
++          return (
++            <Pressable
++              key={filter.id}
++              onPress={() => onChange(filter.id)}
++              accessibilityRole="button"
++              accessibilityState={{ selected: isActive }}
++              style={({ pressed }) => [
++                styles.planFeedFilterTab,
++                {
++                  borderColor: palette.border,
++                  backgroundColor: isActive ? palette.text : palette.surfaceAlt,
++                },
++                pressed ? styles.pressed : null,
++                Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++              ]}
++            >
++              <Text style={[styles.planFeedFilterTabText, { color: isActive ? palette.background : palette.text }]}>
++                {filter.label} · {getPlanFeedCount(plans, filter.id, joinedPlanIds)}
++              </Text>
++            </Pressable>
++          );
++        })}
++      </View>
++    </View>
++  );
++}
++
++function PlanFeedEmptyState({ filterId, onCreatePlan }: { filterId: PlanFeedFilterId; onCreatePlan: () => void }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.planFeedEmptyCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++      <View style={[styles.planFeedEmptyIcon, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++        <Text style={[styles.planFeedEmptyIconText, { color: palette.text }]}>⌁</Text>
++      </View>
++      <View style={styles.heroTextBlock}>
++        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{getPlanFeedFilterLabel(filterId).toUpperCase()}</Text>
++        <Text style={[styles.planFeedEmptyTitle, { color: palette.text }]}>{getPlanFeedEmptyTitle(filterId)}</Text>
++        <Text style={[styles.planFeedEmptyCopy, { color: palette.muted }]}>{getPlanFeedEmptyCopy(filterId)}</Text>
++      </View>
++      <PlanActionButton label="Create mock plan" primary onPress={onCreatePlan} />
++    </View>
++  );
++}
++
++function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
+   const { palette } = useTheme();
+   const [plans, setPlans] = useState<PlanPreview[]>(planPreviews);
+   const [expandedPlanIds, setExpandedPlanIds] = useState<string[]>([planPreviews[0]?.id ?? ""]);
+@@ -1606,9 +1759,14 @@ function PlansScreen() {
+   const [createStepIndex, setCreateStepIndex] = useState(0);
+   const [createDraft, setCreateDraft] = useState<PlanCreateDraft>(() => createInitialPlanDraft());
+   const [joinedPlanIds, setJoinedPlanIds] = useState<string[]>([]);
++  const [activePlanFeedFilterId, setActivePlanFeedFilterId] = useState<PlanFeedFilterId>("explore");
+   const [joinCandidateId, setJoinCandidateId] = useState<string | null>(null);
+   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? null;
+   const joinCandidate = plans.find((plan) => plan.id === joinCandidateId) ?? null;
++  const visiblePlans = useMemo(
++    () => getFilteredPlans(plans, activePlanFeedFilterId, joinedPlanIds),
++    [plans, activePlanFeedFilterId, joinedPlanIds]
++  );
+ 
+   const togglePlan = (planId: string) => {
+     setExpandedPlanIds((current) =>
+@@ -1667,6 +1825,7 @@ function PlansScreen() {
+       })
+     );
+     setJoinedPlanIds((current) => (current.includes(joinCandidate.id) ? current : [...current, joinCandidate.id]));
++    setActivePlanFeedFilterId("joined");
+     setJoinCandidateId(null);
+   };
+ 
+@@ -1674,6 +1833,7 @@ function PlansScreen() {
+     const createdPlan = buildPlanPreviewFromDraft(createDraft);
+     setPlans((current) => [createdPlan, ...current]);
+     setExpandedPlanIds((current) => [createdPlan.id, ...current.filter((id) => id !== createdPlan.id)]);
++    setActivePlanFeedFilterId("created");
+     setCreateModeOpen(false);
+     setJoinCandidateId(null);
+     setSelectedPlanId(createdPlan.id);
+@@ -1720,7 +1880,7 @@ function PlansScreen() {
+             <Text style={[styles.heroTitle, { color: palette.text }]}>Plans are open activities.</Text>
+             <Text style={[styles.heroCopy, { color: palette.muted }]}>
+               A plan is separate from trades: choose local places or online platform places, order them,
+-              publish the plan, open a detail page, and let people join freely with a local mock join state.
++              publish the plan, filter the feed, open detail pages, and let people join freely with local mock state.
+             </Text>
+           </View>
+           <Pressable
+@@ -1738,21 +1898,36 @@ function PlansScreen() {
+         </View>
+       </View>
+ 
+-      <SectionHeader label="MOCK PLAN FEED" title="Create, open, and freely join local mock Plans" />
+-      <View style={styles.cardStack}>
+-        {plans.map((plan) => (
+-          <PlanCard
+-            key={plan.id}
+-            plan={plan}
+-            expanded={expandedPlanIds.includes(plan.id)}
+-            joined={planIsJoined(plan)}
+-            onToggle={() => togglePlan(plan.id)}
+-            onOpenDetail={() => openPlanDetail(plan.id)}
+-            onJoinPress={() => openJoinFlow(plan)}
+-            onCreateSimilar={() => openCreateFlow(createDraftFromPlan(plan))}
+-          />
+-        ))}
+-      </View>
++      <PlanFeedFilters
++        plans={plans}
++        activeFilterId={activePlanFeedFilterId}
++        joinedPlanIds={joinedPlanIds}
++        onChange={setActivePlanFeedFilterId}
++      />
++
++      <SectionHeader
++        label="MOCK PLAN FEED"
++        title={`${getPlanFeedFilterLabel(activePlanFeedFilterId)} Plans · ${visiblePlans.length} visible`}
++      />
++      {visiblePlans.length > 0 ? (
++        <View style={[styles.cardStack, isDesktop ? styles.planFeedDesktopGrid : null]}>
++          {visiblePlans.map((plan) => (
++            <View key={plan.id} style={isDesktop ? styles.planFeedDesktopItem : null}>
++              <PlanCard
++                plan={plan}
++                expanded={expandedPlanIds.includes(plan.id)}
++                joined={planIsJoined(plan)}
++                onToggle={() => togglePlan(plan.id)}
++                onOpenDetail={() => openPlanDetail(plan.id)}
++                onJoinPress={() => openJoinFlow(plan)}
++                onCreateSimilar={() => openCreateFlow(createDraftFromPlan(plan))}
++              />
++            </View>
++          ))}
++        </View>
++      ) : (
++        <PlanFeedEmptyState filterId={activePlanFeedFilterId} onCreatePlan={() => openCreateFlow()} />
++      )}
+       {joinCandidate ? (
+         <JoinPlanSheet plan={joinCandidate} onCancel={cancelJoinFlow} onConfirm={confirmJoinPlan} />
+       ) : null}
+@@ -2002,7 +2177,7 @@ function TradeScreen() {
+ 
+ function ActiveContent({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop: boolean }) {
+   if (activeTab === "plans") {
+-    return <PlansScreen />;
++    return <PlansScreen isDesktop={isDesktop} />;
+   }
+   if (activeTab === "trade") {
+     return <TradeScreen />;
+@@ -2556,6 +2731,108 @@ const styles = StyleSheet.create({
+   cardStack: {
+     gap: 12,
+   },
++  planFeedDesktopGrid: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    alignItems: "stretch",
++  },
++  planFeedDesktopItem: {
++    flexGrow: 1,
++    flexBasis: 360,
++    maxWidth: "49%",
++  },
++  planFeedFilterPanel: {
++    borderRadius: 24,
++    borderWidth: 1,
++    padding: 14,
++    gap: 13,
++  },
++  planFeedFilterHeader: {
++    flexDirection: "row",
++    alignItems: "flex-start",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  planFeedFilterTitle: {
++    marginTop: 6,
++    fontSize: 20,
++    fontWeight: "900",
++    letterSpacing: -0.3,
++  },
++  planFeedFilterHelper: {
++    marginTop: 5,
++    fontSize: 13,
++    lineHeight: 18,
++    fontWeight: "700",
++  },
++  planFeedFilterCount: {
++    minWidth: 72,
++    borderRadius: 18,
++    borderWidth: 1,
++    paddingHorizontal: 10,
++    paddingVertical: 8,
++    alignItems: "center",
++  },
++  planFeedFilterCountValue: {
++    fontSize: 18,
++    fontWeight: "900",
++  },
++  planFeedFilterCountLabel: {
++    marginTop: 1,
++    fontSize: 10,
++    fontWeight: "900",
++  },
++  planFeedFilterTabs: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 8,
++  },
++  planFeedFilterTab: {
++    minHeight: 38,
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 13,
++    paddingVertical: 8,
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  planFeedFilterTabText: {
++    fontSize: 12,
++    fontWeight: "900",
++  },
++  planFeedEmptyCard: {
++    borderRadius: 24,
++    borderWidth: 1,
++    padding: 16,
++    flexDirection: "row",
++    alignItems: "center",
++    flexWrap: "wrap",
++    gap: 13,
++  },
++  planFeedEmptyIcon: {
++    width: 54,
++    height: 54,
++    borderRadius: 27,
++    borderWidth: 1,
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  planFeedEmptyIconText: {
++    fontSize: 23,
++    fontWeight: "900",
++  },
++  planFeedEmptyTitle: {
++    marginTop: 5,
++    fontSize: 20,
++    fontWeight: "900",
++    letterSpacing: -0.3,
++  },
++  planFeedEmptyCopy: {
++    marginTop: 5,
++    fontSize: 13,
++    lineHeight: 19,
++    fontWeight: "700",
++  },
+   planDeckCard: {
+     padding: 16,
+   },
+@@ -2584,11 +2861,28 @@ const styles = StyleSheet.create({
+     justifyContent: "space-between",
+     overflow: "hidden",
+   },
++  planDeckImageTopRow: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 8,
++  },
+   planDeckImageEyebrow: {
+     fontSize: 10,
+     fontWeight: "900",
+     letterSpacing: 0.6,
+   },
++  planVisualKindPill: {
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 8,
++    paddingVertical: 4,
++  },
++  planVisualKindText: {
++    fontSize: 9,
++    fontWeight: "900",
++    letterSpacing: 0.3,
++  },
+   planDeckImageTitle: {
+     fontSize: 22,
+     lineHeight: 27,
+@@ -2612,10 +2906,21 @@ const styles = StyleSheet.create({
+     padding: 10,
+     justifyContent: "space-between",
+   },
++  planThumbTopRow: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 6,
++  },
+   planDeckThumbOrder: {
+     fontSize: 10,
+     fontWeight: "900",
+   },
++  planDeckThumbKind: {
++    fontSize: 9,
++    fontWeight: "900",
++    letterSpacing: 0.3,
++  },
+   planDeckThumbLabel: {
+     fontSize: 12,
+     lineHeight: 15,

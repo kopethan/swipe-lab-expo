@@ -1,0 +1,634 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index 70303dc..1cd54e6 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -187,7 +187,7 @@ function getPlanFeedEmptyCopy(filterId: PlanFeedFilterId) {
+   return "The Plans feed is empty in this lab state. Create a mock plan to test the deck flow.";
+ }
+ 
+-type PlanCreateStepId = "goal" | "mode" | "places" | "media" | "preview";
++type PlanCreateStepId = "basics" | "mode" | "places" | "arrange" | "preview";
+ 
+ type PlacePickerSourceId = PlaceLibrarySource | "create_new";
+ 
+@@ -225,11 +225,11 @@ type PlaceCreateDraft = {
+ };
+ 
+ const planCreateSteps: { id: PlanCreateStepId; label: string; helper: string }[] = [
+-  { id: "goal", label: "Goal", helper: "Name the activity." },
+-  { id: "mode", label: "Mode", helper: "Local, online, or mixed." },
+-  { id: "places", label: "Places", helper: "Order the stops." },
+-  { id: "media", label: "Images", helper: "Polish images and notes." },
+-  { id: "preview", label: "Preview", helper: "Create the mock plan." },
++  { id: "basics", label: "Basics", helper: "Title, summary, category." },
++  { id: "mode", label: "Mode", helper: "Offline, online, or mixed." },
++  { id: "places", label: "Places", helper: "Search My places, Starter places, or create new." },
++  { id: "arrange", label: "Arrange", helper: "Order places, times, images, and notes." },
++  { id: "preview", label: "Preview", helper: "Review the deck before opening." },
+ ];
+ 
+ 
+@@ -292,19 +292,27 @@ function createDraftPlaceFromLibraryItem(place: PlaceLibraryItem, index: number)
+   };
+ }
+ 
+-function getPlacePickerItems(sourceId: PlacePickerSourceId, filterId: PlaceLibraryFilterId, userPlaces: PlaceLibraryItem[]) {
++function getPlacePickerItems(sourceId: PlacePickerSourceId, filterId: PlaceLibraryFilterId, userPlaces: PlaceLibraryItem[], searchText = "") {
+   const sourceItems = sourceId === "starter_place" ? starterPlaceLibrary : userPlaces;
++  const normalizedSearch = searchText.trim().toLowerCase();
+ 
+   return sourceItems.filter((place) => {
+-    if (filterId === "offline") {
+-      return place.kind === "local_place";
++    if (filterId === "offline" && place.kind !== "local_place") {
++      return false;
+     }
+ 
+-    if (filterId === "online") {
+-      return place.kind === "online_place";
++    if (filterId === "online" && place.kind !== "online_place") {
++      return false;
+     }
+ 
+-    return true;
++    if (!normalizedSearch) {
++      return true;
++    }
++
++    return [place.title, place.categoryLabel, place.addressOrPlatform, place.areaLabel, place.description, place.accessLabel]
++      .join(" ")
++      .toLowerCase()
++      .includes(normalizedSearch);
+   });
+ }
+ 
+@@ -434,6 +442,43 @@ function buildPlanPreviewFromDraft(draft: PlanCreateDraft): PlanPreview {
+   };
+ }
+ 
++function getPlanCreateStepValidity(draft: PlanCreateDraft, stepId: PlanCreateStepId) {
++  if (stepId === "basics") {
++    return draft.title.trim().length > 0 && draft.summary.trim().length > 0;
++  }
++
++  if (stepId === "places" || stepId === "arrange" || stepId === "preview") {
++    return draft.places.length > 0;
++  }
++
++  return true;
++}
++
++function getPlanCreateStepWarning(stepId: PlanCreateStepId) {
++  if (stepId === "basics") {
++    return "Add a title and short summary before continuing.";
++  }
++
++  if (stepId === "places" || stepId === "arrange" || stepId === "preview") {
++    return "Add at least one reusable place to continue.";
++  }
++
++  return "Complete this step before continuing.";
++}
++
++function movePlanPlace(places: PlanPlacePreview[], placeId: string, direction: -1 | 1) {
++  const currentIndex = places.findIndex((place) => place.id === placeId);
++  const targetIndex = currentIndex + direction;
++
++  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= places.length) {
++    return places;
++  }
++
++  const nextPlaces = [...places];
++  [nextPlaces[currentIndex], nextPlaces[targetIndex]] = [nextPlaces[targetIndex], nextPlaces[currentIndex]];
++  return nextPlaces.map((place, index) => ({ ...place, order: index + 1 }));
++}
++
+ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop: boolean }) {
+   const { mode, palette, toggleMode } = useTheme();
+   const insets = useSafeAreaInsets();
+@@ -459,7 +504,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB9</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB10</Text>
+         </View>
+ 
+         <Pressable
+@@ -473,7 +518,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>CREATE PLACE FORM PROTOTYPE</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>CREATE PLAN WIZARD REDESIGN</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -1626,12 +1671,12 @@ function PlacePickerFilterTabs({
+   );
+ }
+ 
+-function PlaceLibraryPickerCard({ place, onAdd }: { place: PlaceLibraryItem; onAdd: () => void }) {
++function PlaceLibraryPickerCard({ place, added, onAdd }: { place: PlaceLibraryItem; added: boolean; onAdd: () => void }) {
+   const { palette } = useTheme();
+   const kindLabel = place.kind === "online_place" ? "ONLINE" : "OFFLINE";
+ 
+   return (
+-    <View style={[styles.placeLibraryCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++    <View style={[styles.placeLibraryCard, { borderColor: added ? palette.text : palette.border, backgroundColor: palette.surface }]}>
+       <View style={[styles.placeLibraryImage, { borderColor: palette.border, backgroundColor: palette.deckSurface1 }]}>
+         <View style={styles.planThumbTopRow}>
+           <Text style={[styles.planDeckThumbKind, { color: palette.muted }]}>{kindLabel}</Text>
+@@ -1647,16 +1692,17 @@ function PlaceLibraryPickerCard({ place, onAdd }: { place: PlaceLibraryItem; onA
+             <Text style={[styles.placeLibraryMeta, { color: palette.muted }]}>{place.addressOrPlatform} · {place.accessLabel}</Text>
+           </View>
+           <Pressable
+-            onPress={onAdd}
++            onPress={added ? undefined : onAdd}
+             accessibilityRole="button"
++            accessibilityState={{ disabled: added }}
+             style={({ pressed }) => [
+               styles.placeLibraryAddButton,
+-              { borderColor: palette.border, backgroundColor: palette.text },
+-              pressed ? styles.pressed : null,
+-              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++              { borderColor: palette.border, backgroundColor: added ? palette.surfaceAlt : palette.text, opacity: added ? 0.78 : 1 },
++              pressed && !added ? styles.pressed : null,
++              Platform.OS === "web" && !added ? ({ cursor: "pointer" } as any) : null,
+             ]}
+           >
+-            <Text style={[styles.placeLibraryAddText, { color: palette.background }]}>Add</Text>
++            <Text style={[styles.placeLibraryAddText, { color: added ? palette.muted : palette.background }]}>{added ? "Added" : "Add"}</Text>
+           </Pressable>
+         </View>
+         <Text numberOfLines={3} style={[styles.placeLibraryDescription, { color: palette.muted }]}>{place.description}</Text>
+@@ -1784,15 +1830,52 @@ function CreatePlaceFormPrototype({
+   );
+ }
+ 
++function SelectedPlanPlacesSummary({ places }: { places: PlanPlacePreview[] }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.selectedPlacesCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++      <View style={styles.detailSectionHeader}>
++        <View>
++          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>SELECTED PLACES</Text>
++          <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Route draft</Text>
++        </View>
++        <PlanModeBadge label={`${places.length} stops`} />
++      </View>
++
++      {places.length === 0 ? (
++        <Text style={[styles.detailHelpText, { color: palette.muted }]}>Search My places, Starter places, or create a new reusable place to start the route.</Text>
++      ) : (
++        <View style={styles.selectedPlaceList}>
++          {places.map((place) => (
++            <View key={place.id} style={[styles.selectedPlaceRow, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++              <View style={[styles.selectedPlaceOrder, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++                <Text style={[styles.removePlaceText, { color: palette.text }]}>{place.order}</Text>
++              </View>
++              <View style={styles.heroTextBlock}>
++                <Text style={[styles.selectedPlaceTitle, { color: palette.text }]}>{place.title}</Text>
++                <Text style={[styles.selectedPlaceMeta, { color: palette.muted }]}>{place.timeLabel} · {place.addressOrPlatform} · {place.kind === "online_place" ? "Online" : "Offline"}</Text>
++              </View>
++            </View>
++          ))}
++        </View>
++      )}
++    </View>
++  );
++}
++
+ function PlacePickerPanel({
+   mode,
+   sourceId,
+   filterId,
++  searchText,
+   selectedCount,
++  selectedLibraryPlaceIds,
+   userPlaces,
+   createPlaceDraft,
+   onChangeSource,
+   onChangeFilter,
++  onChangeSearchText,
+   onAddLibraryPlace,
+   onChangeCreatePlaceDraft,
+   onSaveCreatedPlace,
+@@ -1800,11 +1883,14 @@ function PlacePickerPanel({
+   mode: PlanMode;
+   sourceId: PlacePickerSourceId;
+   filterId: PlaceLibraryFilterId;
++  searchText: string;
+   selectedCount: number;
++  selectedLibraryPlaceIds: string[];
+   userPlaces: PlaceLibraryItem[];
+   createPlaceDraft: PlaceCreateDraft;
+   onChangeSource: (sourceId: PlacePickerSourceId) => void;
+   onChangeFilter: (filterId: PlaceLibraryFilterId) => void;
++  onChangeSearchText: (value: string) => void;
+   onAddLibraryPlace: (place: PlaceLibraryItem) => void;
+   onChangeCreatePlaceDraft: (draft: PlaceCreateDraft) => void;
+   onSaveCreatedPlace: () => void;
+@@ -1812,7 +1898,7 @@ function PlacePickerPanel({
+   const { palette } = useTheme();
+   const activeSource = placePickerSourceOptions.find((source) => source.id === sourceId) ?? placePickerSourceOptions[0];
+   const activeFilter = placeLibraryFilters.find((filter) => filter.id === filterId) ?? placeLibraryFilters[0];
+-  const visibleItems = sourceId === "create_new" ? [] : getPlacePickerItems(sourceId, filterId, userPlaces);
++  const visibleItems = sourceId === "create_new" ? [] : getPlacePickerItems(sourceId, filterId, userPlaces, searchText);
+ 
+   return (
+     <View style={[styles.placePickerPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+@@ -1831,8 +1917,18 @@ function PlacePickerPanel({
+       <PlacePickerSourceTabs activeSourceId={sourceId} onChange={onChangeSource} />
+       {sourceId !== "create_new" ? <PlacePickerFilterTabs activeFilterId={filterId} onChange={onChangeFilter} /> : null}
+ 
++      {sourceId !== "create_new" ? (
++        <TextInput
++          value={searchText}
++          onChangeText={onChangeSearchText}
++          placeholder="Search places, platforms, areas, or categories"
++          placeholderTextColor={palette.muted}
++          style={[styles.placePickerSearchInput, { color: palette.text, borderColor: palette.border, backgroundColor: palette.surface }]}
++        />
++      ) : null}
++
+       <View style={[styles.placePickerActiveNote, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+-        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>{getPlacePickerSourceLabel(sourceId).toUpperCase()} · {getPlacePickerFilterLabel(filterId).toUpperCase()}</Text>
++        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>{getPlacePickerSourceLabel(sourceId).toUpperCase()} · {sourceId === "create_new" ? "SAVE TO MY PLACES" : getPlacePickerFilterLabel(filterId).toUpperCase()}</Text>
+         <Text style={[styles.nextStepMeta, { color: palette.muted }]}>{activeSource.helper}{sourceId !== "create_new" ? ` ${activeFilter.helper}` : ""}</Text>
+       </View>
+ 
+@@ -1844,9 +1940,17 @@ function PlacePickerPanel({
+         />
+       ) : (
+         <View style={styles.placeLibraryList}>
+-          {visibleItems.map((place) => (
+-            <PlaceLibraryPickerCard key={place.id} place={place} onAdd={() => onAddLibraryPlace(place)} />
+-          ))}
++          {visibleItems.length === 0 ? (
++            <View style={[styles.placePickerEmptyCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++              <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>No places found</Text>
++              <Text style={[styles.placeLibraryDescription, { color: palette.muted }]}>Try another search, switch source, or create a reusable place for this plan.</Text>
++            </View>
++          ) : visibleItems.map((place) => {
++            const added = selectedLibraryPlaceIds.includes(place.id);
++            return (
++              <PlaceLibraryPickerCard key={place.id} place={place} added={added} onAdd={() => onAddLibraryPlace(place)} />
++            );
++          })}
+         </View>
+       )}
+     </View>
+@@ -1856,15 +1960,23 @@ function PlacePickerPanel({
+ function DraftPlaceEditor({
+   place,
+   canRemove,
++  canMoveUp,
++  canMoveDown,
+   compact,
+   onChange,
+   onRemove,
++  onMoveUp,
++  onMoveDown,
+ }: {
+   place: PlanPlacePreview;
+   canRemove: boolean;
++  canMoveUp?: boolean;
++  canMoveDown?: boolean;
+   compact?: boolean;
+   onChange: (place: PlanPlacePreview) => void;
+   onRemove: () => void;
++  onMoveUp?: () => void;
++  onMoveDown?: () => void;
+ }) {
+   const { palette } = useTheme();
+ 
+@@ -1875,19 +1987,47 @@ function DraftPlaceEditor({
+           <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PLACE {place.order} · {place.kind === "online_place" ? "ONLINE" : "LOCAL"}</Text>
+           <Text style={[styles.draftPlaceTitle, { color: palette.text }]}>{place.title || `Place ${place.order}`}</Text>
+         </View>
+-        <Pressable
+-          onPress={canRemove ? onRemove : undefined}
+-          accessibilityRole="button"
+-          accessibilityState={{ disabled: !canRemove }}
+-          style={({ pressed }) => [
+-            styles.removePlaceButton,
+-            { borderColor: palette.border, opacity: canRemove ? 1 : 0.42 },
+-            pressed && canRemove ? styles.pressed : null,
+-            Platform.OS === "web" && canRemove ? ({ cursor: "pointer" } as any) : null,
+-          ]}
+-        >
+-          <Text style={[styles.removePlaceText, { color: palette.text }]}>Remove</Text>
+-        </Pressable>
++        <View style={styles.draftPlaceActionRow}>
++          <Pressable
++            onPress={canMoveUp ? onMoveUp : undefined}
++            accessibilityRole="button"
++            accessibilityState={{ disabled: !canMoveUp }}
++            style={({ pressed }) => [
++              styles.removePlaceButton,
++              { borderColor: palette.border, opacity: canMoveUp ? 1 : 0.42 },
++              pressed && canMoveUp ? styles.pressed : null,
++              Platform.OS === "web" && canMoveUp ? ({ cursor: "pointer" } as any) : null,
++            ]}
++          >
++            <Text style={[styles.removePlaceText, { color: palette.text }]}>Up</Text>
++          </Pressable>
++          <Pressable
++            onPress={canMoveDown ? onMoveDown : undefined}
++            accessibilityRole="button"
++            accessibilityState={{ disabled: !canMoveDown }}
++            style={({ pressed }) => [
++              styles.removePlaceButton,
++              { borderColor: palette.border, opacity: canMoveDown ? 1 : 0.42 },
++              pressed && canMoveDown ? styles.pressed : null,
++              Platform.OS === "web" && canMoveDown ? ({ cursor: "pointer" } as any) : null,
++            ]}
++          >
++            <Text style={[styles.removePlaceText, { color: palette.text }]}>Down</Text>
++          </Pressable>
++          <Pressable
++            onPress={canRemove ? onRemove : undefined}
++            accessibilityRole="button"
++            accessibilityState={{ disabled: !canRemove }}
++            style={({ pressed }) => [
++              styles.removePlaceButton,
++              { borderColor: palette.border, opacity: canRemove ? 1 : 0.42 },
++              pressed && canRemove ? styles.pressed : null,
++              Platform.OS === "web" && canRemove ? ({ cursor: "pointer" } as any) : null,
++            ]}
++          >
++            <Text style={[styles.removePlaceText, { color: palette.text }]}>Remove</Text>
++          </Pressable>
++        </View>
+       </View>
+ 
+       {compact ? (
+@@ -1960,8 +2100,11 @@ function PlanCreateFlow({
+   const activeStep = planCreateSteps[stepIndex] ?? planCreateSteps[0];
+   const canGoBack = stepIndex > 0;
+   const canGoNext = stepIndex < planCreateSteps.length - 1;
++  const currentStepIsValid = getPlanCreateStepValidity(draft, activeStep.id);
++  const selectedLibraryPlaceIds = draft.places.map((place) => place.libraryPlaceId).filter((id): id is string => Boolean(id));
+   const [placePickerSourceId, setPlacePickerSourceId] = useState<PlacePickerSourceId>("my_place");
+   const [placePickerFilterId, setPlacePickerFilterId] = useState<PlaceLibraryFilterId>("all");
++  const [placePickerSearchText, setPlacePickerSearchText] = useState("");
+   const [placeCreateDraft, setPlaceCreateDraft] = useState<PlaceCreateDraft>(() => createInitialPlaceDraft(draft.mode));
+ 
+   const updatePlace = (placeId: string, nextPlace: PlanPlacePreview) => {
+@@ -1978,14 +2121,18 @@ function PlanCreateFlow({
+     });
+   };
+ 
+-  const addPlace = () => {
++  const movePlace = (placeId: string, direction: -1 | 1) => {
+     onChangeDraft({
+       ...draft,
+-      places: [...draft.places, createDraftPlace(draft.mode, draft.places.length)],
++      places: movePlanPlace(draft.places, placeId, direction),
+     });
+   };
+ 
+   const addLibraryPlace = (place: PlaceLibraryItem) => {
++    if (selectedLibraryPlaceIds.includes(place.id)) {
++      return;
++    }
++
+     onChangeDraft({
+       ...draft,
+       places: [...draft.places, createDraftPlaceFromLibraryItem(place, draft.places.length)],
+@@ -2003,6 +2150,7 @@ function PlanCreateFlow({
+     setPlaceCreateDraft(createInitialPlaceDraft(draft.mode));
+     setPlacePickerSourceId("my_place");
+     setPlacePickerFilterId("all");
++    setPlacePickerSearchText("");
+   };
+ 
+   const changeMode = (mode: PlanMode) => {
+@@ -2038,9 +2186,9 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB9 · CREATE FLOW</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB10 · CREATE PLAN WIZARD</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+-          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. Choose reusable places from My places, Starter places, or create a new offline/online place before arranging the plan route.</Text>
++          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard now separates basics, mode, reusable place selection, route arrangement, and deck preview.</Text>
+         </View>
+         <CreateStepIndicator activeStepId={activeStep.id} onSelect={(stepId) => onChangeStepIndex(planCreateSteps.findIndex((step) => step.id === stepId))} />
+       </View>
+@@ -2054,23 +2202,23 @@ function PlanCreateFlow({
+           <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>{activeStep.helper}</Text>
+         </View>
+ 
+-        {activeStep.id === "goal" ? (
++        {activeStep.id === "basics" ? (
+           <View style={styles.draftFieldGrid}>
+             <DraftTextField label="Plan title" value={draft.title} onChangeText={(title) => onChangeDraft({ ...draft, title })} />
+             <DraftTextField label="Category" value={draft.category} onChangeText={(category) => onChangeDraft({ ...draft, category })} />
+             <DraftTextField label="Start label" value={draft.startLabel} onChangeText={(startLabel) => onChangeDraft({ ...draft, startLabel })} />
+             <DraftTextField label="Capacity label" value={draft.capacityLabel} onChangeText={(capacityLabel) => onChangeDraft({ ...draft, capacityLabel })} />
+             <View style={styles.fullWidthField}>
+-              <DraftTextField label="Summary" value={draft.summary} onChangeText={(summary) => onChangeDraft({ ...draft, summary })} multiline />
++              <DraftTextField label="Short plan summary" value={draft.summary} onChangeText={(summary) => onChangeDraft({ ...draft, summary })} multiline />
+             </View>
+           </View>
+         ) : null}
+ 
+         {activeStep.id === "mode" ? (
+           <View style={styles.modeChoiceGrid}>
+-            <PlanModeChoice mode="local" selected={draft.mode === "local"} title="Local places" helper="Cafes, parks, museums, coworking spots, walks, or real addresses." onPress={() => changeMode("local")} />
+-            <PlanModeChoice mode="online" selected={draft.mode === "online"} title="Online platforms" helper="Discord, WhatsApp, Figma, Google Meet, Zoom, or other online stops." onPress={() => changeMode("online")} />
+-            <PlanModeChoice mode="mixed" selected={draft.mode === "mixed"} title="Mixed plan" helper="Start online or offline, then continue with another ordered stop." onPress={() => changeMode("mixed")} />
++            <PlanModeChoice mode="local" selected={draft.mode === "local"} title="Offline places" helper="Cafes, parks, museums, coworking spots, walks, or real addresses." onPress={() => changeMode("local")} />
++            <PlanModeChoice mode="online" selected={draft.mode === "online"} title="Online places" helper="Discord, WhatsApp, Figma, Google Meet, Zoom, or other online stops." onPress={() => changeMode("online")} />
++            <PlanModeChoice mode="mixed" selected={draft.mode === "mixed"} title="Mixed plan" helper="Start offline or online, then continue with another ordered stop." onPress={() => changeMode("mixed")} />
+           </View>
+         ) : null}
+ 
+@@ -2080,36 +2228,48 @@ function PlanCreateFlow({
+               mode={draft.mode}
+               sourceId={placePickerSourceId}
+               filterId={placePickerFilterId}
++              searchText={placePickerSearchText}
+               selectedCount={draft.places.length}
++              selectedLibraryPlaceIds={selectedLibraryPlaceIds}
+               userPlaces={userPlaces}
+               createPlaceDraft={placeCreateDraft}
+-              onChangeSource={setPlacePickerSourceId}
++              onChangeSource={(sourceId) => {
++                setPlacePickerSourceId(sourceId);
++                setPlacePickerSearchText("");
++              }}
+               onChangeFilter={setPlacePickerFilterId}
++              onChangeSearchText={setPlacePickerSearchText}
+               onAddLibraryPlace={addLibraryPlace}
+               onChangeCreatePlaceDraft={setPlaceCreateDraft}
+               onSaveCreatedPlace={saveCreatedPlace}
+             />
++            <SelectedPlanPlacesSummary places={draft.places} />
++          </View>
++        ) : null}
+ 
++        {activeStep.id === "arrange" ? (
++          <View style={styles.draftPlacesStack}>
+             <View style={styles.draftPlacesHeaderRow}>
+               <View style={styles.heroTextBlock}>
+-                <Text style={[styles.cardEyebrow, { color: palette.muted }]}>SELECTED ROUTE</Text>
+-                <Text style={[styles.draftPlaceTitle, { color: palette.text }]}>Arrange selected places</Text>
+-                <Text style={[styles.detailHelpText, { color: palette.muted }]}>Places chosen above become ordered stops. Edit titles, addresses/platforms, times, and notes here.</Text>
++                <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ARRANGE ROUTE</Text>
++                <Text style={[styles.draftPlaceTitle, { color: palette.text }]}>Order places, times, images, and notes</Text>
++                <Text style={[styles.detailHelpText, { color: palette.muted }]}>This is where the Plan becomes an ordered activity. Use Up / Down to change the sequence, then polish each stop.</Text>
+               </View>
+               <PlanModeBadge label={`${draft.places.length} stops`} />
+             </View>
+ 
+-            {draft.places.map((place) => (
+-              <DraftPlaceEditor key={place.id} place={place} canRemove={draft.places.length > 1} onChange={(nextPlace) => updatePlace(place.id, nextPlace)} onRemove={() => removePlace(place.id)} />
+-            ))}
+-          </View>
+-        ) : null}
+-
+-        {activeStep.id === "media" ? (
+-          <View style={styles.draftPlacesStack}>
+-            <Text style={[styles.detailHelpText, { color: palette.muted }]}>For the lab, images are represented by labels. Later this can become real user-uploaded place images.</Text>
+-            {draft.places.map((place) => (
+-              <DraftPlaceEditor key={place.id} compact place={place} canRemove={false} onChange={(nextPlace) => updatePlace(place.id, nextPlace)} onRemove={() => undefined} />
++            {draft.places.map((place, index) => (
++              <DraftPlaceEditor
++                key={place.id}
++                place={place}
++                canRemove={draft.places.length > 1}
++                canMoveUp={index > 0}
++                canMoveDown={index < draft.places.length - 1}
++                onChange={(nextPlace) => updatePlace(place.id, nextPlace)}
++                onRemove={() => removePlace(place.id)}
++                onMoveUp={() => movePlace(place.id, -1)}
++                onMoveDown={() => movePlace(place.id, 1)}
++              />
+             ))}
+           </View>
+         ) : null}
+@@ -2120,10 +2280,11 @@ function PlanCreateFlow({
+       <View style={[styles.createFooterPanel, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+         <PlanActionButton label={canGoBack ? "Back" : "Cancel"} onPress={canGoBack ? () => onChangeStepIndex(stepIndex - 1) : onBack} />
+         <View style={styles.createFooterRight}>
++          {!currentStepIsValid ? <Text style={[styles.createStepWarning, { color: palette.muted }]}>{getPlanCreateStepWarning(activeStep.id)}</Text> : null}
+           {canGoNext ? (
+-            <PlanActionButton label="Next" primary onPress={() => onChangeStepIndex(stepIndex + 1)} />
++            <PlanActionButton label="Next" primary disabled={!currentStepIsValid} onPress={() => onChangeStepIndex(stepIndex + 1)} />
+           ) : (
+-            <PlanActionButton label="Create mock plan" primary onPress={onCreatePlan} />
++            <PlanActionButton label="Open mock plan" primary disabled={!currentStepIsValid} onPress={onCreatePlan} />
+           )}
+         </View>
+       </View>
+@@ -3936,6 +4097,13 @@ const styles = StyleSheet.create({
+     fontSize: 12,
+     fontWeight: "900",
+   },
++  createStepWarning: {
++    maxWidth: 260,
++    fontSize: 11,
++    lineHeight: 16,
++    fontWeight: "800",
++    textAlign: "right",
++  },
+   createStepPanel: {
+     borderRadius: 24,
+     borderWidth: 1,
+@@ -4072,6 +4240,15 @@ const styles = StyleSheet.create({
+     fontSize: 11,
+     fontWeight: "900",
+   },
++  placePickerSearchInput: {
++    minHeight: 44,
++    borderRadius: 16,
++    borderWidth: 1,
++    paddingHorizontal: 12,
++    paddingVertical: 10,
++    fontSize: 14,
++    fontWeight: "800",
++  },
+   placePickerActiveNote: {
+     borderRadius: 18,
+     borderWidth: 1,
+@@ -4080,6 +4257,12 @@ const styles = StyleSheet.create({
+   placeLibraryList: {
+     gap: 10,
+   },
++  placePickerEmptyCard: {
++    borderRadius: 18,
++    borderWidth: 1,
++    padding: 14,
++    gap: 6,
++  },
+   placeLibraryCard: {
+     borderRadius: 20,
+     borderWidth: 1,
+@@ -4150,6 +4333,41 @@ const styles = StyleSheet.create({
+   createPlaceFormFooter: {
+     gap: 10,
+   },
++  selectedPlacesCard: {
++    borderRadius: 22,
++    borderWidth: 1,
++    padding: 14,
++    gap: 12,
++  },
++  selectedPlaceList: {
++    gap: 8,
++  },
++  selectedPlaceRow: {
++    borderRadius: 16,
++    borderWidth: 1,
++    padding: 10,
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 10,
++  },
++  selectedPlaceOrder: {
++    width: 32,
++    height: 32,
++    borderRadius: 999,
++    borderWidth: 1,
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  selectedPlaceTitle: {
++    fontSize: 14,
++    fontWeight: "900",
++  },
++  selectedPlaceMeta: {
++    marginTop: 3,
++    fontSize: 11,
++    lineHeight: 15,
++    fontWeight: "800",
++  },
+   draftPlacesHeaderRow: {
+     marginTop: 2,
+     flexDirection: "row",
+@@ -4181,6 +4399,12 @@ const styles = StyleSheet.create({
+     fontWeight: "900",
+     letterSpacing: -0.2,
+   },
++  draftPlaceActionRow: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    justifyContent: "flex-end",
++    gap: 6,
++  },
+   removePlaceButton: {
+     minHeight: 34,
+     borderRadius: 999,
+@@ -4209,6 +4433,8 @@ const styles = StyleSheet.create({
+   },
+   createFooterRight: {
+     flexDirection: "row",
++    flexWrap: "wrap",
++    alignItems: "center",
+     justifyContent: "flex-end",
+     gap: 8,
+   },

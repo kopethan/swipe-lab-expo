@@ -1,0 +1,407 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index 6765c11..c1fd600 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -495,6 +495,54 @@ function getPlanCreateStepWarning(stepId: PlanCreateStepId) {
+   return "Complete this step before continuing.";
+ }
+ 
++function getPlanCreateStepPolishCopy(stepId: PlanCreateStepId) {
++  if (stepId === "basics") {
++    return "Name the plan like a small activity people can understand quickly in the feed.";
++  }
++
++  if (stepId === "mode") {
++    return "Choose the plan world first: offline places, online platforms, or a mixed route.";
++  }
++
++  if (stepId === "places") {
++    return "Pick reusable places from your library, starter templates, or create a new place on the spot.";
++  }
++
++  if (stepId === "arrange") {
++    return "Put places in the right order, then polish the time, note, and visual label for each stop.";
++  }
++
++  return "Review the clean summary card and the visual place cards before opening the mock plan.";
++}
++
++function getPlanCreatePrimaryLabel(stepId: PlanCreateStepId) {
++  if (stepId === "arrange") {
++    return "Review deck";
++  }
++
++  if (stepId === "preview") {
++    return "Open mock plan";
++  }
++
++  return "Continue";
++}
++
++function getCanOpenCreateStep(draft: PlanCreateDraft, targetStepId: PlanCreateStepId) {
++  if (targetStepId === "basics" || targetStepId === "mode") {
++    return true;
++  }
++
++  if (targetStepId === "places") {
++    return getPlanCreateStepValidity(draft, "basics");
++  }
++
++  return getPlanCreateStepValidity(draft, "basics") && getPlanCreateStepValidity(draft, "places");
++}
++
++function getPlanCreateProgressPercent(stepIndex: number) {
++  return `${Math.round(((stepIndex + 1) / planCreateSteps.length) * 100)}%`;
++}
++
+ function movePlanPlace(places: PlanPlacePreview[], placeId: string, direction: -1 | 1) {
+   const currentIndex = places.findIndex((place) => place.id === placeId);
+   const targetIndex = currentIndex + direction;
+@@ -533,7 +581,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB15</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB16</Text>
+         </View>
+ 
+         <Pressable
+@@ -547,7 +595,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>PLACE MEDIA FALLBACK POLISH</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>CREATE PLAN WIZARD POLISH</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -1555,7 +1603,7 @@ function PlanDetailPage({
+         <View style={styles.heroTextBlock}>
+           <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LAB RULES</Text>
+           <Text style={[styles.detailActionTitle, { color: palette.text }]}>Independent open-plan prototype.</Text>
+-          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB15 keeps Plans independent while polishing offline map-style and online platform-style fallback media for place cards.</Text>
++          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB16 keeps Plans independent while polishing the Create Plan wizard flow, progress, validation, and footer controls.</Text>
+         </View>
+       </View>
+     </View>
+@@ -1639,34 +1687,92 @@ function DraftTextField({
+   );
+ }
+ 
+-function CreateStepIndicator({ activeStepId, onSelect }: { activeStepId: PlanCreateStepId; onSelect: (stepId: PlanCreateStepId) => void }) {
++function CreateStepIndicator({
++  activeStepIndex,
++  draft,
++  onSelect,
++}: {
++  activeStepIndex: number;
++  draft: PlanCreateDraft;
++  onSelect: (stepId: PlanCreateStepId) => void;
++}) {
+   const { palette } = useTheme();
++  const activeStepId = planCreateSteps[activeStepIndex]?.id ?? planCreateSteps[0].id;
+ 
+   return (
+-    <View style={styles.createStepRow}>
+-      {planCreateSteps.map((step, index) => {
+-        const isActive = activeStepId === step.id;
+-        return (
+-          <Pressable
+-            key={step.id}
+-            onPress={() => onSelect(step.id)}
+-            accessibilityRole="button"
+-            accessibilityState={{ selected: isActive }}
+-            style={({ pressed }) => [
+-              styles.createStepChip,
+-              {
+-                borderColor: palette.border,
+-                backgroundColor: isActive ? palette.text : palette.surfaceAlt,
+-              },
+-              pressed ? styles.pressed : null,
+-              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+-            ]}
+-          >
+-            <Text style={[styles.createStepNumber, { color: isActive ? palette.background : palette.muted }]}>{index + 1}</Text>
+-            <Text style={[styles.createStepLabel, { color: isActive ? palette.background : palette.text }]}>{step.label}</Text>
+-          </Pressable>
+-        );
+-      })}
++    <View style={styles.createStepStack}>
++      <View style={[styles.createProgressTrack, { backgroundColor: palette.surfaceAlt }]}>
++        <View style={[styles.createProgressFill, { width: getPlanCreateProgressPercent(activeStepIndex), backgroundColor: palette.text }]} />
++      </View>
++      <View style={styles.createStepRow}>
++        {planCreateSteps.map((step, index) => {
++          const isActive = activeStepId === step.id;
++          const isDone = index < activeStepIndex && getPlanCreateStepValidity(draft, step.id);
++          const canOpen = getCanOpenCreateStep(draft, step.id);
++          return (
++            <Pressable
++              key={step.id}
++              onPress={canOpen ? () => onSelect(step.id) : undefined}
++              accessibilityRole="button"
++              accessibilityState={{ selected: isActive, disabled: !canOpen }}
++              disabled={!canOpen}
++              style={({ pressed }) => [
++                styles.createStepChip,
++                {
++                  borderColor: isActive ? palette.text : palette.border,
++                  backgroundColor: isActive ? palette.text : palette.surfaceAlt,
++                  opacity: canOpen ? 1 : 0.46,
++                },
++                pressed && canOpen ? styles.pressed : null,
++                Platform.OS === "web" && canOpen ? ({ cursor: "pointer" } as any) : null,
++              ]}
++            >
++              <Text style={[styles.createStepNumber, { color: isActive ? palette.background : palette.muted }]}>{isDone ? "✓" : index + 1}</Text>
++              <Text style={[styles.createStepLabel, { color: isActive ? palette.background : palette.text }]}>{step.label}</Text>
++            </Pressable>
++          );
++        })}
++      </View>
++    </View>
++  );
++}
++
++function CreateWizardStepNote({
++  activeStep,
++  stepIndex,
++  valid,
++  placeCount,
++}: {
++  activeStep: (typeof planCreateSteps)[number];
++  stepIndex: number;
++  valid: boolean;
++  placeCount: number;
++}) {
++  const { palette } = useTheme();
++  const nextStep = planCreateSteps[stepIndex + 1];
++
++  return (
++    <View style={[styles.createWizardNoteCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++      <View style={styles.createWizardNoteTopRow}>
++        <View style={styles.heroTextBlock}>
++          <Text style={[styles.nextStepLabel, { color: palette.muted }]}>WIZARD CHECKPOINT</Text>
++          <Text style={[styles.createWizardNoteTitle, { color: palette.text }]}>{activeStep.label}</Text>
++          <Text style={[styles.createWizardNoteCopy, { color: palette.muted }]}>{getPlanCreateStepPolishCopy(activeStep.id)}</Text>
++        </View>
++        <View style={[styles.createWizardStatusPill, { borderColor: palette.border, backgroundColor: valid ? palette.text : palette.surface }]}>
++          <Text style={[styles.createWizardStatusText, { color: valid ? palette.background : palette.muted }]}>{valid ? "READY" : "TODO"}</Text>
++        </View>
++      </View>
++      <View style={styles.createWizardMetaRow}>
++        <Text style={[styles.createWizardMetaText, { color: palette.muted }]}>Step {stepIndex + 1} of {planCreateSteps.length}</Text>
++        <Text style={[styles.createWizardMetaText, { color: palette.muted }]}>{placeCount} selected places</Text>
++        <Text style={[styles.createWizardMetaText, { color: palette.muted }]}>{nextStep ? `Next: ${nextStep.label}` : "Final review"}</Text>
++      </View>
++      {!valid ? (
++        <View style={[styles.createWizardWarningCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++          <Text style={[styles.createWizardWarningText, { color: palette.danger }]}>{getPlanCreateStepWarning(activeStep.id)}</Text>
++        </View>
++      ) : null}
+     </View>
+   );
+ }
+@@ -2697,11 +2803,20 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB15 · PLACE MEDIA FALLBACK POLISH</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB16 · CREATE PLAN WIZARD POLISH</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+-          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard preview and detail page now share the same summary and visual place-card language.</Text>
++          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard now has clearer progress, validation, source tabs, and footer actions before the mock plan opens.</Text>
+         </View>
+-        <CreateStepIndicator activeStepId={activeStep.id} onSelect={(stepId) => onChangeStepIndex(planCreateSteps.findIndex((step) => step.id === stepId))} />
++        <CreateStepIndicator
++          activeStepIndex={stepIndex}
++          draft={draft}
++          onSelect={(stepId) => {
++            const nextIndex = planCreateSteps.findIndex((step) => step.id === stepId);
++            if (nextIndex >= 0 && getCanOpenCreateStep(draft, stepId)) {
++              onChangeStepIndex(nextIndex);
++            }
++          }}
++        />
+       </View>
+ 
+       <View style={[styles.createStepPanel, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+@@ -2713,6 +2828,8 @@ function PlanCreateFlow({
+           <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>{activeStep.helper}</Text>
+         </View>
+ 
++        <CreateWizardStepNote activeStep={activeStep} stepIndex={stepIndex} valid={currentStepIsValid} placeCount={draft.places.length} />
++
+         {activeStep.id === "basics" ? (
+           <View style={styles.draftFieldGrid}>
+             <DraftTextField label="Plan title" value={draft.title} onChangeText={(title) => onChangeDraft({ ...draft, title })} />
+@@ -2769,7 +2886,12 @@ function PlanCreateFlow({
+               <PlanModeBadge label={`${draft.places.length} stops`} />
+             </View>
+ 
+-            {draft.places.map((place, index) => (
++            {draft.places.length === 0 ? (
++              <View style={[styles.createWizardEmptyState, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++                <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>No places selected yet</Text>
++                <Text style={[styles.detailHelpText, { color: palette.muted }]}>Go back to Places and add at least one reusable place before arranging the route.</Text>
++              </View>
++            ) : draft.places.map((place, index) => (
+               <DraftPlaceEditor
+                 key={place.id}
+                 place={place}
+@@ -2789,13 +2911,20 @@ function PlanCreateFlow({
+       </View>
+ 
+       <View style={[styles.createFooterPanel, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+-        <PlanActionButton label={canGoBack ? "Back" : "Cancel"} onPress={canGoBack ? () => onChangeStepIndex(stepIndex - 1) : onBack} />
++        <View style={styles.createFooterLeft}>
++          <PlanActionButton label={canGoBack ? "Back" : "Cancel"} onPress={canGoBack ? () => onChangeStepIndex(stepIndex - 1) : onBack} />
++          <Text style={[styles.createFooterStepText, { color: palette.muted }]}>Step {stepIndex + 1}/{planCreateSteps.length} · {activeStep.label}</Text>
++        </View>
+         <View style={styles.createFooterRight}>
+-          {!currentStepIsValid ? <Text style={[styles.createStepWarning, { color: palette.muted }]}>{getPlanCreateStepWarning(activeStep.id)}</Text> : null}
++          {!currentStepIsValid ? (
++            <View style={[styles.createStepWarningPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++              <Text style={[styles.createStepWarning, { color: palette.danger }]}>{getPlanCreateStepWarning(activeStep.id)}</Text>
++            </View>
++          ) : null}
+           {canGoNext ? (
+-            <PlanActionButton label="Next" primary disabled={!currentStepIsValid} onPress={() => onChangeStepIndex(stepIndex + 1)} />
++            <PlanActionButton label={getPlanCreatePrimaryLabel(activeStep.id)} primary disabled={!currentStepIsValid} onPress={() => onChangeStepIndex(stepIndex + 1)} />
+           ) : (
+-            <PlanActionButton label="Open mock plan" primary disabled={!currentStepIsValid} onPress={onCreatePlan} />
++            <PlanActionButton label={getPlanCreatePrimaryLabel(activeStep.id)} primary disabled={!currentStepIsValid} onPress={onCreatePlan} />
+           )}
+         </View>
+       </View>
+@@ -4679,6 +4808,18 @@ const styles = StyleSheet.create({
+     justifyContent: "flex-end",
+     gap: 8,
+   },
++  createStepStack: {
++    gap: 10,
++  },
++  createProgressTrack: {
++    height: 7,
++    borderRadius: 999,
++    overflow: "hidden",
++  },
++  createProgressFill: {
++    height: "100%",
++    borderRadius: 999,
++  },
+   createStepRow: {
+     flexDirection: "row",
+     flexWrap: "wrap",
+@@ -4703,12 +4844,75 @@ const styles = StyleSheet.create({
+     fontWeight: "900",
+   },
+   createStepWarning: {
+-    maxWidth: 260,
++    maxWidth: 280,
+     fontSize: 11,
+     lineHeight: 16,
+-    fontWeight: "800",
++    fontWeight: "900",
+     textAlign: "right",
+   },
++  createStepWarningPill: {
++    borderRadius: 16,
++    borderWidth: 1,
++    paddingHorizontal: 10,
++    paddingVertical: 8,
++  },
++  createWizardNoteCard: {
++    borderRadius: 20,
++    borderWidth: 1,
++    padding: 13,
++    gap: 11,
++  },
++  createWizardNoteTopRow: {
++    flexDirection: "row",
++    alignItems: "flex-start",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  createWizardNoteTitle: {
++    marginTop: 5,
++    fontSize: 17,
++    fontWeight: "900",
++    letterSpacing: -0.2,
++  },
++  createWizardNoteCopy: {
++    marginTop: 5,
++    fontSize: 12,
++    lineHeight: 18,
++    fontWeight: "800",
++  },
++  createWizardStatusPill: {
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 10,
++    paddingVertical: 6,
++  },
++  createWizardStatusText: {
++    fontSize: 10,
++    fontWeight: "900",
++    letterSpacing: 0.5,
++  },
++  createWizardMetaRow: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 8,
++  },
++  createWizardMetaText: {
++    borderRadius: 999,
++    fontSize: 11,
++    lineHeight: 15,
++    fontWeight: "900",
++  },
++  createWizardWarningCard: {
++    borderRadius: 16,
++    borderWidth: 1,
++    paddingHorizontal: 11,
++    paddingVertical: 9,
++  },
++  createWizardWarningText: {
++    fontSize: 12,
++    lineHeight: 17,
++    fontWeight: "900",
++  },
+   createStepPanel: {
+     borderRadius: 24,
+     borderWidth: 1,
+@@ -5094,6 +5298,12 @@ const styles = StyleSheet.create({
+   draftPlacesStack: {
+     gap: 12,
+   },
++  createWizardEmptyState: {
++    borderRadius: 20,
++    borderWidth: 1,
++    padding: 14,
++    gap: 6,
++  },
+   draftPlaceCard: {
+     borderRadius: 22,
+     borderWidth: 1,
+@@ -5514,8 +5724,20 @@ const styles = StyleSheet.create({
+     flexDirection: "row",
+     alignItems: "center",
+     justifyContent: "space-between",
++    flexWrap: "wrap",
+     gap: 12,
+   },
++  createFooterLeft: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    alignItems: "center",
++    gap: 10,
++  },
++  createFooterStepText: {
++    fontSize: 11,
++    lineHeight: 15,
++    fontWeight: "900",
++  },
+   createFooterRight: {
+     flexDirection: "row",
+     flexWrap: "wrap",

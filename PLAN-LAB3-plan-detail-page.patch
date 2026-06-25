@@ -1,0 +1,508 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index fde8704..77832c9 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -86,6 +86,10 @@ function getTabTitle(tabId: NavLabTabId) {
+   return navLabTabs.find((tab) => tab.id === tabId)?.label ?? "Me";
+ }
+ 
++function getPlanModeLabel(plan: PlanPreview) {
++  return plan.mode === "mixed" ? "Mixed" : plan.mode === "online" ? "Online" : "Local";
++}
++
+ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop: boolean }) {
+   const { mode, palette, toggleMode } = useTheme();
+   const insets = useSafeAreaInsets();
+@@ -111,7 +115,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB2</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB3</Text>
+         </View>
+ 
+         <Pressable
+@@ -646,11 +650,20 @@ function MeScreen({ isDesktop }: { isDesktop: boolean }) {
+   );
+ }
+ 
+-function PlanActionButton({ label, primary }: { label: string; primary?: boolean }) {
++function PlanActionButton({
++  label,
++  primary,
++  onPress,
++}: {
++  label: string;
++  primary?: boolean;
++  onPress?: () => void;
++}) {
+   const { palette } = useTheme();
+ 
+   return (
+     <Pressable
++      onPress={onPress}
+       accessibilityRole="button"
+       style={({ pressed }) => [
+         styles.planActionButton,
+@@ -768,13 +781,15 @@ function PlanCard({
+   plan,
+   expanded,
+   onToggle,
++  onOpenDetail,
+ }: {
+   plan: PlanPreview;
+   expanded: boolean;
+   onToggle: () => void;
++  onOpenDetail: () => void;
+ }) {
+   const { palette } = useTheme();
+-  const modeLabel = plan.mode === "mixed" ? "Mixed" : plan.mode === "online" ? "Online" : "Local";
++  const modeLabel = getPlanModeLabel(plan);
+   const compactMeta = `${plan.startLabel} · ${plan.places.length} places · ${plan.joinedCount} joined`;
+ 
+   return (
+@@ -843,7 +858,7 @@ function PlanCard({
+ 
+       {expanded ? (
+         <View style={styles.planActions}>
+-          <PlanActionButton label="View plan" primary />
++          <PlanActionButton label="View plan" primary onPress={onOpenDetail} />
+           <PlanActionButton label={plan.joinLabel} />
+           <PlanActionButton label="Create similar" />
+         </View>
+@@ -852,9 +867,145 @@ function PlanCard({
+   );
+ }
+ 
++function PlanParticipantChips({ plan }: { plan: PlanPreview }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={styles.detailParticipantRow}>
++      {plan.joinedPreview.map((name) => (
++        <View key={name} style={[styles.participantChip, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++          <Text style={[styles.participantChipText, { color: palette.text }]}>{name}</Text>
++        </View>
++      ))}
++    </View>
++  );
++}
++
++function PlanDetailPlaceTimeline({ places }: { places: PlanPlacePreview[] }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={styles.detailTimeline}>
++      {places.map((place, index) => (
++        <View key={place.id} style={styles.detailTimelineRow}>
++          <View style={styles.detailTimelineRail}>
++            <View style={[styles.detailPlaceMarker, { borderColor: palette.border, backgroundColor: palette.deckSurface1 }]}>
++              <Text style={[styles.detailPlaceMarkerText, { color: palette.text }]}>{place.order}</Text>
++            </View>
++            {index < places.length - 1 ? <View style={[styles.detailPlaceConnector, { backgroundColor: palette.border }]} /> : null}
++          </View>
++          <View style={[styles.detailPlaceCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++            <View style={styles.detailPlaceHeaderRow}>
++              <View style={styles.planPlaceTextBlock}>
++                <Text style={[styles.detailPlaceTitle, { color: palette.text }]}>{place.title}</Text>
++                <Text style={[styles.detailPlaceMeta, { color: palette.muted }]}>
++                  {place.kind === "online_place" ? "Online platform" : "Local place"} · {place.addressOrPlatform}
++                </Text>
++              </View>
++              <Text style={[styles.detailPlaceTime, { color: palette.text }]}>{place.timeLabel}</Text>
++            </View>
++            <View style={[styles.detailPlaceImagePreview, { borderColor: palette.border, backgroundColor: palette.deckSurface2 }]}>
++              <Text style={[styles.detailPlaceImageText, { color: palette.text }]}>{place.imageLabel}</Text>
++            </View>
++            <Text style={[styles.detailPlaceNote, { color: palette.muted }]}>{place.note}</Text>
++          </View>
++        </View>
++      ))}
++    </View>
++  );
++}
++
++function PlanDetailPage({ plan, onBack }: { plan: PlanPreview; onBack: () => void }) {
++  const { palette } = useTheme();
++  const modeLabel = getPlanModeLabel(plan);
++
++  return (
++    <View style={styles.tabContent}>
++      <View style={[styles.detailHeaderPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++        <View style={styles.detailTopBar}>
++          <Pressable
++            onPress={onBack}
++            accessibilityRole="button"
++            style={({ pressed }) => [
++              styles.detailBackButton,
++              { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
++              pressed ? styles.pressed : null,
++              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
++            ]}
++          >
++            <Text style={[styles.detailBackText, { color: palette.text }]}>‹ Plans</Text>
++          </Pressable>
++          <View style={styles.detailStatusRow}>
++            <PlanModeBadge label={modeLabel} />
++            <PlanModeBadge label={plan.status} />
++          </View>
++        </View>
++
++        <View style={styles.detailHeroLayout}>
++          <View style={styles.detailHeroTextBlock}>
++            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN DETAIL · INDEPENDENT ACTIVITY</Text>
++            <Text style={[styles.detailTitle, { color: palette.text }]}>{plan.title}</Text>
++            <Text style={[styles.detailSummary, { color: palette.muted }]}>{plan.summary}</Text>
++            <Text style={[styles.detailMetaLine, { color: palette.muted }]}>
++              Opened by {plan.ownerName} · {plan.startLabel} · {plan.capacityLabel}
++            </Text>
++          </View>
++          <View style={styles.detailHeroMediaBlock}>
++            <PlanDeckImageStrip places={plan.places} modeLabel={modeLabel} />
++          </View>
++        </View>
++      </View>
++
++      <View style={styles.planStatsRow}>
++        <PlanMiniStat label="places" value={plan.places.length} />
++        <PlanMiniStat label="joined" value={plan.joinedCount} />
++        <PlanMiniStat label="mode" value={modeLabel} />
++        <PlanMiniStat label="status" value={plan.status} />
++      </View>
++
++      <View style={[styles.detailSectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++        <View style={styles.detailSectionHeader}>
++          <View>
++            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ORDERED PLACES</Text>
++            <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Plan route</Text>
++          </View>
++          <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>{plan.placeSummary}</Text>
++        </View>
++        <PlanDetailPlaceTimeline places={plan.places} />
++      </View>
++
++      <View style={[styles.detailSectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++        <View style={styles.detailSectionHeader}>
++          <View>
++            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PEOPLE</Text>
++            <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Joined freely</Text>
++          </View>
++          <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>{plan.joinedCount} joined</Text>
++        </View>
++        <PlanParticipantChips plan={plan} />
++        <Text style={[styles.detailHelpText, { color: palette.muted }]}>This lab detail keeps Plans separate from Trade, Needs, Offers, and Agenda. Joining is a simple open-plan action for now.</Text>
++      </View>
++
++      <View style={[styles.detailActionPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
++        <View style={styles.heroTextBlock}>
++          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>NEXT LAB STEP</Text>
++          <Text style={[styles.detailActionTitle, { color: palette.text }]}>Join flow will come after the detail page.</Text>
++          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB3 only proves the detail layout, timeline, images, and back navigation.</Text>
++        </View>
++        <View style={styles.planActionsInline}>
++          <PlanActionButton label={plan.joinLabel} primary />
++          <PlanActionButton label="Back to feed" onPress={onBack} />
++        </View>
++      </View>
++    </View>
++  );
++}
++
+ function PlansScreen() {
+   const { palette } = useTheme();
+   const [expandedPlanIds, setExpandedPlanIds] = useState<string[]>([planPreviews[0]?.id ?? ""]);
++  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
++  const selectedPlan = planPreviews.find((plan) => plan.id === selectedPlanId) ?? null;
+ 
+   const togglePlan = (planId: string) => {
+     setExpandedPlanIds((current) =>
+@@ -862,6 +1013,10 @@ function PlansScreen() {
+     );
+   };
+ 
++  if (selectedPlan) {
++    return <PlanDetailPage plan={selectedPlan} onBack={() => setSelectedPlanId(null)} />;
++  }
++
+   return (
+     <View style={styles.tabContent}>
+       <View style={[styles.heroPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+@@ -871,7 +1026,7 @@ function PlansScreen() {
+             <Text style={[styles.heroTitle, { color: palette.text }]}>Plans are open activities.</Text>
+             <Text style={[styles.heroCopy, { color: palette.muted }]}>
+               A plan is separate from trades: choose local places or online platform places, order them,
+-              publish the plan, and show each plan as a visual deck card people can join freely.
++              publish the plan, open a detail page, and let people join freely.
+             </Text>
+           </View>
+           <Pressable
+@@ -888,7 +1043,7 @@ function PlansScreen() {
+         </View>
+       </View>
+ 
+-      <SectionHeader label="MOCK PLAN FEED" title="Plan deck cards reuse the Trade card rhythm" />
++      <SectionHeader label="MOCK PLAN FEED" title="Open a deck card to view the Plan detail page" />
+       <View style={styles.cardStack}>
+         {planPreviews.map((plan) => (
+           <PlanCard
+@@ -896,6 +1051,7 @@ function PlansScreen() {
+             plan={plan}
+             expanded={expandedPlanIds.includes(plan.id)}
+             onToggle={() => togglePlan(plan.id)}
++            onOpenDetail={() => setSelectedPlanId(plan.id)}
+           />
+         ))}
+       </View>
+@@ -2011,6 +2167,212 @@ const styles = StyleSheet.create({
+     fontSize: 12,
+     fontWeight: "900",
+   },
++  detailHeaderPanel: {
++    borderRadius: 28,
++    borderWidth: 1,
++    padding: 16,
++    gap: 18,
++  },
++  detailTopBar: {
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  detailBackButton: {
++    minHeight: 38,
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 13,
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  detailBackText: {
++    fontSize: 13,
++    fontWeight: "900",
++  },
++  detailStatusRow: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    justifyContent: "flex-end",
++    gap: 8,
++  },
++  detailHeroLayout: {
++    flexDirection: "row",
++    alignItems: "stretch",
++    gap: 18,
++    flexWrap: "wrap",
++  },
++  detailHeroTextBlock: {
++    flex: 1,
++    minWidth: 260,
++    justifyContent: "center",
++  },
++  detailHeroMediaBlock: {
++    flex: 1,
++    minWidth: 280,
++  },
++  detailTitle: {
++    marginTop: 9,
++    fontSize: 34,
++    lineHeight: 39,
++    fontWeight: "900",
++    letterSpacing: -1,
++  },
++  detailSummary: {
++    marginTop: 10,
++    fontSize: 15,
++    lineHeight: 22,
++    fontWeight: "700",
++  },
++  detailMetaLine: {
++    marginTop: 12,
++    fontSize: 13,
++    lineHeight: 18,
++    fontWeight: "800",
++  },
++  detailSectionCard: {
++    borderRadius: 24,
++    borderWidth: 1,
++    padding: 16,
++    gap: 16,
++  },
++  detailSectionHeader: {
++    flexDirection: "row",
++    alignItems: "flex-start",
++    justifyContent: "space-between",
++    gap: 14,
++  },
++  detailSectionTitle: {
++    marginTop: 4,
++    fontSize: 21,
++    fontWeight: "900",
++    letterSpacing: -0.3,
++  },
++  detailSectionMeta: {
++    maxWidth: 280,
++    textAlign: "right",
++    fontSize: 12,
++    lineHeight: 17,
++    fontWeight: "800",
++  },
++  detailTimeline: {
++    gap: 0,
++  },
++  detailTimelineRow: {
++    flexDirection: "row",
++    alignItems: "stretch",
++    gap: 12,
++  },
++  detailTimelineRail: {
++    width: 38,
++    alignItems: "center",
++  },
++  detailPlaceMarker: {
++    width: 34,
++    height: 34,
++    borderRadius: 17,
++    borderWidth: 1,
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  detailPlaceMarkerText: {
++    fontSize: 13,
++    fontWeight: "900",
++  },
++  detailPlaceConnector: {
++    flex: 1,
++    width: StyleSheet.hairlineWidth,
++    minHeight: 20,
++  },
++  detailPlaceCard: {
++    flex: 1,
++    marginBottom: 12,
++    borderRadius: 20,
++    borderWidth: 1,
++    padding: 13,
++    gap: 10,
++  },
++  detailPlaceHeaderRow: {
++    flexDirection: "row",
++    alignItems: "flex-start",
++    justifyContent: "space-between",
++    gap: 10,
++  },
++  detailPlaceTitle: {
++    fontSize: 16,
++    fontWeight: "900",
++    letterSpacing: -0.2,
++  },
++  detailPlaceMeta: {
++    marginTop: 3,
++    fontSize: 12,
++    lineHeight: 17,
++    fontWeight: "800",
++  },
++  detailPlaceTime: {
++    fontSize: 13,
++    fontWeight: "900",
++  },
++  detailPlaceImagePreview: {
++    minHeight: 76,
++    borderRadius: 18,
++    borderWidth: 1,
++    padding: 12,
++    justifyContent: "flex-end",
++  },
++  detailPlaceImageText: {
++    fontSize: 15,
++    fontWeight: "900",
++  },
++  detailPlaceNote: {
++    fontSize: 13,
++    lineHeight: 19,
++    fontWeight: "700",
++  },
++  detailParticipantRow: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 8,
++  },
++  participantChip: {
++    borderRadius: 999,
++    borderWidth: 1,
++    paddingHorizontal: 11,
++    paddingVertical: 7,
++  },
++  participantChipText: {
++    fontSize: 12,
++    fontWeight: "900",
++  },
++  detailHelpText: {
++    fontSize: 13,
++    lineHeight: 19,
++    fontWeight: "700",
++  },
++  detailActionPanel: {
++    borderRadius: 24,
++    borderWidth: 1,
++    padding: 16,
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    flexWrap: "wrap",
++    gap: 14,
++  },
++  detailActionTitle: {
++    marginTop: 5,
++    fontSize: 18,
++    lineHeight: 23,
++    fontWeight: "900",
++    letterSpacing: -0.2,
++  },
++  planActionsInline: {
++    flexDirection: "row",
++    flexWrap: "wrap",
++    justifyContent: "flex-end",
++    gap: 8,
++  },
+   cardFooter: {
+     marginTop: 16,
+     paddingTop: 12,
+diff --git a/features/nav-lab/navLab.mockData.ts b/features/nav-lab/navLab.mockData.ts
+index 450c0fc..05e54b3 100644
+--- a/features/nav-lab/navLab.mockData.ts
++++ b/features/nav-lab/navLab.mockData.ts
+@@ -77,6 +77,7 @@ export const planPreviews: PlanPreview[] = [
+     startLabel: "Sat 15:00",
+     placeSummary: "Republique → Canal → Coworking cafe",
+     joinedCount: 4,
++    joinedPreview: ["Mina", "Leo", "Nora", "Yanis"],
+     capacityLabel: "Open spots",
+     joinLabel: "Join plan",
+     places: [
+@@ -123,6 +124,7 @@ export const planPreviews: PlanPreview[] = [
+     startLabel: "Tonight 20:30",
+     placeSummary: "Discord → Figma → Google Meet",
+     joinedCount: 6,
++    joinedPreview: ["Alex", "Maya", "Sam", "Ines", "+2"],
+     capacityLabel: "Open online",
+     joinLabel: "Join online",
+     places: [
+@@ -169,6 +171,7 @@ export const planPreviews: PlanPreview[] = [
+     startLabel: "Sun 11:00",
+     placeSummary: "WhatsApp → Luxembourg Gardens",
+     joinedCount: 0,
++    joinedPreview: ["Sara"],
+     capacityLabel: "Draft",
+     joinLabel: "Preview plan",
+     places: [
+diff --git a/features/nav-lab/navLab.types.ts b/features/nav-lab/navLab.types.ts
+index 65638dc..eea2153 100644
+--- a/features/nav-lab/navLab.types.ts
++++ b/features/nav-lab/navLab.types.ts
+@@ -52,6 +52,7 @@ export type PlanPreview = {
+   placeSummary: string;
+   places: PlanPlacePreview[];
+   joinedCount: number;
++  joinedPreview: string[];
+   capacityLabel: string;
+   joinLabel: string;
+ };

@@ -1,0 +1,195 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index 19899a8..26f4564 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -504,7 +504,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB12</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB13</Text>
+         </View>
+ 
+         <Pressable
+@@ -1359,30 +1359,25 @@ function PlanDetailPlaceTimeline({ places }: { places: PlanPlacePreview[] }) {
+   const { palette } = useTheme();
+ 
+   return (
+-    <View style={styles.detailTimeline}>
++    <View style={styles.detailVisualPlaceStack}>
+       {places.map((place, index) => (
+-        <View key={place.id} style={styles.detailTimelineRow}>
+-          <View style={styles.detailTimelineRail}>
+-            <View style={[styles.detailPlaceMarker, { borderColor: palette.border, backgroundColor: palette.deckSurface1 }]}>
++        <View key={place.id} style={styles.detailVisualPlaceItem}>
++          <View style={styles.detailVisualPlaceHeader}>
++            <View style={[styles.detailPlaceNumberPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+               <Text style={[styles.detailPlaceMarkerText, { color: palette.text }]}>{place.order}</Text>
+             </View>
+-            {index < places.length - 1 ? <View style={[styles.detailPlaceConnector, { backgroundColor: palette.border }]} /> : null}
+-          </View>
+-          <View style={[styles.detailPlaceCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+-            <View style={styles.detailPlaceHeaderRow}>
+-              <View style={styles.planPlaceTextBlock}>
+-                <Text style={[styles.detailPlaceTitle, { color: palette.text }]}>{place.title}</Text>
+-                <Text style={[styles.detailPlaceMeta, { color: palette.muted }]}>
+-                  {place.kind === "online_place" ? "Online platform" : "Local place"} · {place.addressOrPlatform}
+-                </Text>
+-              </View>
+-              <Text style={[styles.detailPlaceTime, { color: palette.text }]}>{place.timeLabel}</Text>
+-            </View>
+-            <View style={[styles.detailPlaceImagePreview, { borderColor: palette.border, backgroundColor: palette.deckSurface2 }]}>
+-              <Text style={[styles.detailPlaceImageText, { color: palette.text }]}>{place.imageLabel}</Text>
++            <View style={styles.planPlaceTextBlock}>
++              <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ROUTE STOP {place.order}</Text>
++              <Text style={[styles.detailPlaceTitle, { color: palette.text }]}>{place.title}</Text>
++              <Text style={[styles.detailPlaceMeta, { color: palette.muted }]}>
++                {place.timeLabel} · {place.kind === "online_place" ? "Online platform" : "Local place"} · {place.addressOrPlatform}
++              </Text>
+             </View>
+-            <Text style={[styles.detailPlaceNote, { color: palette.muted }]}>{place.note}</Text>
+           </View>
++
++          <PlanDeckPlacePreviewCard place={place} totalPlaces={places.length} />
++
++          {index < places.length - 1 ? <View style={[styles.detailPlaceConnectorLine, { backgroundColor: palette.border }]} /> : null}
+         </View>
+       ))}
+     </View>
+@@ -1428,17 +1423,27 @@ function PlanDetailPage({
+           </View>
+         </View>
+ 
+-        <View style={styles.detailHeroLayout}>
+-          <View style={styles.detailHeroTextBlock}>
+-            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN DETAIL · OPEN ACTIVITY</Text>
+-            <Text style={[styles.detailTitle, { color: palette.text }]}>{plan.title}</Text>
+-            <Text style={[styles.detailSummary, { color: palette.muted }]}>{plan.summary}</Text>
+-            <Text style={[styles.detailMetaLine, { color: palette.muted }]}>
+-              Opened by {plan.ownerName} · {plan.startLabel} · {plan.capacityLabel}
+-            </Text>
+-          </View>
+-          <View style={styles.detailHeroMediaBlock}>
+-            <PlanDeckImageStrip places={plan.places} modeLabel={modeLabel} />
++        <View style={styles.detailSummaryStack}>
++          <PlanSummaryDeckBody
++            plan={plan}
++            eyebrow="PLAN DETAIL · OPEN ACTIVITY"
++            rightLabels={[...(joined ? [isCurrentUserPlan(plan) ? "YOURS" : "JOINED"] : []), modeLabel.toUpperCase(), plan.status.toUpperCase()]}
++          />
++
++          <View style={[styles.detailQuickActionPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++            <View style={styles.heroTextBlock}>
++              <Text style={[styles.cardEyebrow, { color: palette.muted }]}>OPEN PLAN</Text>
++              <Text style={[styles.detailActionTitle, { color: palette.text }]}>
++                {joined ? (isCurrentUserPlan(plan) ? "This is your open plan." : "You joined this open plan.") : "Join freely without owner approval."}
++              </Text>
++              <Text style={[styles.detailMetaLine, { color: palette.muted }]}>
++                Opened by {plan.ownerName} · {plan.startLabel} · {plan.capacityLabel}
++              </Text>
++            </View>
++            <View style={styles.planActionsInline}>
++              <PlanActionButton label={joinActionLabel} primary disabled={joinDisabled} onPress={onJoinPress} />
++              <PlanActionButton label="Back to feed" onPress={onBack} />
++            </View>
+           </View>
+         </View>
+       </View>
+@@ -1453,10 +1458,10 @@ function PlanDetailPage({
+       <View style={[styles.detailSectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+         <View style={styles.detailSectionHeader}>
+           <View>
+-            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ORDERED PLACES</Text>
+-            <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Plan route</Text>
++            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>VISUAL ROUTE</Text>
++            <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Place cards</Text>
+           </View>
+-          <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>{plan.placeSummary}</Text>
++          <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>Feed-style place cards · {plan.placeSummary}</Text>
+         </View>
+         <PlanDetailPlaceTimeline places={plan.places} />
+       </View>
+@@ -1477,17 +1482,9 @@ function PlanDetailPage({
+ 
+       <View style={[styles.detailActionPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>JOIN FLOW PROTOTYPE</Text>
+-          <Text style={[styles.detailActionTitle, { color: palette.text }]}>
+-            {joined ? (isCurrentUserPlan(plan) ? "This is your open plan." : "You joined this open plan.") : "Join freely without owner approval."}
+-          </Text>
+-          <Text style={[styles.detailHelpText, { color: palette.muted }]}>
+-            PLAN-LAB12 keeps this independent from Trade while the plan summary stays theme-based and places become visual cards.
+-          </Text>
+-        </View>
+-        <View style={styles.planActionsInline}>
+-          <PlanActionButton label={joinActionLabel} primary disabled={joinDisabled} onPress={onJoinPress} />
+-          <PlanActionButton label="Back to feed" onPress={onBack} />
++          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LAB RULES</Text>
++          <Text style={[styles.detailActionTitle, { color: palette.text }]}>Independent open-plan prototype.</Text>
++          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB13 keeps this independent from Trade, Needs, Offers, and Agenda while the detail page matches the clean summary and visual place-card deck style.</Text>
+         </View>
+       </View>
+     </View>
+@@ -2291,9 +2288,9 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB12 · VISUAL PLACE CARDS</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB13 · DETAIL VISUAL PARITY</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+-          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The preview now uses a clean theme summary card followed by visual place cards.</Text>
++          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard preview and detail page now share the same summary and visual place-card language.</Text>
+         </View>
+         <CreateStepIndicator activeStepId={activeStep.id} onSelect={(stepId) => onChangeStepIndex(planCreateSteps.findIndex((step) => step.id === stepId))} />
+       </View>
+@@ -3974,6 +3971,19 @@ const styles = StyleSheet.create({
+     flex: 1,
+     minWidth: 280,
+   },
++  detailSummaryStack: {
++    gap: 14,
++  },
++  detailQuickActionPanel: {
++    borderRadius: 22,
++    borderWidth: 1,
++    padding: 14,
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++    flexWrap: "wrap",
++  },
+   detailTitle: {
+     marginTop: 9,
+     fontSize: 34,
+@@ -4021,6 +4031,30 @@ const styles = StyleSheet.create({
+   detailTimeline: {
+     gap: 0,
+   },
++  detailVisualPlaceStack: {
++    gap: 16,
++  },
++  detailVisualPlaceItem: {
++    gap: 10,
++  },
++  detailVisualPlaceHeader: {
++    flexDirection: "row",
++    alignItems: "center",
++    gap: 10,
++  },
++  detailPlaceNumberPill: {
++    width: 38,
++    height: 38,
++    borderRadius: 999,
++    borderWidth: 1,
++    alignItems: "center",
++    justifyContent: "center",
++  },
++  detailPlaceConnectorLine: {
++    alignSelf: "center",
++    width: StyleSheet.hairlineWidth,
++    height: 18,
++  },
+   detailTimelineRow: {
+     flexDirection: "row",
+     alignItems: "stretch",

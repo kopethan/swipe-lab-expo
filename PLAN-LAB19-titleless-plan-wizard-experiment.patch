@@ -1,0 +1,287 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index 7003cda..2add338 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -187,7 +187,7 @@ function getPlanFeedEmptyCopy(filterId: PlanFeedFilterId) {
+   return "The Plans feed is empty in this lab state. Create a mock plan to test the deck flow.";
+ }
+ 
+-type PlanCreateStepId = "basics" | "mode" | "places" | "arrange" | "preview";
++type PlanCreateStepId = "mode" | "places" | "arrange" | "rules" | "preview";
+ 
+ type PlacePickerSourceId = PlaceLibrarySource | "create_new";
+ 
+@@ -231,11 +231,11 @@ type PlaceCreateDraft = {
+ };
+ 
+ const planCreateSteps: { id: PlanCreateStepId; label: string; helper: string }[] = [
+-  { id: "basics", label: "Basics", helper: "Title, summary, category." },
+   { id: "mode", label: "Mode", helper: "Offline, online, or mixed." },
+   { id: "places", label: "Places", helper: "Search My places, Starter places, or create new." },
+-  { id: "arrange", label: "Arrange", helper: "Order places, start/end times, join deadline, and route notes." },
+-  { id: "preview", label: "Preview", helper: "Review the deck before opening." },
++  { id: "arrange", label: "Arrange", helper: "Order places, route notes, and per-stop timing." },
++  { id: "rules", label: "Rules", helper: "Join deadline, capacity, final end time, and optional title." },
++  { id: "preview", label: "Preview", helper: "Review the generated deck before opening." },
+ ];
+ 
+ 
+@@ -523,11 +523,45 @@ function createPlaceDraftFromLibraryItem(place: PlaceLibraryItem): PlaceCreateDr
+   };
+ }
+ 
++function getGeneratedPlanTitleFromPlaces(places: PlanPlacePreview[], mode: PlanMode) {
++  const placeNames = places.map((place) => place.title.trim()).filter(Boolean);
++
++  if (placeNames.length === 0) {
++    return `${getPlanModeDisplay(mode)} plan`;
++  }
++
++  if (placeNames.length <= 3) {
++    return placeNames.join(" → ");
++  }
++
++  return `${placeNames.slice(0, 2).join(" → ")} + ${placeNames.length - 2} more`;
++}
++
++function getGeneratedPlanSummaryFromPlaces(places: PlanPlacePreview[], mode: PlanMode) {
++  if (places.length === 0) {
++    return `Choose ${getPlanModeDisplay(mode).toLowerCase()} places to build this open plan.`;
++  }
++
++  const firstNote = places[0]?.note?.trim();
++  const routeLabel = getGeneratedPlanTitleFromPlaces(places, mode);
++  const placeLabel = places.length === 1 ? "1 place" : `${places.length} places`;
++
++  return firstNote ? `${routeLabel}. ${firstNote}` : `${routeLabel}. Open plan with ${placeLabel}.`;
++}
++
++function getDraftPlanTitle(draft: PlanCreateDraft) {
++  return draft.title.trim() || getGeneratedPlanTitleFromPlaces(draft.places, draft.mode);
++}
++
++function getDraftPlanSummary(draft: PlanCreateDraft) {
++  return draft.summary.trim() || getGeneratedPlanSummaryFromPlaces(draft.places, draft.mode);
++}
++
+ function createInitialPlanDraft(): PlanCreateDraft {
+   return {
+-    title: "Saturday creative plan",
+-    summary: "Coffee, a short walk, and a calm open session that people can freely join.",
+-    category: "Social",
++    title: "",
++    summary: "",
++    category: "Local",
+     mode: "local",
+     ownerName: "Kopy",
+     startLabel: "Sat 15:00",
+@@ -566,15 +600,17 @@ function buildPlanPreviewFromDraft(draft: PlanCreateDraft): PlanPreview {
+     imageLabel: place.imageLabel.trim() || (place.kind === "online_place" ? "Platform visual" : "Place image"),
+   }));
+   const modeLabel = getPlanModeDisplay(draft.mode);
+-  const slugBase = `${draft.title || "plan"}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
++  const generatedTitle = getDraftPlanTitle({ ...draft, places });
++  const generatedSummary = getDraftPlanSummary({ ...draft, places });
++  const slugBase = `${generatedTitle || "plan"}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+ 
+   return {
+     id: `created-${slugBase}`,
+     category: draft.category.trim() || modeLabel,
+-    title: draft.title.trim() || "Untitled open plan",
++    title: generatedTitle,
+     status: "open",
+     mode: draft.mode,
+-    summary: draft.summary.trim() || "A new open plan created inside the lab prototype.",
++    summary: generatedSummary,
+     ownerName: draft.ownerName.trim() || "Kopy",
+     startLabel: draft.startLabel.trim() || "Flexible",
+     finalEndLabel: draft.finalEndLabel.trim() || undefined,
+@@ -590,11 +626,7 @@ function buildPlanPreviewFromDraft(draft: PlanCreateDraft): PlanPreview {
+ }
+ 
+ function getPlanCreateStepValidity(draft: PlanCreateDraft, stepId: PlanCreateStepId) {
+-  if (stepId === "basics") {
+-    return draft.title.trim().length > 0 && draft.summary.trim().length > 0;
+-  }
+-
+-  if (stepId === "places" || stepId === "arrange" || stepId === "preview") {
++  if (stepId === "places" || stepId === "arrange" || stepId === "rules" || stepId === "preview") {
+     return draft.places.length > 0;
+   }
+ 
+@@ -602,11 +634,7 @@ function getPlanCreateStepValidity(draft: PlanCreateDraft, stepId: PlanCreateSte
+ }
+ 
+ function getPlanCreateStepWarning(stepId: PlanCreateStepId) {
+-  if (stepId === "basics") {
+-    return "Add a title and short summary before continuing.";
+-  }
+-
+-  if (stepId === "places" || stepId === "arrange" || stepId === "preview") {
++  if (stepId === "places" || stepId === "arrange" || stepId === "rules" || stepId === "preview") {
+     return "Add at least one reusable place to continue.";
+   }
+ 
+@@ -614,12 +642,8 @@ function getPlanCreateStepWarning(stepId: PlanCreateStepId) {
+ }
+ 
+ function getPlanCreateStepPolishCopy(stepId: PlanCreateStepId) {
+-  if (stepId === "basics") {
+-    return "Name the plan like a small activity people can understand quickly in the feed.";
+-  }
+-
+   if (stepId === "mode") {
+-    return "Choose the plan world first: offline places, online platforms, or a mixed route.";
++    return "Choose the plan world first. The title will be generated later from selected places.";
+   }
+ 
+   if (stepId === "places") {
+@@ -627,10 +651,14 @@ function getPlanCreateStepPolishCopy(stepId: PlanCreateStepId) {
+   }
+ 
+   if (stepId === "arrange") {
+-    return "Put places in the right order, then polish the time, note, and visual label for each stop.";
++    return "Put places in the right order, then translate/polish the note and instruction for each stop.";
+   }
+ 
+-  return "Review the clean summary card and the visual place cards before opening the mock plan.";
++  if (stepId === "rules") {
++    return "Set joining and timing rules. A custom title or plan note is optional, not required.";
++  }
++
++  return "Review the generated summary card and the visual place cards before opening the mock plan.";
+ }
+ 
+ function getPlanCreatePrimaryLabel(stepId: PlanCreateStepId) {
+@@ -646,15 +674,11 @@ function getPlanCreatePrimaryLabel(stepId: PlanCreateStepId) {
+ }
+ 
+ function getCanOpenCreateStep(draft: PlanCreateDraft, targetStepId: PlanCreateStepId) {
+-  if (targetStepId === "basics" || targetStepId === "mode") {
++  if (targetStepId === "mode" || targetStepId === "places") {
+     return true;
+   }
+ 
+-  if (targetStepId === "places") {
+-    return getPlanCreateStepValidity(draft, "basics");
+-  }
+-
+-  return getPlanCreateStepValidity(draft, "basics") && getPlanCreateStepValidity(draft, "places");
++  return getPlanCreateStepValidity(draft, "places");
+ }
+ 
+ function getPlanCreateProgressPercent(stepIndex: number) {
+@@ -699,7 +723,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB18</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB19</Text>
+         </View>
+ 
+         <Pressable
+@@ -713,7 +737,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>FIELD ARCHITECTURE</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>TITLELESS PLAN WIZARD</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -1645,7 +1669,7 @@ function PlanDetailPage({
+         <View style={styles.heroTextBlock}>
+           <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LAB RULES</Text>
+           <Text style={[styles.detailActionTitle, { color: palette.text }]}>Independent open-plan prototype.</Text>
+-          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB18 keeps Plans independent while separating reusable Place data from Plan-specific timing, joining, and route-stop instructions.</Text>
++          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB19 keeps Plans independent while separating reusable Place data from Plan-specific timing, joining, and route-stop instructions.</Text>
+         </View>
+       </View>
+     </View>
+@@ -2776,7 +2800,7 @@ function PlanCreatePreview({ draft }: { draft: PlanCreateDraft }) {
+             <PlanModeBadge label={getPlanEstimatedDurationLabel(draft)} />
+           </View>
+         </View>
+-        <Text style={[styles.detailHelpText, { color: palette.muted }]}>This preview now separates reusable Place data from Plan-specific timing: join deadline, final end time, auto duration, and route-stop instructions.</Text>
++        <Text style={[styles.detailHelpText, { color: palette.muted }]}>This preview generates the summary from the ordered places. Optional cover text can override it, but each place note remains the main translated content.</Text>
+       </View>
+ 
+       <PlanDeckSummaryPreviewCard plan={previewPlan} />
+@@ -2897,9 +2921,9 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB18 · FIELD ARCHITECTURE</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB19 · TITLELESS PLAN WIZARD</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+-          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard now separates reusable Place fields from Plan-specific timing, join deadline, capacity, and route-stop instructions.</Text>
++          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard is now titleless by default: places carry the real content, and the summary card is generated from the ordered route.</Text>
+         </View>
+         <CreateStepIndicator
+           activeStepIndex={stepIndex}
+@@ -2924,15 +2948,6 @@ function PlanCreateFlow({
+ 
+         <CreateWizardStepNote activeStep={activeStep} stepIndex={stepIndex} valid={currentStepIsValid} placeCount={draft.places.length} />
+ 
+-        {activeStep.id === "basics" ? (
+-          <View style={styles.draftFieldGrid}>
+-            <DraftTextField label="Plan title" value={draft.title} onChangeText={(title) => onChangeDraft({ ...draft, title })} />
+-            <DraftTextField label="Category" value={draft.category} onChangeText={(category) => onChangeDraft({ ...draft, category })} />
+-            <View style={styles.fullWidthField}>
+-              <DraftTextField label="Short plan summary" value={draft.summary} onChangeText={(summary) => onChangeDraft({ ...draft, summary })} multiline />
+-            </View>
+-          </View>
+-        ) : null}
+ 
+         {activeStep.id === "mode" ? (
+           <View style={styles.modeChoiceGrid}>
+@@ -2978,8 +2993,6 @@ function PlanCreateFlow({
+               <PlanModeBadge label={`${draft.places.length} stops`} />
+             </View>
+ 
+-            <PlanSchedulePanel draft={draft} onChangeDraft={onChangeDraft} />
+-
+             {draft.places.length === 0 ? (
+               <View style={[styles.createWizardEmptyState, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+                 <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>No places selected yet</Text>
+@@ -3001,6 +3014,29 @@ function PlanCreateFlow({
+           </View>
+         ) : null}
+ 
++        {activeStep.id === "rules" ? (
++          <View style={styles.draftPlacesStack}>
++            <PlanSchedulePanel draft={draft} onChangeDraft={onChangeDraft} />
++            <View style={[styles.planScheduleCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++              <View style={styles.detailSectionHeader}>
++                <View>
++                  <Text style={[styles.cardEyebrow, { color: palette.muted }]}>OPTIONAL COVER TEXT</Text>
++                  <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Auto-generated unless you override it</Text>
++                </View>
++                <PlanModeBadge label="Optional" />
++              </View>
++              <Text style={[styles.detailHelpText, { color: palette.muted }]}>Leave these empty to use the generated route label. The real details stay inside each place note, so places can be translated one by one.</Text>
++              <View style={styles.draftFieldGrid}>
++                <DraftTextField label="Custom plan title optional" value={draft.title} placeholder={getGeneratedPlanTitleFromPlaces(draft.places, draft.mode)} onChangeText={(title) => onChangeDraft({ ...draft, title })} />
++                <DraftTextField label="Plan category label optional" value={draft.category} onChangeText={(category) => onChangeDraft({ ...draft, category })} />
++                <View style={styles.fullWidthField}>
++                  <DraftTextField label="Short plan note optional" value={draft.summary} placeholder={getGeneratedPlanSummaryFromPlaces(draft.places, draft.mode)} onChangeText={(summary) => onChangeDraft({ ...draft, summary })} multiline />
++                </View>
++              </View>
++            </View>
++          </View>
++        ) : null}
++
+         {activeStep.id === "preview" ? <PlanCreatePreview draft={draft} /> : null}
+       </View>
+ 
+@@ -3028,8 +3064,8 @@ function PlanCreateFlow({
+ 
+ function createDraftFromPlan(plan: PlanPreview): PlanCreateDraft {
+   return {
+-    title: plan.title,
+-    summary: plan.summary,
++    title: "",
++    summary: "",
+     category: plan.category,
+     mode: plan.mode,
+     ownerName: "Kopy",

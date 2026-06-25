@@ -1,0 +1,541 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index 5d99101..7003cda 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -207,6 +207,8 @@ type PlanCreateDraft = {
+   mode: PlanMode;
+   ownerName: string;
+   startLabel: string;
++  finalEndLabel: string;
++  joinDeadlineLabel: string;
+   capacityLabel: string;
+   places: PlanPlacePreview[];
+ };
+@@ -219,8 +221,12 @@ type PlaceCreateDraft = {
+   areaLabel: string;
+   description: string;
+   imageLabelsText: string;
++  tagsText: string;
+   accessLabel: string;
+   defaultTimeLabel: string;
++  defaultDurationLabel: string;
++  multilingualNote: string;
++  safetyLabel: string;
+   defaultNote: string;
+ };
+ 
+@@ -228,7 +234,7 @@ const planCreateSteps: { id: PlanCreateStepId; label: string; helper: string }[]
+   { id: "basics", label: "Basics", helper: "Title, summary, category." },
+   { id: "mode", label: "Mode", helper: "Offline, online, or mixed." },
+   { id: "places", label: "Places", helper: "Search My places, Starter places, or create new." },
+-  { id: "arrange", label: "Arrange", helper: "Order places, times, images, and notes." },
++  { id: "arrange", label: "Arrange", helper: "Order places, start/end times, join deadline, and route notes." },
+   { id: "preview", label: "Preview", helper: "Review the deck before opening." },
+ ];
+ 
+@@ -259,6 +265,92 @@ function getDefaultAddressOrPlatform(mode: PlanMode, index: number) {
+   return index === 0 ? "Paris" : "Add address";
+ }
+ 
++function parseClockMinutes(label: string | undefined) {
++  const match = (label ?? "").match(/(\d{1,2}):(\d{2})/);
++
++  if (!match) {
++    return null;
++  }
++
++  const hours = Number(match[1]);
++  const minutes = Number(match[2]);
++
++  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 23 || minutes > 59) {
++    return null;
++  }
++
++  return hours * 60 + minutes;
++}
++
++function formatDurationMinutes(totalMinutes: number) {
++  if (totalMinutes <= 0) {
++    return "Flexible";
++  }
++
++  const hours = Math.floor(totalMinutes / 60);
++  const minutes = totalMinutes % 60;
++
++  if (hours > 0 && minutes > 0) {
++    return `${hours}h ${minutes}m`;
++  }
++
++  if (hours > 0) {
++    return `${hours}h`;
++  }
++
++  return `${minutes}m`;
++}
++
++function getDurationBetweenLabels(startLabel: string | undefined, endLabel: string | undefined) {
++  const start = parseClockMinutes(startLabel);
++  const end = parseClockMinutes(endLabel);
++
++  if (start === null || end === null) {
++    return null;
++  }
++
++  const normalizedEnd = end >= start ? end : end + 24 * 60;
++  return formatDurationMinutes(normalizedEnd - start);
++}
++
++function getDerivedStopEndLabel(places: PlanPlacePreview[], index: number, finalEndLabel: string) {
++  return places[index].endTimeLabel?.trim() || places[index + 1]?.timeLabel?.trim() || finalEndLabel.trim();
++}
++
++function getDerivedStopDurationLabel(places: PlanPlacePreview[], index: number, finalEndLabel: string) {
++  const place = places[index];
++  const explicitDuration = place.durationLabel?.trim();
++
++  if (explicitDuration) {
++    return explicitDuration;
++  }
++
++  const endLabel = getDerivedStopEndLabel(places, index, finalEndLabel);
++  return getDurationBetweenLabels(place.timeLabel, endLabel) ?? (endLabel ? `Until ${endLabel}` : "Flexible");
++}
++
++function getPlanEstimatedDurationLabel(draft: PlanCreateDraft) {
++  const firstStart = draft.places[0]?.timeLabel || draft.startLabel;
++  const finalEnd = draft.finalEndLabel;
++  const exactDuration = getDurationBetweenLabels(firstStart, finalEnd);
++
++  if (exactDuration) {
++    return exactDuration;
++  }
++
++  if (draft.places.length > 1) {
++    const lastStart = draft.places[draft.places.length - 1]?.timeLabel;
++    const knownSpan = getDurationBetweenLabels(firstStart, lastStart);
++    return knownSpan ? `${knownSpan}+` : "Flexible route";
++  }
++
++  return "Flexible";
++}
++
++function getPlanTimingMeta(draft: PlanCreateDraft) {
++  return `${draft.startLabel || "Flexible start"} · ${draft.finalEndLabel || "no final end yet"} · ${getPlanEstimatedDurationLabel(draft)}`;
++}
++
+ function createDraftPlace(mode: PlanMode, index: number): PlanPlacePreview {
+   const order = index + 1;
+   const kind = getDefaultPlaceKind(mode, index);
+@@ -270,7 +362,10 @@ function createDraftPlace(mode: PlanMode, index: number): PlanPlacePreview {
+     title: kind === "online_place" ? `Online stop ${order}` : `Local place ${order}`,
+     addressOrPlatform: getDefaultAddressOrPlatform(mode, index),
+     timeLabel: order === 1 ? "15:00" : `${15 + index}:00`,
++    endTimeLabel: "",
++    durationLabel: "",
+     note: order === 1 ? "Meet, say hello, and start the plan." : "Continue the plan in this ordered stop.",
++    meetingInstruction: kind === "online_place" ? "Link/access can be shared after joining." : "Meet in a public, easy-to-find spot.",
+     imageLabel: kind === "online_place" ? "Platform visual" : "Place image",
+   };
+ }
+@@ -287,7 +382,10 @@ function createDraftPlaceFromLibraryItem(place: PlaceLibraryItem, index: number)
+     title: place.title,
+     addressOrPlatform: place.addressOrPlatform,
+     timeLabel: place.defaultTimeLabel,
++    endTimeLabel: "",
++    durationLabel: place.defaultDurationLabel ?? "",
+     note: place.defaultNote,
++    meetingInstruction: place.kind === "online_place" ? "Verify the link and show the domain clearly before people open it." : "Confirm the exact meeting point after people join.",
+     imageLabel: place.imageLabels[0] ?? (place.kind === "online_place" ? "Platform visual" : "Place image"),
+   };
+ }
+@@ -329,8 +427,12 @@ function createInitialPlaceDraft(mode: PlanMode): PlaceCreateDraft {
+       ? "A reusable online place for calls, group sessions, reviews, or remote plans."
+       : "A reusable local place for public meetups, walks, cafes, or offline plans.",
+     imageLabelsText: kind === "online_place" ? "Platform visual, Online room" : "Place image, Outside view",
+-    accessLabel: kind === "online_place" ? "Access note hidden" : "Public place",
++    tagsText: kind === "online_place" ? "remote, group, link" : "public, local, meetup",
++    accessLabel: kind === "online_place" ? "Private link shared later" : "Public place",
+     defaultTimeLabel: kind === "online_place" ? "Evening" : "Afternoon",
++    defaultDurationLabel: kind === "online_place" ? "45 min" : "1h",
++    multilingualNote: kind === "online_place" ? "Optional translated access note later." : "Optional translated meeting note later.",
++    safetyLabel: kind === "online_place" ? "HTTPS links only · show domain before opening" : "Google address search later · fallback map image",
+     defaultNote: kind === "online_place" ? "Open the online room and welcome people." : "Meet in a public place and keep the plan simple.",
+   };
+ }
+@@ -365,9 +467,13 @@ function createLibraryPlaceFromDraft(draft: PlaceCreateDraft): PlaceLibraryItem
+     imageLabels: normalizePlaceImageLabels(draft.imageLabelsText, draft.kind),
+     ownerName: planCurrentUserName,
+     visibility: draft.kind === "online_place" ? "private" : "public",
+-    accessLabel: draft.accessLabel.trim() || (draft.kind === "online_place" ? "Access note hidden" : "Public place"),
++    accessLabel: draft.accessLabel.trim() || (draft.kind === "online_place" ? "Private link shared later" : "Public place"),
+     defaultTimeLabel: draft.defaultTimeLabel.trim() || "Flexible",
++    defaultDurationLabel: draft.defaultDurationLabel.trim() || (draft.kind === "online_place" ? "45 min" : "1h"),
+     defaultNote: draft.defaultNote.trim() || "Use this reusable place inside a plan.",
++    tags: draft.tagsText.split(",").map((tag) => tag.trim()).filter(Boolean),
++    multilingualNote: draft.multilingualNote.trim() || undefined,
++    safetyLabel: draft.safetyLabel.trim() || undefined,
+     useLabel: draft.kind === "online_place" ? "Use online place" : "Use this place",
+   };
+ }
+@@ -407,8 +513,12 @@ function createPlaceDraftFromLibraryItem(place: PlaceLibraryItem): PlaceCreateDr
+     areaLabel: place.areaLabel,
+     description: place.description,
+     imageLabelsText: place.imageLabels.join(", "),
++    tagsText: place.tags?.join(", ") ?? "",
+     accessLabel: place.accessLabel,
+     defaultTimeLabel: place.defaultTimeLabel,
++    defaultDurationLabel: place.defaultDurationLabel ?? "",
++    multilingualNote: place.multilingualNote ?? "",
++    safetyLabel: place.safetyLabel ?? "",
+     defaultNote: place.defaultNote,
+   };
+ }
+@@ -421,6 +531,8 @@ function createInitialPlanDraft(): PlanCreateDraft {
+     mode: "local",
+     ownerName: "Kopy",
+     startLabel: "Sat 15:00",
++    finalEndLabel: "18:00",
++    joinDeadlineLabel: "Join until the plan starts",
+     capacityLabel: "Open spots",
+     places: [createDraftPlace("local", 0), createDraftPlace("local", 1)],
+   };
+@@ -447,7 +559,10 @@ function buildPlanPreviewFromDraft(draft: PlanCreateDraft): PlanPreview {
+     title: place.title.trim() || `Place ${index + 1}`,
+     addressOrPlatform: place.addressOrPlatform.trim() || getDefaultAddressOrPlatform(draft.mode, index),
+     timeLabel: place.timeLabel.trim() || "Flexible",
++    endTimeLabel: getDerivedStopEndLabel(draft.places, index, draft.finalEndLabel),
++    durationLabel: getDerivedStopDurationLabel(draft.places, index, draft.finalEndLabel),
+     note: place.note.trim() || "Plan stop note.",
++    meetingInstruction: place.meetingInstruction?.trim() || (place.kind === "online_place" ? "Link/access can be shared after joining." : "Meet in a public, easy-to-find spot."),
+     imageLabel: place.imageLabel.trim() || (place.kind === "online_place" ? "Platform visual" : "Place image"),
+   }));
+   const modeLabel = getPlanModeDisplay(draft.mode);
+@@ -462,6 +577,9 @@ function buildPlanPreviewFromDraft(draft: PlanCreateDraft): PlanPreview {
+     summary: draft.summary.trim() || "A new open plan created inside the lab prototype.",
+     ownerName: draft.ownerName.trim() || "Kopy",
+     startLabel: draft.startLabel.trim() || "Flexible",
++    finalEndLabel: draft.finalEndLabel.trim() || undefined,
++    joinDeadlineLabel: draft.joinDeadlineLabel.trim() || undefined,
++    durationLabel: getPlanEstimatedDurationLabel(draft),
+     placeSummary: getPlanPlaceSummary(places),
+     joinedCount: 1,
+     joinedPreview: [draft.ownerName.trim() || "Kopy"],
+@@ -581,7 +699,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB17</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB18</Text>
+         </View>
+ 
+         <Pressable
+@@ -595,7 +713,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>LAB QA / CLEANUP</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>FIELD ARCHITECTURE</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -1240,7 +1358,7 @@ function PlanSummaryDeckBody({
+       <PlanPlaceRoute places={plan.places} />
+ 
+       <View style={[styles.planSummaryMetaRow, { borderTopColor: palette.border }]}>
+-        <Text style={[styles.planSummaryMetaText, { color: palette.muted }]}>{plan.startLabel} · {plan.places.length} places · {plan.joinedCount} joined</Text>
++        <Text style={[styles.planSummaryMetaText, { color: palette.muted }]}>{plan.startLabel}{plan.finalEndLabel ? ` → ${plan.finalEndLabel}` : ""} · {plan.durationLabel ?? "Flexible"} · {plan.places.length} places · {plan.joinedCount} joined</Text>
+         <Text style={[styles.planSummaryCardCount, { color: palette.text }]}>01/{String(totalCards).padStart(2, "0")}</Text>
+       </View>
+     </View>
+@@ -1363,7 +1481,7 @@ function PlanCard({
+           <View style={[styles.nextStepPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+             <Text style={[styles.nextStepLabel, { color: palette.muted }]}>Plan route</Text>
+             <Text style={[styles.nextStepText, { color: palette.text }]}>{plan.placeSummary}</Text>
+-            <Text style={[styles.nextStepMeta, { color: palette.muted }]}>Opened by {plan.ownerName} · {plan.capacityLabel}</Text>
++            <Text style={[styles.nextStepMeta, { color: palette.muted }]}>Opened by {plan.ownerName} · {plan.capacityLabel}{plan.joinDeadlineLabel ? ` · ${plan.joinDeadlineLabel}` : ""}</Text>
+           </View>
+         </>
+       ) : null}
+@@ -1413,7 +1531,7 @@ function PlanDetailPlaceTimeline({ places }: { places: PlanPlacePreview[] }) {
+               <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ROUTE STOP {place.order}</Text>
+               <Text style={[styles.detailPlaceTitle, { color: palette.text }]}>{place.title}</Text>
+               <Text style={[styles.detailPlaceMeta, { color: palette.muted }]}>
+-                {place.timeLabel} · {place.kind === "online_place" ? "Online platform" : "Local place"} · {place.addressOrPlatform}
++                {place.timeLabel}{place.endTimeLabel ? ` → ${place.endTimeLabel}` : ""} · {place.durationLabel ?? "Flexible"} · {place.kind === "online_place" ? "Online platform" : "Local place"} · {place.addressOrPlatform}
+               </Text>
+             </View>
+           </View>
+@@ -1480,7 +1598,7 @@ function PlanDetailPage({
+                 {joined ? (isCurrentUserPlan(plan) ? "This is your open plan." : "You joined this open plan.") : "Join freely without owner approval."}
+               </Text>
+               <Text style={[styles.detailMetaLine, { color: palette.muted }]}>
+-                Opened by {plan.ownerName} · {plan.startLabel} · {plan.capacityLabel}
++                Opened by {plan.ownerName} · {plan.startLabel}{plan.finalEndLabel ? ` → ${plan.finalEndLabel}` : ""} · {plan.capacityLabel}
+               </Text>
+             </View>
+             <View style={styles.planActionsInline}>
+@@ -1527,7 +1645,7 @@ function PlanDetailPage({
+         <View style={styles.heroTextBlock}>
+           <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LAB RULES</Text>
+           <Text style={[styles.detailActionTitle, { color: palette.text }]}>Independent open-plan prototype.</Text>
+-          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB17 keeps Plans independent while cleaning up visual parity, long-text handling, and lab-only prototype polish.</Text>
++          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB18 keeps Plans independent while separating reusable Place data from Plan-specific timing, joining, and route-stop instructions.</Text>
+         </View>
+       </View>
+     </View>
+@@ -1893,6 +2011,7 @@ function PlaceLibraryPickerCard({ place, added, onAdd }: { place: PlaceLibraryIt
+           </Pressable>
+         </View>
+         <Text numberOfLines={3} style={[styles.placeLibraryDescription, { color: palette.muted }]}>{place.description}</Text>
++        <Text numberOfLines={2} style={[styles.placeLibraryMeta, { color: palette.muted }]}>{place.defaultTimeLabel} · {place.defaultDurationLabel ?? "flexible duration"}{place.safetyLabel ? ` · ${place.safetyLabel}` : ""}</Text>
+       </View>
+     </View>
+   );
+@@ -1965,8 +2084,12 @@ function CreatePlaceFormPrototype({
+       areaLabel: seed.areaLabel,
+       accessLabel: seed.accessLabel,
+       defaultTimeLabel: seed.defaultTimeLabel,
++      defaultDurationLabel: seed.defaultDurationLabel,
++      multilingualNote: seed.multilingualNote,
++      safetyLabel: seed.safetyLabel,
+       defaultNote: seed.defaultNote,
+       imageLabelsText: seed.imageLabelsText,
++      tagsText: seed.tagsText,
+     });
+   };
+ 
+@@ -1997,17 +2120,25 @@ function CreatePlaceFormPrototype({
+ 
+       <View style={styles.draftFieldGrid}>
+         <DraftTextField label="Place title" value={draft.title} onChangeText={(title) => onChangeDraft({ ...draft, title })} />
+-        <DraftTextField label={draft.kind === "online_place" ? "Platform / link label" : "Address / area"} value={draft.addressOrPlatform} onChangeText={(addressOrPlatform) => onChangeDraft({ ...draft, addressOrPlatform })} />
++        <DraftTextField label={draft.kind === "online_place" ? "HTTPS link / platform label" : "Google address search / manual address"} value={draft.addressOrPlatform} onChangeText={(addressOrPlatform) => onChangeDraft({ ...draft, addressOrPlatform })} />
+         <DraftTextField label="Category label" value={draft.categoryLabel} onChangeText={(categoryLabel) => onChangeDraft({ ...draft, categoryLabel })} />
+-        <DraftTextField label="Area label" value={draft.areaLabel} onChangeText={(areaLabel) => onChangeDraft({ ...draft, areaLabel })} />
+-        <DraftTextField label="Access label" value={draft.accessLabel} onChangeText={(accessLabel) => onChangeDraft({ ...draft, accessLabel })} />
+-        <DraftTextField label="Default time" value={draft.defaultTimeLabel} onChangeText={(defaultTimeLabel) => onChangeDraft({ ...draft, defaultTimeLabel })} />
++        <DraftTextField label="Area / domain label" value={draft.areaLabel} onChangeText={(areaLabel) => onChangeDraft({ ...draft, areaLabel })} />
++        <DraftTextField label={draft.kind === "online_place" ? "Access / safety label" : "Access label"} value={draft.accessLabel} onChangeText={(accessLabel) => onChangeDraft({ ...draft, accessLabel })} />
++        <DraftTextField label="Default start time" value={draft.defaultTimeLabel} onChangeText={(defaultTimeLabel) => onChangeDraft({ ...draft, defaultTimeLabel })} />
++        <DraftTextField label="Default duration" value={draft.defaultDurationLabel} onChangeText={(defaultDurationLabel) => onChangeDraft({ ...draft, defaultDurationLabel })} />
++        <DraftTextField label="Tags" value={draft.tagsText} onChangeText={(tagsText) => onChangeDraft({ ...draft, tagsText })} placeholder="public, cafe, meetup" />
+         <View style={styles.fullWidthField}>
+-          <DraftTextField label="Image labels" value={draft.imageLabelsText} onChangeText={(imageLabelsText) => onChangeDraft({ ...draft, imageLabelsText })} placeholder="Place image, Detail image" />
++          <DraftTextField label="Image labels / uploaded media later" value={draft.imageLabelsText} onChangeText={(imageLabelsText) => onChangeDraft({ ...draft, imageLabelsText })} placeholder="Place image, Detail image" />
+         </View>
+         <View style={styles.fullWidthField}>
+           <DraftTextField label="Description" value={draft.description} onChangeText={(description) => onChangeDraft({ ...draft, description })} multiline />
+         </View>
++        <View style={styles.fullWidthField}>
++          <DraftTextField label="Manual translated note" value={draft.multilingualNote} onChangeText={(multilingualNote) => onChangeDraft({ ...draft, multilingualNote })} multiline />
++        </View>
++        <View style={styles.fullWidthField}>
++          <DraftTextField label="Safety / fallback note" value={draft.safetyLabel} onChangeText={(safetyLabel) => onChangeDraft({ ...draft, safetyLabel })} multiline />
++        </View>
+         <View style={styles.fullWidthField}>
+           <DraftTextField label="Default route note" value={draft.defaultNote} onChangeText={(defaultNote) => onChangeDraft({ ...draft, defaultNote })} multiline />
+         </View>
+@@ -2045,7 +2176,7 @@ function SelectedPlanPlacesSummary({ places }: { places: PlanPlacePreview[] }) {
+               </View>
+               <View style={styles.heroTextBlock}>
+                 <Text style={[styles.selectedPlaceTitle, { color: palette.text }]}>{place.title}</Text>
+-                <Text style={[styles.selectedPlaceMeta, { color: palette.muted }]}>{place.timeLabel} · {place.addressOrPlatform} · {place.kind === "online_place" ? "Online" : "Offline"}</Text>
++                <Text style={[styles.selectedPlaceMeta, { color: palette.muted }]}>{place.timeLabel} · {place.endTimeLabel ? `until ${place.endTimeLabel}` : "end auto"} · {place.addressOrPlatform} · {place.kind === "online_place" ? "Online" : "Offline"}</Text>
+               </View>
+             </View>
+           ))}
+@@ -2225,7 +2356,11 @@ function StandalonePlaceLibraryCard({
+           </View>
+           <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+             <Text style={[styles.nextStepLabel, { color: palette.muted }]}>DEFAULT</Text>
+-            <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.defaultTimeLabel}</Text>
++            <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.defaultTimeLabel} · {place.defaultDurationLabel ?? "flexible"}</Text>
++          </View>
++          <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++            <Text style={[styles.nextStepLabel, { color: palette.muted }]}>SAFETY</Text>
++            <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.safetyLabel ?? (place.kind === "online_place" ? "Check link" : "Map fallback")}</Text>
+           </View>
+         </View>
+         <View style={styles.standalonePlaceActions}>
+@@ -2437,6 +2572,33 @@ function PlaceLibraryScreen({
+   );
+ }
+ 
++function PlanSchedulePanel({ draft, onChangeDraft }: { draft: PlanCreateDraft; onChangeDraft: (draft: PlanCreateDraft) => void }) {
++  const { palette } = useTheme();
++
++  return (
++    <View style={[styles.planScheduleCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++      <View style={styles.detailSectionHeader}>
++        <View>
++          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PLAN TIMING</Text>
++          <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Plan-level timing and joining</Text>
++        </View>
++        <PlanModeBadge label={getPlanEstimatedDurationLabel(draft)} />
++      </View>
++      <Text style={[styles.detailHelpText, { color: palette.muted }]}>Place start times define the route. A stop can end at its own end time, otherwise it ends when the next stop starts. The final end time closes the last stop.</Text>
++      <View style={styles.draftFieldGrid}>
++        <DraftTextField label="Plan starts" value={draft.startLabel} onChangeText={(startLabel) => onChangeDraft({ ...draft, startLabel })} />
++        <DraftTextField label="Final end time" value={draft.finalEndLabel} onChangeText={(finalEndLabel) => onChangeDraft({ ...draft, finalEndLabel })} />
++        <DraftTextField label="Join deadline" value={draft.joinDeadlineLabel} onChangeText={(joinDeadlineLabel) => onChangeDraft({ ...draft, joinDeadlineLabel })} />
++        <DraftTextField label="Capacity" value={draft.capacityLabel} onChangeText={(capacityLabel) => onChangeDraft({ ...draft, capacityLabel })} />
++      </View>
++      <View style={[styles.placePickerActiveNote, { borderColor: palette.border, backgroundColor: palette.surface }]}>
++        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>AUTO DURATION</Text>
++        <Text style={[styles.nextStepMeta, { color: palette.muted }]}>{getPlanTimingMeta(draft)}</Text>
++      </View>
++    </View>
++  );
++}
++
+ function DraftPlaceEditor({
+   place,
+   canRemove,
+@@ -2513,8 +2675,9 @@ function DraftPlaceEditor({
+       {compact ? (
+         <View style={styles.draftFieldGrid}>
+           <DraftTextField label="Image label" value={place.imageLabel} onChangeText={(imageLabel) => onChange({ ...place, imageLabel })} />
++          <DraftTextField label="Start time" value={place.timeLabel} onChangeText={(timeLabel) => onChange({ ...place, timeLabel })} />
+           <View style={styles.fullWidthField}>
+-            <DraftTextField label="Short note" value={place.note} onChangeText={(note) => onChange({ ...place, note })} multiline />
++            <DraftTextField label="Plan-specific note" value={place.note} onChangeText={(note) => onChange({ ...place, note })} multiline />
+           </View>
+         </View>
+       ) : (
+@@ -2522,10 +2685,13 @@ function DraftPlaceEditor({
+           <View style={styles.draftFieldGrid}>
+             <DraftTextField label="Place / platform" value={place.title} onChangeText={(title) => onChange({ ...place, title })} />
+             <DraftTextField label="Address / platform" value={place.addressOrPlatform} onChangeText={(addressOrPlatform) => onChange({ ...place, addressOrPlatform })} />
+-            <DraftTextField label="Time" value={place.timeLabel} onChangeText={(timeLabel) => onChange({ ...place, timeLabel })} />
++            <DraftTextField label="Start time" value={place.timeLabel} onChangeText={(timeLabel) => onChange({ ...place, timeLabel })} />
++            <DraftTextField label="End time optional" value={place.endTimeLabel ?? ""} onChangeText={(endTimeLabel) => onChange({ ...place, endTimeLabel })} />
++            <DraftTextField label="Manual duration optional" value={place.durationLabel ?? ""} onChangeText={(durationLabel) => onChange({ ...place, durationLabel })} />
+             <DraftTextField label="Image label" value={place.imageLabel} onChangeText={(imageLabel) => onChange({ ...place, imageLabel })} />
+           </View>
+-          <DraftTextField label="Short note" value={place.note} onChangeText={(note) => onChange({ ...place, note })} multiline />
++          <DraftTextField label="Plan-specific note" value={place.note} onChangeText={(note) => onChange({ ...place, note })} multiline />
++          <DraftTextField label="Meeting / access instruction" value={place.meetingInstruction ?? ""} onChangeText={(meetingInstruction) => onChange({ ...place, meetingInstruction })} multiline />
+         </>
+       )}
+     </View>
+@@ -2549,7 +2715,7 @@ function PlanDeckSummaryPreviewCard({ plan }: { plan: PlanPreview }) {
+ 
+ function PlanDeckPlacePreviewCard({ place, totalPlaces }: { place: PlanPlacePreview; totalPlaces: number }) {
+   const kindLabel = place.kind === "online_place" ? "ONLINE" : "LOCAL";
+-  const placeMeta = `${place.timeLabel || "Flexible"} · ${place.addressOrPlatform}`;
++  const placeMeta = `${place.timeLabel || "Flexible"}${place.endTimeLabel ? ` → ${place.endTimeLabel}` : ""} · ${place.durationLabel || "flexible duration"} · ${place.addressOrPlatform}`;
+ 
+   return (
+     <View style={[styles.tradeCard, styles.planDeckCard, styles.planDeckPreviewCard, styles.planPosterPlaceCard]}>
+@@ -2574,6 +2740,7 @@ function PlanDeckPlacePreviewCard({ place, totalPlaces }: { place: PlanPlacePrev
+         <Text style={styles.planPosterEyebrow}>{kindLabel.toLowerCase()} stop · {place.order}</Text>
+         <Text style={styles.planPosterTitle}>{place.title}</Text>
+         <Text style={styles.planPosterNote}>{place.note}</Text>
++        {place.meetingInstruction ? <Text style={styles.planPosterNote}>{place.meetingInstruction}</Text> : null}
+         <Text style={styles.planPosterMeta}>{placeMeta}</Text>
+         <View style={styles.planPosterChipRow}>
+           <View style={styles.planPosterChip}>
+@@ -2604,9 +2771,12 @@ function PlanCreatePreview({ draft }: { draft: PlanCreateDraft }) {
+             <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PREVIEW · FEED PARITY</Text>
+             <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Plan deck preview</Text>
+           </View>
+-          <PlanModeBadge label={`${totalCards} cards`} />
++          <View style={styles.detailStatusRow}>
++            <PlanModeBadge label={`${totalCards} cards`} />
++            <PlanModeBadge label={getPlanEstimatedDurationLabel(draft)} />
++          </View>
+         </View>
+-        <Text style={[styles.detailHelpText, { color: palette.muted }]}>This is the non-clickable preview users see before opening the mock plan: a clean theme summary card, then visual place cards with offline map-style or online platform-style fallback media.</Text>
++        <Text style={[styles.detailHelpText, { color: palette.muted }]}>This preview now separates reusable Place data from Plan-specific timing: join deadline, final end time, auto duration, and route-stop instructions.</Text>
+       </View>
+ 
+       <PlanDeckSummaryPreviewCard plan={previewPlan} />
+@@ -2727,9 +2897,9 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB17 · LAB QA / CLEANUP</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB18 · FIELD ARCHITECTURE</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+-          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard now has clearer progress, validation, source tabs, and footer actions before the mock plan opens.</Text>
++          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard now separates reusable Place fields from Plan-specific timing, join deadline, capacity, and route-stop instructions.</Text>
+         </View>
+         <CreateStepIndicator
+           activeStepIndex={stepIndex}
+@@ -2758,8 +2928,6 @@ function PlanCreateFlow({
+           <View style={styles.draftFieldGrid}>
+             <DraftTextField label="Plan title" value={draft.title} onChangeText={(title) => onChangeDraft({ ...draft, title })} />
+             <DraftTextField label="Category" value={draft.category} onChangeText={(category) => onChangeDraft({ ...draft, category })} />
+-            <DraftTextField label="Start label" value={draft.startLabel} onChangeText={(startLabel) => onChangeDraft({ ...draft, startLabel })} />
+-            <DraftTextField label="Capacity label" value={draft.capacityLabel} onChangeText={(capacityLabel) => onChangeDraft({ ...draft, capacityLabel })} />
+             <View style={styles.fullWidthField}>
+               <DraftTextField label="Short plan summary" value={draft.summary} onChangeText={(summary) => onChangeDraft({ ...draft, summary })} multiline />
+             </View>
+@@ -2810,6 +2978,8 @@ function PlanCreateFlow({
+               <PlanModeBadge label={`${draft.places.length} stops`} />
+             </View>
+ 
++            <PlanSchedulePanel draft={draft} onChangeDraft={onChangeDraft} />
++
+             {draft.places.length === 0 ? (
+               <View style={[styles.createWizardEmptyState, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+                 <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>No places selected yet</Text>
+@@ -2864,6 +3034,8 @@ function createDraftFromPlan(plan: PlanPreview): PlanCreateDraft {
+     mode: plan.mode,
+     ownerName: "Kopy",
+     startLabel: plan.startLabel,
++    finalEndLabel: "18:00",
++    joinDeadlineLabel: "Join until the plan starts",
+     capacityLabel: plan.capacityLabel,
+     places: plan.places.map((place, index) => ({
+       ...place,
+@@ -4935,6 +5107,12 @@ const styles = StyleSheet.create({
+     padding: 14,
+     gap: 6,
+   },
++  planScheduleCard: {
++    borderRadius: 22,
++    borderWidth: 1,
++    padding: 14,
++    gap: 12,
++  },
+   draftPlaceCard: {
+     borderRadius: 22,
+     borderWidth: 1,
+diff --git a/features/nav-lab/navLab.types.ts b/features/nav-lab/navLab.types.ts
+index 3372a59..0e7f635 100644
+--- a/features/nav-lab/navLab.types.ts
++++ b/features/nav-lab/navLab.types.ts
+@@ -56,7 +56,11 @@ export type PlaceLibraryItem = {
+   visibility: PlaceLibraryVisibility;
+   accessLabel: string;
+   defaultTimeLabel: string;
++  defaultDurationLabel?: string;
+   defaultNote: string;
++  tags?: string[];
++  multilingualNote?: string;
++  safetyLabel?: string;
+   useLabel: string;
+ };
+ 
+@@ -75,7 +79,10 @@ export type PlanPlacePreview = {
+   title: string;
+   addressOrPlatform: string;
+   timeLabel: string;
++  endTimeLabel?: string;
++  durationLabel?: string;
+   note: string;
++  meetingInstruction?: string;
+   imageLabel: string;
+ };
+ 
+@@ -88,6 +95,9 @@ export type PlanPreview = {
+   summary: string;
+   ownerName: string;
+   startLabel: string;
++  finalEndLabel?: string;
++  joinDeadlineLabel?: string;
++  durationLabel?: string;
+   placeSummary: string;
+   places: PlanPlacePreview[];
+   joinedCount: number;

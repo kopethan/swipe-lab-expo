@@ -1,0 +1,504 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index c1fd600..5d99101 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -581,7 +581,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB16</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB17</Text>
+         </View>
+ 
+         <Pressable
+@@ -595,7 +595,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+ 
+       <View style={styles.headerTitleRow}>
+         <View style={styles.headerTitleBlock}>
+-          <Text style={[styles.eyebrow, { color: palette.muted }]}>CREATE PLAN WIZARD POLISH</Text>
++          <Text style={[styles.eyebrow, { color: palette.muted }]}>LAB QA / CLEANUP</Text>
+           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
+           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
+         </View>
+@@ -1184,55 +1184,6 @@ function getPlaceMediaChipLabel(kind: PlanPlaceKind) {
+   return kind === "online_place" ? "Platform" : "Map fallback";
+ }
+ 
+-function getPlaceVisualKindLabel(place?: PlanPlacePreview) {
+-  if (!place) {
+-    return "VISUAL";
+-  }
+-
+-  return getPlaceMediaFallbackLabel(place.kind);
+-}
+-
+-function PlanDeckImageStrip({ places, modeLabel }: { places: PlanPlacePreview[]; modeLabel: string }) {
+-  const { palette } = useTheme();
+-  const [primaryPlace, ...secondaryPlaces] = places;
+-  const visibleSecondaryPlaces = secondaryPlaces.slice(0, 2);
+-
+-  return (
+-    <View style={styles.planDeckMediaGrid}>
+-      <View style={[styles.planDeckHeroImage, { borderColor: palette.border, backgroundColor: palette.deckSurface1 }]}>
+-        <View style={styles.planDeckImageTopRow}>
+-          <Text style={[styles.planDeckImageEyebrow, { color: palette.muted }]}>{modeLabel.toUpperCase()}</Text>
+-          <View style={[styles.planVisualKindPill, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+-            <Text style={[styles.planVisualKindText, { color: palette.text }]}>{getPlaceVisualKindLabel(primaryPlace)}</Text>
+-          </View>
+-        </View>
+-        <Text style={[styles.planDeckImageTitle, { color: palette.text }]}>{primaryPlace?.imageLabel ?? "Plan image"}</Text>
+-        <Text style={[styles.planDeckImageMeta, { color: palette.muted }]}>1 · {primaryPlace?.title ?? "First place"}</Text>
+-      </View>
+-
+-      <View style={styles.planDeckThumbColumn}>
+-        {visibleSecondaryPlaces.map((place) => (
+-          <View key={place.id} style={[styles.planDeckThumbImage, { borderColor: palette.border, backgroundColor: palette.deckSurface2 }]}>
+-            <View style={styles.planThumbTopRow}>
+-              <Text style={[styles.planDeckThumbOrder, { color: palette.muted }]}>{place.order}</Text>
+-              <Text style={[styles.planDeckThumbKind, { color: palette.muted }]}>
+-                {place.kind === "online_place" ? "WEB" : "LOCAL"}
+-              </Text>
+-            </View>
+-            <Text numberOfLines={2} style={[styles.planDeckThumbLabel, { color: palette.text }]}>{place.imageLabel}</Text>
+-          </View>
+-        ))}
+-        {visibleSecondaryPlaces.length === 0 ? (
+-          <View style={[styles.planDeckThumbImage, { borderColor: palette.border, backgroundColor: palette.deckSurface2 }]}>
+-            <Text style={[styles.planDeckThumbOrder, { color: palette.muted }]}>+</Text>
+-            <Text style={[styles.planDeckThumbLabel, { color: palette.text }]}>Add place</Text>
+-          </View>
+-        ) : null}
+-      </View>
+-    </View>
+-  );
+-}
+-
+ function PlanPlaceRoute({ places }: { places: PlanPlacePreview[] }) {
+   const { palette } = useTheme();
+ 
+@@ -1281,8 +1232,8 @@ function PlanSummaryDeckBody({
+ 
+       <View style={styles.planSummaryCenterBlock}>
+         <Text style={[styles.planSummaryModeLabel, { color: palette.muted }]}>{plan.category} · {modeLabel} plan</Text>
+-        <Text style={[styles.planSummaryDeckTitle, { color: palette.text }]}>{plan.title}</Text>
+-        <Text style={[styles.planSummaryDeckCopy, { color: palette.muted }]}>{plan.summary}</Text>
++        <Text style={[styles.planSummaryDeckTitle, { color: palette.text }]} numberOfLines={2}>{plan.title}</Text>
++        <Text style={[styles.planSummaryDeckCopy, { color: palette.muted }]} numberOfLines={3}>{plan.summary}</Text>
+         <Text style={[styles.planSummaryRouteLine, { color: palette.text }]} numberOfLines={2}>{routeLabel}</Text>
+       </View>
+ 
+@@ -1354,33 +1305,6 @@ function PlanPlacePosterBackdrop({ place }: { place: PlanPlacePreview }) {
+   );
+ }
+ 
+-function PlanPlaceTimeline({ places }: { places: PlanPlacePreview[] }) {
+-  const { palette } = useTheme();
+-
+-  return (
+-    <View style={[styles.planPreviewList, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+-      <Text style={[styles.planColumnTitle, { color: palette.text }]}>Ordered places</Text>
+-      {places.map((place) => (
+-        <View key={place.id} style={styles.planPlaceRow}>
+-          <View style={[styles.planPlaceImageChip, { borderColor: palette.border, backgroundColor: palette.deckSurface1 }]}>
+-            <Text style={[styles.planPlaceImageChipText, { color: palette.text }]}>{place.order}</Text>
+-          </View>
+-          <View style={styles.planPlaceTextBlock}>
+-            <View style={styles.planPlaceTitleRow}>
+-              <Text style={[styles.planPlaceTitle, { color: palette.text }]}>{place.title}</Text>
+-              <Text style={[styles.planPlaceTime, { color: palette.muted }]}>{place.timeLabel}</Text>
+-            </View>
+-            <Text style={[styles.planPlaceMeta, { color: palette.muted }]}>
+-              {place.kind === "online_place" ? "Online" : "Local"} · {place.addressOrPlatform} · {place.imageLabel}
+-            </Text>
+-            <Text style={[styles.bulletText, { color: palette.muted }]}>{place.note}</Text>
+-          </View>
+-        </View>
+-      ))}
+-    </View>
+-  );
+-}
+-
+ function PlanCard({
+   plan,
+   expanded,
+@@ -1603,7 +1527,7 @@ function PlanDetailPage({
+         <View style={styles.heroTextBlock}>
+           <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LAB RULES</Text>
+           <Text style={[styles.detailActionTitle, { color: palette.text }]}>Independent open-plan prototype.</Text>
+-          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB16 keeps Plans independent while polishing the Create Plan wizard flow, progress, validation, and footer controls.</Text>
++          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB17 keeps Plans independent while cleaning up visual parity, long-text handling, and lab-only prototype polish.</Text>
+         </View>
+       </View>
+     </View>
+@@ -2803,7 +2727,7 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB16 · CREATE PLAN WIZARD POLISH</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB17 · LAB QA / CLEANUP</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+           <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard now has clearer progress, validation, source tabs, and footer actions before the mock plan opens.</Text>
+         </View>
+@@ -4187,101 +4111,6 @@ const styles = StyleSheet.create({
+   planDeckPressable: {
+     gap: 0,
+   },
+-  planDeckMediaGrid: {
+-    marginTop: 16,
+-    minHeight: 168,
+-    flexDirection: "row",
+-    gap: 10,
+-  },
+-  planDeckHeroImage: {
+-    flex: 1,
+-    minHeight: 168,
+-    borderRadius: 24,
+-    borderWidth: 1,
+-    padding: 14,
+-    justifyContent: "space-between",
+-    overflow: "hidden",
+-  },
+-  planDeckImageTopRow: {
+-    flexDirection: "row",
+-    alignItems: "center",
+-    justifyContent: "space-between",
+-    gap: 8,
+-  },
+-  planDeckImageEyebrow: {
+-    fontSize: 10,
+-    fontWeight: "900",
+-    letterSpacing: 0.6,
+-  },
+-  planVisualKindPill: {
+-    borderRadius: 999,
+-    borderWidth: 1,
+-    paddingHorizontal: 8,
+-    paddingVertical: 4,
+-  },
+-  planVisualKindText: {
+-    fontSize: 9,
+-    fontWeight: "900",
+-    letterSpacing: 0.3,
+-  },
+-  planDeckImageTitle: {
+-    fontSize: 22,
+-    lineHeight: 27,
+-    fontWeight: "900",
+-    letterSpacing: -0.5,
+-  },
+-  planDeckImageMeta: {
+-    fontSize: 12,
+-    lineHeight: 17,
+-    fontWeight: "800",
+-  },
+-  planDeckThumbColumn: {
+-    width: 94,
+-    gap: 10,
+-  },
+-  planDeckThumbImage: {
+-    flex: 1,
+-    minHeight: 79,
+-    borderRadius: 20,
+-    borderWidth: 1,
+-    padding: 10,
+-    justifyContent: "space-between",
+-  },
+-  planThumbTopRow: {
+-    flexDirection: "row",
+-    alignItems: "center",
+-    justifyContent: "space-between",
+-    gap: 6,
+-  },
+-  planDeckThumbOrder: {
+-    fontSize: 10,
+-    fontWeight: "900",
+-  },
+-  planDeckThumbKind: {
+-    fontSize: 9,
+-    fontWeight: "900",
+-    letterSpacing: 0.3,
+-  },
+-  planDeckThumbLabel: {
+-    fontSize: 12,
+-    lineHeight: 15,
+-    fontWeight: "900",
+-  },
+-  planDeckTitleBlock: {
+-    marginTop: 18,
+-    alignItems: "center",
+-    gap: 6,
+-  },
+-  planDeckTitle: {
+-    maxWidth: 520,
+-  },
+-  planDeckSummary: {
+-    maxWidth: 560,
+-    textAlign: "center",
+-    fontSize: 13,
+-    lineHeight: 19,
+-    fontWeight: "700",
+-  },
+   planDeckRouteRow: {
+     marginTop: 12,
+     flexDirection: "row",
+@@ -4313,43 +4142,12 @@ const styles = StyleSheet.create({
+     fontSize: 14,
+     fontWeight: "900",
+   },
+-  planCard: {
+-    borderRadius: 24,
+-    borderWidth: 1,
+-    padding: 16,
+-  },
+-  planCardHeader: {
+-    flexDirection: "row",
+-    alignItems: "flex-start",
+-    justifyContent: "space-between",
+-    gap: 12,
+-  },
+-  planHeaderTextBlock: {
+-    flex: 1,
+-  },
+   cardTopLine: {
+     flexDirection: "row",
+     alignItems: "center",
+     justifyContent: "space-between",
+     gap: 12,
+   },
+-  planTitle: {
+-    marginTop: 8,
+-    fontSize: 22,
+-    fontWeight: "900",
+-    letterSpacing: -0.4,
+-  },
+-  planSummary: {
+-    marginTop: 7,
+-    fontSize: 13,
+-    lineHeight: 19,
+-  },
+-  planBadgeRow: {
+-    marginTop: 11,
+-    flexDirection: "row",
+-    flexWrap: "wrap",
+-    gap: 8,
+-  },
+   planModeBadge: {
+     borderRadius: 999,
+     borderWidth: 1,
+@@ -4360,13 +4158,6 @@ const styles = StyleSheet.create({
+     fontSize: 11,
+     fontWeight: "900",
+   },
+-  collapsedPlanMetaRow: {
+-    marginTop: 14,
+-    flexDirection: "row",
+-    alignItems: "center",
+-    justifyContent: "space-between",
+-    gap: 12,
+-  },
+   planStatsRow: {
+     marginTop: 16,
+     flexDirection: "row",
+@@ -4390,96 +4181,10 @@ const styles = StyleSheet.create({
+     fontWeight: "900",
+     letterSpacing: 0.2,
+   },
+-  planColumns: {
+-    marginTop: 16,
+-    flexDirection: "row",
+-    flexWrap: "wrap",
+-    gap: 12,
+-  },
+-  planColumn: {
+-    flex: 1,
+-    gap: 5,
+-  },
+-  planPreviewList: {
+-    flexGrow: 1,
+-    flexBasis: 240,
+-    borderRadius: 18,
+-    borderWidth: 1,
+-    padding: 13,
+-    gap: 7,
+-  },
+-  planColumnTitle: {
+-    marginBottom: 2,
+-    fontSize: 13,
+-    fontWeight: "900",
+-  },
+-  planBulletRow: {
+-    flexDirection: "row",
+-    gap: 7,
+-  },
+-  planBulletDot: {
+-    width: 9,
+-    fontSize: 13,
+-    lineHeight: 18,
+-    fontWeight: "900",
+-  },
+-  planPlaceImageChip: {
+-    width: 46,
+-    height: 46,
+-    borderRadius: 16,
+-    borderWidth: 1,
+-    alignItems: "center",
+-    justifyContent: "center",
+-  },
+-  planPlaceImageChipText: {
+-    fontSize: 14,
+-    fontWeight: "900",
+-  },
+-  planPlaceRow: {
+-    flexDirection: "row",
+-    gap: 11,
+-    paddingVertical: 4,
+-  },
+-  planPlaceOrderBadge: {
+-    width: 28,
+-    height: 28,
+-    borderRadius: 999,
+-    borderWidth: 1,
+-    alignItems: "center",
+-    justifyContent: "center",
+-  },
+-  planPlaceOrderText: {
+-    fontSize: 12,
+-    fontWeight: "900",
+-  },
+   planPlaceTextBlock: {
+     flex: 1,
+     gap: 4,
+   },
+-  planPlaceTitleRow: {
+-    flexDirection: "row",
+-    alignItems: "flex-start",
+-    justifyContent: "space-between",
+-    gap: 10,
+-  },
+-  planPlaceTitle: {
+-    flex: 1,
+-    fontSize: 14,
+-    fontWeight: "900",
+-  },
+-  planPlaceTime: {
+-    fontSize: 12,
+-    fontWeight: "900",
+-  },
+-  planPlaceMeta: {
+-    fontSize: 12,
+-    fontWeight: "700",
+-  },
+-  bulletText: {
+-    flex: 1,
+-    fontSize: 13,
+-    lineHeight: 18,
+-  },
+   nextStepPanel: {
+     marginTop: 12,
+     borderRadius: 18,
+@@ -4551,21 +4256,6 @@ const styles = StyleSheet.create({
+     justifyContent: "flex-end",
+     gap: 8,
+   },
+-  detailHeroLayout: {
+-    flexDirection: "row",
+-    alignItems: "stretch",
+-    gap: 18,
+-    flexWrap: "wrap",
+-  },
+-  detailHeroTextBlock: {
+-    flex: 1,
+-    minWidth: 260,
+-    justifyContent: "center",
+-  },
+-  detailHeroMediaBlock: {
+-    flex: 1,
+-    minWidth: 280,
+-  },
+   detailSummaryStack: {
+     gap: 14,
+   },
+@@ -4623,9 +4313,6 @@ const styles = StyleSheet.create({
+     lineHeight: 17,
+     fontWeight: "800",
+   },
+-  detailTimeline: {
+-    gap: 0,
+-  },
+   detailVisualPlaceStack: {
+     gap: 16,
+   },
+@@ -4650,46 +4337,10 @@ const styles = StyleSheet.create({
+     width: StyleSheet.hairlineWidth,
+     height: 18,
+   },
+-  detailTimelineRow: {
+-    flexDirection: "row",
+-    alignItems: "stretch",
+-    gap: 12,
+-  },
+-  detailTimelineRail: {
+-    width: 38,
+-    alignItems: "center",
+-  },
+-  detailPlaceMarker: {
+-    width: 34,
+-    height: 34,
+-    borderRadius: 17,
+-    borderWidth: 1,
+-    alignItems: "center",
+-    justifyContent: "center",
+-  },
+   detailPlaceMarkerText: {
+     fontSize: 13,
+     fontWeight: "900",
+   },
+-  detailPlaceConnector: {
+-    flex: 1,
+-    width: StyleSheet.hairlineWidth,
+-    minHeight: 20,
+-  },
+-  detailPlaceCard: {
+-    flex: 1,
+-    marginBottom: 12,
+-    borderRadius: 20,
+-    borderWidth: 1,
+-    padding: 13,
+-    gap: 10,
+-  },
+-  detailPlaceHeaderRow: {
+-    flexDirection: "row",
+-    alignItems: "flex-start",
+-    justifyContent: "space-between",
+-    gap: 10,
+-  },
+   detailPlaceTitle: {
+     fontSize: 16,
+     fontWeight: "900",
+@@ -4701,26 +4352,6 @@ const styles = StyleSheet.create({
+     lineHeight: 17,
+     fontWeight: "800",
+   },
+-  detailPlaceTime: {
+-    fontSize: 13,
+-    fontWeight: "900",
+-  },
+-  detailPlaceImagePreview: {
+-    minHeight: 76,
+-    borderRadius: 18,
+-    borderWidth: 1,
+-    padding: 12,
+-    justifyContent: "flex-end",
+-  },
+-  detailPlaceImageText: {
+-    fontSize: 15,
+-    fontWeight: "900",
+-  },
+-  detailPlaceNote: {
+-    fontSize: 13,
+-    lineHeight: 19,
+-    fontWeight: "700",
+-  },
+   detailParticipantRow: {
+     flexDirection: "row",
+     flexWrap: "wrap",

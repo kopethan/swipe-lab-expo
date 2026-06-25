@@ -1,0 +1,539 @@
+diff --git a/features/nav-lab/NavLabScreen.tsx b/features/nav-lab/NavLabScreen.tsx
+index ec1cafc..19899a8 100644
+--- a/features/nav-lab/NavLabScreen.tsx
++++ b/features/nav-lab/NavLabScreen.tsx
+@@ -504,7 +504,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
+         </Pressable>
+ 
+         <View style={styles.headerPill}>
+-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB11</Text>
++          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB12</Text>
+         </View>
+ 
+         <Pressable
+@@ -1162,6 +1162,79 @@ function PlanPlaceRoute({ places }: { places: PlanPlacePreview[] }) {
+   );
+ }
+ 
++function PlanSummaryDeckBody({
++  plan,
++  eyebrow,
++  rightLabels,
++}: {
++  plan: PlanPreview;
++  eyebrow: string;
++  rightLabels: string[];
++}) {
++  const { mode, palette } = useTheme();
++  const modeLabel = getPlanModeLabel(plan);
++  const routeLabel = plan.places.map((place) => place.title).join(" → ");
++  const totalCards = plan.places.length + 1;
++  const summarySurface = mode === "dark" ? palette.surfaceAlt : palette.surface;
++
++  return (
++    <View style={[styles.planSummarySurface, { borderColor: palette.border, backgroundColor: summarySurface }]}>
++      <View style={styles.cardTopLine}>
++        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{eyebrow}</Text>
++        <View style={styles.planTopTags}>
++          {rightLabels.map((label) => (
++            <View key={label} style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
++              <Text style={[styles.smallTagText, { color: palette.text }]}>{label}</Text>
++            </View>
++          ))}
++        </View>
++      </View>
++
++      <View style={styles.planSummaryCenterBlock}>
++        <Text style={[styles.planSummaryModeLabel, { color: palette.muted }]}>{plan.category} · {modeLabel} plan</Text>
++        <Text style={[styles.planSummaryDeckTitle, { color: palette.text }]}>{plan.title}</Text>
++        <Text style={[styles.planSummaryDeckCopy, { color: palette.muted }]}>{plan.summary}</Text>
++        <Text style={[styles.planSummaryRouteLine, { color: palette.text }]} numberOfLines={2}>{routeLabel}</Text>
++      </View>
++
++      <PlanPlaceRoute places={plan.places} />
++
++      <View style={[styles.planSummaryMetaRow, { borderTopColor: palette.border }]}>
++        <Text style={[styles.planSummaryMetaText, { color: palette.muted }]}>{plan.startLabel} · {plan.places.length} places · {plan.joinedCount} joined</Text>
++        <Text style={[styles.planSummaryCardCount, { color: palette.text }]}>01/{String(totalCards).padStart(2, "0")}</Text>
++      </View>
++    </View>
++  );
++}
++
++function PlanPlacePosterBackdrop({ place }: { place: PlanPlacePreview }) {
++  const { palette } = useTheme();
++  const isOnline = place.kind === "online_place";
++  const lines = Array.from({ length: 7 }, (_, index) => index);
++
++  return (
++    <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.planPosterBackdrop, { backgroundColor: isOnline ? palette.deckSurface2 : palette.deckSurface1 }]}>
++      <View style={[styles.planPosterGlow, { backgroundColor: isOnline ? palette.deckSurface1 : palette.deckSurface2 }]} />
++      {lines.map((line) => (
++        <View
++          key={`poster-line-${place.id}-${line}`}
++          style={[
++            styles.planPosterLine,
++            {
++              top: 22 + line * 31,
++              left: line % 2 === 0 ? -18 : 36,
++              right: line % 2 === 0 ? 42 : -24,
++              opacity: isOnline ? 0.22 : 0.18,
++              transform: [{ rotate: isOnline ? "-10deg" : "8deg" }],
++            },
++          ]}
++        />
++      ))}
++      <Text style={styles.planPosterVisualLabel}>{place.imageLabel || (isOnline ? "Platform visual" : "Place image")}</Text>
++    </View>
++  );
++}
++
+ function PlanPlaceTimeline({ places }: { places: PlanPlacePreview[] }) {
+   const { palette } = useTheme();
+ 
+@@ -1210,8 +1283,6 @@ function PlanCard({
+   const modeLabel = getPlanModeLabel(plan);
+   const joinActionLabel = getPlanJoinActionLabel(plan, joined);
+   const joinDisabled = !canJoinPlan(plan, joined);
+-  const compactMeta = `${plan.startLabel} · ${plan.places.length} places · ${plan.joinedCount} joined`;
+-
+   return (
+     <View style={[styles.tradeCard, styles.planDeckCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+       <Pressable
+@@ -1224,37 +1295,11 @@ function PlanCard({
+           Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+         ]}
+       >
+-        <View style={styles.cardTopLine}>
+-          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PLAN · {modeLabel.toUpperCase()}</Text>
+-          <View style={styles.planTopTags}>
+-            {joined ? (
+-              <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.text }]}>
+-                <Text style={[styles.smallTagText, { color: palette.background }]}>{isCurrentUserPlan(plan) ? "YOURS" : "JOINED"}</Text>
+-              </View>
+-            ) : null}
+-            <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+-              <Text style={[styles.smallTagText, { color: palette.text }]}>{plan.status.toUpperCase()}</Text>
+-            </View>
+-          </View>
+-        </View>
+-
+-        <PlanDeckImageStrip places={plan.places} modeLabel={modeLabel} />
+-
+-        <View style={styles.planDeckTitleBlock}>
+-          <Text style={[styles.exchangeLabel, { color: palette.muted }]}>{plan.category} plan</Text>
+-          <Text style={[styles.exchangeTitle, styles.planDeckTitle, { color: palette.text }]}>{plan.title}</Text>
+-          <Text style={[styles.planDeckSummary, { color: palette.muted }]}>{plan.summary}</Text>
+-        </View>
+-
+-        <View style={styles.exchangeBlock}>
+-          <View style={[styles.exchangeDivider, { backgroundColor: palette.border }]} />
+-          <Text style={[styles.exchangeIcon, { color: palette.muted }]}>⌁</Text>
+-          <View style={[styles.exchangeDivider, { backgroundColor: palette.border }]} />
+-        </View>
+-
+-        <PlanPlaceRoute places={plan.places} />
+-
+-        <Text style={[styles.tradeMeta, { color: palette.muted }]}>{compactMeta}</Text>
++        <PlanSummaryDeckBody
++          plan={plan}
++          eyebrow={`PLAN · ${modeLabel.toUpperCase()}`}
++          rightLabels={[...(joined ? [isCurrentUserPlan(plan) ? "YOURS" : "JOINED"] : []), plan.status.toUpperCase()]}
++        />
+       </Pressable>
+ 
+       {expanded ? (
+@@ -1266,8 +1311,10 @@ function PlanCard({
+             <PlanMiniStat label="status" value={plan.status} />
+           </View>
+ 
+-          <View style={styles.planColumns}>
+-            <PlanPlaceTimeline places={plan.places} />
++          <View style={styles.planPlaceCardStack}>
++            {plan.places.map((place) => (
++              <PlanDeckPlacePreviewCard key={place.id} place={place} totalPlaces={plan.places.length} />
++            ))}
+           </View>
+ 
+           <View style={[styles.nextStepPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+@@ -1279,7 +1326,7 @@ function PlanCard({
+       ) : null}
+ 
+       <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
+-        <Text style={[styles.footerMeta, { color: palette.muted }]}>{expanded ? "Deck expanded" : "Tap to preview ordered places"}</Text>
++        <Text style={[styles.footerMeta, { color: palette.muted }]}>{expanded ? "Deck expanded" : "Tap to preview visual place cards"}</Text>
+         <Text style={[styles.footerAction, { color: palette.text }]}>{expanded ? "Collapse" : joinActionLabel}</Text>
+       </View>
+ 
+@@ -1435,7 +1482,7 @@ function PlanDetailPage({
+             {joined ? (isCurrentUserPlan(plan) ? "This is your open plan." : "You joined this open plan.") : "Join freely without owner approval."}
+           </Text>
+           <Text style={[styles.detailHelpText, { color: palette.muted }]}>
+-            PLAN-LAB11 keeps this independent from Trade while the create preview now matches the feed deck style.
++            PLAN-LAB12 keeps this independent from Trade while the plan summary stays theme-based and places become visual cards.
+           </Text>
+         </View>
+         <View style={styles.planActionsInline}>
+@@ -2058,36 +2105,9 @@ function PlanDeckSummaryPreviewCard({ plan }: { plan: PlanPreview }) {
+ 
+   return (
+     <View style={[styles.tradeCard, styles.planDeckCard, styles.planDeckPreviewCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+-      <View style={styles.cardTopLine}>
+-        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>CARD 1 · PLAN SUMMARY</Text>
+-        <View style={styles.planTopTags}>
+-          <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+-            <Text style={[styles.smallTagText, { color: palette.text }]}>PREVIEW</Text>
+-          </View>
+-          <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+-            <Text style={[styles.smallTagText, { color: palette.text }]}>{modeLabel.toUpperCase()}</Text>
+-          </View>
+-        </View>
+-      </View>
+-
+-      <PlanDeckImageStrip places={plan.places} modeLabel={modeLabel} />
+-
+-      <View style={styles.planDeckTitleBlock}>
+-        <Text style={[styles.exchangeLabel, { color: palette.muted }]}>{plan.category} plan</Text>
+-        <Text style={[styles.exchangeTitle, styles.planDeckTitle, { color: palette.text }]}>{plan.title}</Text>
+-        <Text style={[styles.planDeckSummary, { color: palette.muted }]}>{plan.summary}</Text>
+-      </View>
+-
+-      <View style={styles.exchangeBlock}>
+-        <View style={[styles.exchangeDivider, { backgroundColor: palette.border }]} />
+-        <Text style={[styles.exchangeIcon, { color: palette.muted }]}>⌁</Text>
+-        <View style={[styles.exchangeDivider, { backgroundColor: palette.border }]} />
+-      </View>
+-
+-      <PlanPlaceRoute places={plan.places} />
+-
++      <PlanSummaryDeckBody plan={plan} eyebrow="CARD 1 · PLAN SUMMARY" rightLabels={["PREVIEW", modeLabel.toUpperCase()]} />
+       <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
+-        <Text style={[styles.footerMeta, { color: palette.muted }]}>{plan.startLabel} · {plan.places.length} places</Text>
++        <Text style={[styles.footerMeta, { color: palette.muted }]}>Theme summary · no background image</Text>
+         <Text style={[styles.footerAction, { color: palette.text }]}>Summary card</Text>
+       </View>
+     </View>
+@@ -2095,43 +2115,41 @@ function PlanDeckSummaryPreviewCard({ plan }: { plan: PlanPreview }) {
+ }
+ 
+ function PlanDeckPlacePreviewCard({ place, totalPlaces }: { place: PlanPlacePreview; totalPlaces: number }) {
+-  const { palette } = useTheme();
+   const kindLabel = place.kind === "online_place" ? "ONLINE" : "LOCAL";
++  const placeMeta = `${place.timeLabel || "Flexible"} · ${place.addressOrPlatform}`;
+ 
+   return (
+-    <View style={[styles.tradeCard, styles.planDeckCard, styles.planDeckPreviewCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+-      <View style={styles.cardTopLine}>
+-        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>CARD {place.order + 1} · PLACE {place.order}/{totalPlaces}</Text>
+-        <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+-          <Text style={[styles.smallTagText, { color: palette.text }]}>{kindLabel}</Text>
+-        </View>
+-      </View>
++    <View style={[styles.tradeCard, styles.planDeckCard, styles.planDeckPreviewCard, styles.planPosterPlaceCard]}>
++      <PlanPlacePosterBackdrop place={place} />
+ 
+-      <View style={[styles.planPreviewPlaceMedia, { borderColor: palette.border, backgroundColor: palette.deckSurface1 }]}>
+-        <View style={styles.planDeckImageTopRow}>
+-          <Text style={[styles.planDeckImageEyebrow, { color: palette.muted }]}>{kindLabel} PLACE</Text>
+-          <View style={[styles.planVisualKindPill, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+-            <Text style={[styles.planVisualKindText, { color: palette.text }]}>{place.timeLabel || "FLEXIBLE"}</Text>
+-          </View>
++      <View style={styles.planPosterTopBadges}>
++        <View style={[styles.planPosterBadge, styles.planPosterPrimaryBadge]}>
++          <Text style={styles.planPosterBadgeText}>PLACE {place.order}/{totalPlaces}</Text>
++        </View>
++        <View style={[styles.planPosterBadge, styles.planPosterKindBadge]}>
++          <Text style={styles.planPosterBadgeText}>{kindLabel}</Text>
+         </View>
+-        <Text style={[styles.planDeckImageTitle, { color: palette.text }]}>{place.imageLabel || "Place image"}</Text>
+-        <Text style={[styles.planDeckImageMeta, { color: palette.muted }]}>{place.order} · {place.title}</Text>
+-      </View>
+-
+-      <View style={styles.planDeckTitleBlock}>
+-        <Text style={[styles.exchangeLabel, { color: palette.muted }]}>{kindLabel.toLowerCase()} stop</Text>
+-        <Text style={[styles.exchangeTitle, styles.planDeckTitle, { color: palette.text }]}>{place.title}</Text>
+-        <Text style={[styles.planDeckSummary, { color: palette.muted }]}>{place.note}</Text>
+       </View>
+ 
+-      <View style={[styles.planPreviewPlaceMetaPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+-        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>Address / platform</Text>
+-        <Text style={[styles.nextStepText, { color: palette.text }]}>{place.addressOrPlatform}</Text>
++      <View pointerEvents="none" style={styles.planPosterBlurWash}>
++        <View style={styles.planPosterBlurBandSoft} />
++        <View style={styles.planPosterBlurBandStrong} />
++        <View style={styles.planPosterBlurBandDeep} />
+       </View>
+ 
+-      <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
+-        <Text style={[styles.footerMeta, { color: palette.muted }]}>Ordered place card</Text>
+-        <Text style={[styles.footerAction, { color: palette.text }]}>#{place.order}</Text>
++      <View style={styles.planPosterBottomContent}>
++        <Text style={styles.planPosterEyebrow}>{kindLabel.toLowerCase()} stop · {place.order}</Text>
++        <Text style={styles.planPosterTitle}>{place.title}</Text>
++        <Text style={styles.planPosterNote}>{place.note}</Text>
++        <Text style={styles.planPosterMeta}>{placeMeta}</Text>
++        <View style={styles.planPosterChipRow}>
++          <View style={styles.planPosterChip}>
++            <Text style={styles.planPosterChipText}>{place.kind === "online_place" ? "Platform" : "Place"}</Text>
++          </View>
++          <View style={styles.planPosterChip}>
++            <Text style={styles.planPosterChipText}>{place.timeLabel || "Flexible"}</Text>
++          </View>
++        </View>
+       </View>
+     </View>
+   );
+@@ -2152,7 +2170,7 @@ function PlanCreatePreview({ draft }: { draft: PlanCreateDraft }) {
+           </View>
+           <PlanModeBadge label={`${totalCards} cards`} />
+         </View>
+-        <Text style={[styles.detailHelpText, { color: palette.muted }]}>This is the non-clickable preview users see before opening the mock plan: one summary card, then one card for each ordered place.</Text>
++        <Text style={[styles.detailHelpText, { color: palette.muted }]}>This is the non-clickable preview users see before opening the mock plan: a clean theme summary card, then visual place cards with bottom text overlays.</Text>
+       </View>
+ 
+       <PlanDeckSummaryPreviewCard plan={previewPlan} />
+@@ -2273,9 +2291,9 @@ function PlanCreateFlow({
+           </View>
+         </View>
+         <View style={styles.heroTextBlock}>
+-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB11 · DECK PREVIEW PARITY</Text>
++          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB12 · VISUAL PLACE CARDS</Text>
+           <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
+-          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The final preview now mirrors the feed deck rhythm with a summary card and ordered place cards.</Text>
++          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The preview now uses a clean theme summary card followed by visual place cards.</Text>
+         </View>
+         <CreateStepIndicator activeStepId={activeStep.id} onSelect={(stepId) => onChangeStepIndex(planCreateSteps.findIndex((step) => step.id === stepId))} />
+       </View>
+@@ -4477,6 +4495,232 @@ const styles = StyleSheet.create({
+     justifyContent: "space-between",
+     gap: 12,
+   },
++  planSummarySurface: {
++    minHeight: 258,
++    justifyContent: "space-between",
++    overflow: "hidden",
++  },
++  planSummaryCenterBlock: {
++    flex: 1,
++    minHeight: 126,
++    alignItems: "center",
++    justifyContent: "center",
++    paddingVertical: 16,
++    gap: 7,
++  },
++  planSummaryModeLabel: {
++    fontSize: 11,
++    fontWeight: "900",
++    letterSpacing: 0.8,
++    textTransform: "uppercase",
++  },
++  planSummaryDeckTitle: {
++    maxWidth: 560,
++    textAlign: "center",
++    fontSize: 28,
++    lineHeight: 32,
++    fontWeight: "900",
++    letterSpacing: -0.72,
++  },
++  planSummaryDeckCopy: {
++    maxWidth: 560,
++    textAlign: "center",
++    fontSize: 14,
++    lineHeight: 20,
++    fontWeight: "700",
++  },
++  planSummaryRouteLine: {
++    maxWidth: 560,
++    marginTop: 4,
++    textAlign: "center",
++    fontSize: 13,
++    lineHeight: 18,
++    fontWeight: "900",
++  },
++  planSummaryMetaRow: {
++    marginTop: 14,
++    paddingTop: 12,
++    borderTopWidth: 1,
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 12,
++  },
++  planSummaryMetaText: {
++    flex: 1,
++    fontSize: 12,
++    lineHeight: 16,
++    fontWeight: "800",
++  },
++  planSummaryCardCount: {
++    fontSize: 12,
++    lineHeight: 16,
++    fontWeight: "900",
++    letterSpacing: 0.5,
++  },
++  planPlaceCardStack: {
++    marginTop: 14,
++    gap: 12,
++  },
++  planPosterPlaceCard: {
++    minHeight: 318,
++    padding: 0,
++    overflow: "hidden",
++    borderWidth: 0,
++  },
++  planPosterBackdrop: {
++    overflow: "hidden",
++  },
++  planPosterGlow: {
++    position: "absolute",
++    top: -42,
++    right: -34,
++    width: 184,
++    height: 184,
++    borderRadius: 92,
++    opacity: 0.42,
++  },
++  planPosterLine: {
++    position: "absolute",
++    height: 14,
++    borderRadius: 999,
++    backgroundColor: "rgba(255,255,255,0.46)",
++  },
++  planPosterVisualLabel: {
++    position: "absolute",
++    top: 112,
++    left: 22,
++    right: 22,
++    color: "rgba(255,255,255,0.54)",
++    textAlign: "center",
++    fontSize: 26,
++    lineHeight: 31,
++    fontWeight: "900",
++    letterSpacing: -0.7,
++  },
++  planPosterTopBadges: {
++    position: "absolute",
++    top: 14,
++    left: 14,
++    right: 14,
++    zIndex: 3,
++    flexDirection: "row",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: 10,
++  },
++  planPosterBadge: {
++    minHeight: 30,
++    borderRadius: 999,
++    paddingHorizontal: 11,
++    alignItems: "center",
++    justifyContent: "center",
++    borderWidth: 1,
++    borderColor: "rgba(255,255,255,0.34)",
++  },
++  planPosterPrimaryBadge: {
++    backgroundColor: "rgba(0,0,0,0.32)",
++  },
++  planPosterKindBadge: {
++    backgroundColor: "rgba(255,255,255,0.16)",
++  },
++  planPosterBadgeText: {
++    color: "#FFFFFF",
++    fontSize: 10,
++    lineHeight: 13,
++    fontWeight: "900",
++    letterSpacing: 0.7,
++  },
++  planPosterBlurWash: {
++    position: "absolute",
++    left: 0,
++    right: 0,
++    bottom: 0,
++    height: "58%",
++    zIndex: 1,
++  },
++  planPosterBlurBandSoft: {
++    position: "absolute",
++    left: 0,
++    right: 0,
++    top: 0,
++    height: "44%",
++    backgroundColor: "rgba(0,0,0,0.14)",
++  },
++  planPosterBlurBandStrong: {
++    position: "absolute",
++    left: 0,
++    right: 0,
++    top: "28%",
++    height: "44%",
++    backgroundColor: "rgba(0,0,0,0.3)",
++  },
++  planPosterBlurBandDeep: {
++    position: "absolute",
++    left: 0,
++    right: 0,
++    bottom: 0,
++    height: "48%",
++    backgroundColor: "rgba(0,0,0,0.56)",
++  },
++  planPosterBottomContent: {
++    position: "absolute",
++    left: 0,
++    right: 0,
++    bottom: 0,
++    zIndex: 2,
++    padding: 18,
++    alignItems: "flex-start",
++    gap: 5,
++  },
++  planPosterEyebrow: {
++    color: "rgba(255,255,255,0.76)",
++    fontSize: 11,
++    lineHeight: 14,
++    fontWeight: "900",
++    letterSpacing: 0.7,
++    textTransform: "uppercase",
++  },
++  planPosterTitle: {
++    color: "#FFFFFF",
++    fontSize: 27,
++    lineHeight: 31,
++    fontWeight: "900",
++    letterSpacing: -0.65,
++  },
++  planPosterNote: {
++    maxWidth: 560,
++    color: "rgba(255,255,255,0.86)",
++    fontSize: 14,
++    lineHeight: 19,
++    fontWeight: "700",
++  },
++  planPosterMeta: {
++    color: "rgba(255,255,255,0.76)",
++    fontSize: 12,
++    lineHeight: 16,
++    fontWeight: "800",
++  },
++  planPosterChipRow: {
++    marginTop: 5,
++    flexDirection: "row",
++    flexWrap: "wrap",
++    gap: 7,
++  },
++  planPosterChip: {
++    borderRadius: 999,
++    borderWidth: 1,
++    borderColor: "rgba(255,255,255,0.28)",
++    backgroundColor: "rgba(255,255,255,0.12)",
++    paddingHorizontal: 9,
++    paddingVertical: 5,
++  },
++  planPosterChipText: {
++    color: "rgba(255,255,255,0.86)",
++    fontSize: 10,
++    lineHeight: 12,
++    fontWeight: "900",
++  },
+   draftPlaceTitleBlock: {
+     flex: 1,
+   },
