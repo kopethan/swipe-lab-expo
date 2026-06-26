@@ -5,12 +5,12 @@ export const SQUARE_STACK_VISIBLE_BEFORE = 1;
 // without making the idle stack look like more than four visible cards.
 export const SQUARE_STACK_VISIBLE_AFTER = 4;
 
-export const SQUARE_STACK_COMMIT_THRESHOLD = 0.36;
-export const SQUARE_STACK_VELOCITY_THRESHOLD = 1.05;
+export const SQUARE_STACK_COMMIT_THRESHOLD = 0.4;
+export const SQUARE_STACK_VELOCITY_THRESHOLD = 1.18;
 
-export const SQUARE_STACK_DEPTH_ALLOWANCE_X = 72;
-export const SQUARE_STACK_DEPTH_ALLOWANCE_Y = 72;
-export const SQUARE_STACK_DEFAULT_MIN_CARD_SIZE = 248;
+export const SQUARE_STACK_DEPTH_ALLOWANCE_X = 36;
+export const SQUARE_STACK_DEPTH_ALLOWANCE_Y = 46;
+export const SQUARE_STACK_DEFAULT_MIN_CARD_SIZE = 280;
 export const SQUARE_STACK_DEFAULT_MAX_CARD_SIZE = 390;
 
 export type SquareStackLayoutInput = {
@@ -84,29 +84,29 @@ export function getSquareStackTransform(visualOffset: number, cardSize: number, 
   // fourth-after card stays mounted as a hidden tail so it can slide into the
   // third depth slot during a next swipe instead of appearing after release.
   if (depthEffect === "motionOnly") {
-    const motionInput = [-1, -0.72, -0.28, -0.08, 0, 1, 2, 3, 4];
+    const motionInput = [-1, -0.72, -0.28, -0.08, 0, 0.08, 0.28, 0.72, 1, 2, 3, 4];
     const translateX = interpolate(
       clampedOffset,
       motionInput,
-      [-cardSize * 0.74, -cardSize * 0.52, -cardSize * 0.16, 0, 0, 10, 20, 30, 40],
+      [-cardSize * 0.74, -cardSize * 0.52, -cardSize * 0.16, 0, 0, 0, 2, 5, 7, 14, 21, 28],
       Extrapolation.CLAMP
     );
     const translateY = interpolate(
       clampedOffset,
       motionInput,
-      [-cardSize * 0.74, -cardSize * 0.52, -cardSize * 0.16, 0, 0, 10, 20, 30, 40],
+      [-cardSize * 0.74, -cardSize * 0.52, -cardSize * 0.16, 0, 0, 0, 2, 5, 7, 14, 21, 28],
       Extrapolation.CLAMP
     );
     const scale = interpolate(
       clampedOffset,
       motionInput,
-      [0.88, 0.925, 0.975, 0.998, 1, 0.984, 0.968, 0.952, 0.936],
+      [0.88, 0.925, 0.975, 0.998, 1, 0.999, 0.996, 0.991, 0.988, 0.976, 0.964, 0.952],
       Extrapolation.CLAMP
     );
     const opacity = interpolate(
       clampedOffset,
       motionInput,
-      [0, 0.18, 0.72, 0.96, 1, 0.86, 0.64, 0.42, 0],
+      [0, 0.18, 0.86, 0.98, 1, 0.98, 0.86, 0.18, 0, 0, 0, 0],
       Extrapolation.CLAMP
     );
 

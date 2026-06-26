@@ -30,6 +30,7 @@ type LayerProps<TCard extends SquareStackDeckCard> = {
   index: number;
   total: number;
   size: number;
+  committedIndex: number;
   baseIndex: SharedValue<number>;
   progress: SharedValue<number>;
   renderCard: SquareStackDeckProps<TCard>["renderCard"];
@@ -41,21 +42,39 @@ function SquareStackLayerInner<TCard extends SquareStackDeckCard>({
   index,
   total,
   size,
+  committedIndex,
   baseIndex,
   progress,
   renderCard,
   depthEffect,
 }: LayerProps<TCard>) {
+  const depthOffset = index - committedIndex;
+  const isCommittedTopLayer = depthOffset === 0;
+  const isIncomingPreviousLayer = depthOffset === -1;
+
   const animatedStyle = useAnimatedStyle(() => {
     const visualOffset = index - baseIndex.value - progress.value;
     const pose = getSquareStackTransform(visualOffset, size, depthEffect ?? "flat");
+    let layerOpacity = pose.opacity;
+
+    // Resting decks are forward-only: the previous card is mounted only so it
+    // can enter during a back gesture, but it stays invisible at idle.
+    if (index < baseIndex.value && progress.value >= 0) {
+      layerOpacity = 0;
+    }
+
+    // Keep the readable card opaque while it is moving. This prevents lower
+    // layers from flashing through during the diagonal promotion.
+    if ((isCommittedTopLayer && visualOffset < 0) || (isIncomingPreviousLayer && progress.value < 0 && visualOffset < 0)) {
+      layerOpacity = 1;
+    }
 
     return {
-      opacity: pose.opacity,
+      opacity: layerOpacity,
       zIndex: getSquareStackZIndex(visualOffset),
       transform: [{ translateX: pose.translateX }, { translateY: pose.translateY }, { scale: pose.scale }],
     };
-  }, [depthEffect, index, size]);
+  }, [depthEffect, index, isCommittedTopLayer, isIncomingPreviousLayer, size]);
 
   const shadowStyle = useAnimatedStyle(() => {
     const visualOffset = index - baseIndex.value - progress.value;
@@ -88,13 +107,15 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
   initialIndex = 0,
   renderCard,
   onIndexChange,
+  onSwipeStart,
+  onSwipeEnd,
   availableWidth,
   availableHeight,
   minCardSize,
   maxCardSize,
   renderWindow = "visible",
-  showDebugBadge = true,
-  depthEffect = "flat",
+  showDebugBadge = false,
+  depthEffect = "motionOnly",
 }: SquareStackDeckProps<TCard>) {
   const { width, height } = useWindowDimensions();
   const layoutMetrics = useMemo(
@@ -120,6 +141,7 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
   const gestureIntent = useSharedValue<SquareStackGestureIntent>("UNDECIDED");
   const gestureStartAbsX = useSharedValue(0);
   const gestureStartAbsY = useSharedValue(0);
+  const deckSwipeActive = useSharedValue(false);
 
   useEffect(() => {
     const nextIndex = Math.min(committedIndex, Math.max(cards.length - 1, 0));
@@ -200,6 +222,11 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
             return;
           }
 
+          if (onSwipeStart) {
+            deckSwipeActive.value = true;
+            runOnJS(onSwipeStart)();
+          }
+
           state.activate();
         })
         .onUpdate((event) => {
@@ -208,7 +235,7 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
           }
 
           const diagonalDrag = event.translationX + event.translationY * 0.9;
-          const rawProgress = -diagonalDrag / (cardSize * 0.72);
+          const rawProgress = -diagonalDrag / (cardSize * 0.76);
 
           const canGoNext = baseIndex.value < cards.length - 1;
           const canGoPrev = baseIndex.value > 0;
@@ -226,7 +253,7 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
             return;
           }
 
-          const velocityProgress = -(event.velocityX + event.velocityY * 0.9) / (cardSize * 0.72);
+          const velocityProgress = -(event.velocityX + event.velocityY * 0.9) / (cardSize * 0.76);
           const currentProgress = progress.value;
           const canGoNext = baseIndex.value < cards.length - 1;
           const canGoPrev = baseIndex.value > 0;
@@ -271,9 +298,15 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
           );
         })
         .onFinalize(() => {
+          if (deckSwipeActive.value) {
+            deckSwipeActive.value = false;
+            if (onSwipeEnd) {
+              runOnJS(onSwipeEnd)();
+            }
+          }
           gestureIntent.value = "UNDECIDED";
         }),
-    [baseIndex, cardSize, cards.length, commitIndex, gestureIntent, gestureStartAbsX, gestureStartAbsY, progress]
+    [baseIndex, cardSize, cards.length, commitIndex, deckSwipeActive, gestureIntent, gestureStartAbsX, gestureStartAbsY, onSwipeEnd, onSwipeStart, progress]
   );
 
   if (cards.length === 0) {
@@ -298,6 +331,7 @@ export function ContinuousSquareStackDeck<TCard extends SquareStackDeckCard>({
                 index={cardIndex}
                 total={cards.length}
                 size={cardSize}
+                committedIndex={committedIndex}
                 baseIndex={baseIndex}
                 progress={progress}
                 renderCard={renderCard}

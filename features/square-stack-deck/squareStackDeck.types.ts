@@ -16,6 +16,12 @@ export type SquareStackDeckProps<TCard extends SquareStackDeckCard> = {
   renderCard: (args: SquareStackDeckRenderArgs<TCard>) => React.ReactNode;
   onIndexChange?: (index: number, card: TCard) => void;
   /**
+   * Optional gesture lifecycle hooks for product screens that need to suppress
+   * tap/open actions while a diagonal swipe is being recognized.
+   */
+  onSwipeStart?: () => void;
+  onSwipeEnd?: () => void;
+  /**
    * By default the square deck only mounts the active card and nearby depth
    * layers. Use "all" for small feeds where back-list cards should already
    * have their real content mounted.

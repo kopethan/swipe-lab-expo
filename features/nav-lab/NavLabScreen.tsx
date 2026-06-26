@@ -1,5 +1,5 @@
 import { Stack, router } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -12,12 +12,14 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ContinuousSquareStackDeck, type SquareStackDeckCard } from "@/features/square-stack-deck";
 import { useTheme } from "@/providers/ThemeProvider";
 
 import { meHubSections, myPlaceLibrary, navLabTabs, placeLibraryFilters, placeLibraryGroups, planPreviews, starterPlaceLibrary, tradeFilters, tradePreviews } from "./navLab.mockData";
 import type { MeHubSection, MeHubSectionId, NavLabTabId, PlaceLibraryFilterId, PlaceLibraryItem, PlaceLibrarySource, PlanMode, PlanPlaceKind, PlanPlacePreview, PlanPreview, TradeFilterId, TradePreview } from "./navLab.types";
 
 const desktopBreakpoint = 820;
+const tabletContentBreakpoint = 700;
 const meOrderStorageKey = "hellowhen-nav-lab-me-section-order-v1";
 const defaultMeSectionOrder: MeHubSectionId[] = ["activity", "plans", "tools", "account"];
 
@@ -95,10 +97,19 @@ const planCurrentUserName = "Kopy";
 
 type PlanFeedFilterId = "explore" | "joined" | "created";
 
+type PlanDiscussionMessage = {
+  id: string;
+  authorName: string;
+  roleLabel: string;
+  text: string;
+  timeLabel: string;
+  isCurrentUser?: boolean;
+};
+
 const planFeedFilters: { id: PlanFeedFilterId; label: string; helper: string }[] = [
-  { id: "explore", label: "Explore", helper: "All open, online, local, mixed, and draft plan examples." },
-  { id: "joined", label: "Joined", helper: "Plans you joined freely in this local lab session." },
-  { id: "created", label: "Created", helper: "Mock plans created by Kopy inside this prototype." },
+  { id: "explore", label: "Explore", helper: "Open local, online, mixed, and draft plan examples." },
+  { id: "joined", label: "Joined", helper: "Plans you joined freely in this local session." },
+  { id: "created", label: "Created", helper: "Plans created by Kopy inside this local session." },
 ];
 
 function isCurrentUserPlan(plan: PlanPreview) {
@@ -139,6 +150,34 @@ function addCurrentUserToJoinedPreview(joinedPreview: string[]) {
   return [...namedItems, planCurrentUserName, ...compactCountItems];
 }
 
+function removeCurrentUserFromJoinedPreview(joinedPreview: string[]) {
+  return joinedPreview.filter((name) => name !== planCurrentUserName);
+}
+
+function getPlanJoinPanelTitle(plan: PlanPreview, joined: boolean) {
+  if (isCurrentUserPlan(plan)) {
+    return "This is your plan.";
+  }
+
+  if (joined) {
+    return "You joined this plan.";
+  }
+
+  return "Join freely and follow the route.";
+}
+
+function getPlanJoinPanelCopy(plan: PlanPreview, joined: boolean) {
+  if (isCurrentUserPlan(plan)) {
+    return "You can use this detail page to review the route and the people preview.";
+  }
+
+  if (joined) {
+    return "You can leave this plan from the local preview without notifying anyone.";
+  }
+
+  return "Joining is open, free, and does not create a trade, agenda item, payment, or owner approval request.";
+}
+
 function isPlanCreatedByCurrentUser(plan: PlanPreview) {
   return plan.ownerName === planCurrentUserName;
 }
@@ -177,14 +216,14 @@ function getPlanFeedEmptyTitle(filterId: PlanFeedFilterId) {
 
 function getPlanFeedEmptyCopy(filterId: PlanFeedFilterId) {
   if (filterId === "joined") {
-    return "Join an open plan from Explore and it will appear here in this local prototype.";
+    return "Join an open plan from Explore and it will appear here in this local preview.";
   }
 
   if (filterId === "created") {
-    return "Create a mock local, online, or mixed plan and it will appear in this view.";
+    return "Create a local, online, or mixed plan and it will appear in this view.";
   }
 
-  return "The Plans feed is empty in this lab state. Create a mock plan to test the deck flow.";
+  return "The Plans feed is empty in this preview state. Create a plan to test the deck flow.";
 }
 
 type PlanCreateStepId = "mode" | "places" | "arrange" | "rules" | "preview";
@@ -231,11 +270,11 @@ type PlaceCreateDraft = {
 };
 
 const planCreateSteps: { id: PlanCreateStepId; label: string; helper: string }[] = [
-  { id: "mode", label: "Mode", helper: "Offline, online, or mixed." },
-  { id: "places", label: "Places", helper: "Search My places, Starter places, or create new." },
-  { id: "arrange", label: "Arrange", helper: "Order places, route notes, and per-stop timing." },
-  { id: "rules", label: "Rules", helper: "Join deadline, capacity, final end time, and optional title." },
-  { id: "preview", label: "Preview", helper: "Review the generated deck before opening." },
+  { id: "mode", label: "Type", helper: "Choose local, online, or mixed." },
+  { id: "places", label: "Places", helper: "Pick reusable places for the route." },
+  { id: "arrange", label: "Route", helper: "Order stops and set useful timing." },
+  { id: "rules", label: "Details", helper: "Set joining, capacity, and optional cover text." },
+  { id: "preview", label: "Preview", helper: "Check the deck before creating it." },
 ];
 
 
@@ -463,7 +502,7 @@ function createLibraryPlaceFromDraft(draft: PlaceCreateDraft): PlaceLibraryItem 
     categoryLabel: draft.categoryLabel.trim() || (draft.kind === "online_place" ? "Online · Custom" : "Offline · Custom"),
     addressOrPlatform: draft.addressOrPlatform.trim() || (draft.kind === "online_place" ? "Online platform" : "Local address"),
     areaLabel: draft.areaLabel.trim() || (draft.kind === "online_place" ? "Online" : "Local"),
-    description: draft.description.trim() || "A reusable place created inside the lab prototype.",
+    description: draft.description.trim() || "A reusable place created in this local preview.",
     imageLabels: normalizePlaceImageLabels(draft.imageLabelsText, draft.kind),
     ownerName: planCurrentUserName,
     visibility: draft.kind === "online_place" ? "private" : "public",
@@ -496,8 +535,42 @@ function getPlaceLibrarySourceTitle(sourceId: PlaceLibrarySource) {
 
 function getPlaceLibrarySourceHelper(sourceId: PlaceLibrarySource) {
   return sourceId === "starter_place"
-    ? "Starter places are reusable templates for local and online plans. Later they can become verified official places."
-    : "Your reusable offline and online places. Create them separately, then pick them inside the Create Plan wizard.";
+    ? "Starter places are reusable templates you can preview, copy, or use as the first stop in a new plan."
+    : "Your reusable offline and online places. Preview details, edit them, or start a plan from one place.";
+}
+
+function getPlaceKindLabel(kind: PlanPlaceKind) {
+  return kind === "online_place" ? "Online place" : "Offline place";
+}
+
+function getPlaceKindShortLabel(kind: PlanPlaceKind) {
+  return kind === "online_place" ? "Online" : "Offline";
+}
+
+function getPlaceDetailSafetyLabel(place: PlaceLibraryItem) {
+  return place.safetyLabel ?? (place.kind === "online_place" ? "Check the link/domain before people open it." : "Use a public, easy-to-find meeting point.");
+}
+
+function getPlaceDetailAccessLabel(place: PlaceLibraryItem) {
+  if (place.kind === "online_place") {
+    return place.accessLabel || "Access shared after joining";
+  }
+
+  return place.accessLabel || "Public place";
+}
+
+function buildPlanDraftFromLibraryPlace(place: PlaceLibraryItem): PlanCreateDraft {
+  const mode: PlanMode = place.kind === "online_place" ? "online" : "local";
+  const seededPlace = createDraftPlaceFromLibraryItem(place, 0);
+
+  return {
+    ...createInitialPlanDraft(),
+    mode,
+    category: mode === "online" ? "Online" : "Local",
+    startLabel: place.defaultTimeLabel,
+    finalEndLabel: "",
+    places: [{ ...seededPlace, order: 1 }],
+  };
 }
 
 function getPlaceLibraryVisibleItems(sourceId: PlaceLibrarySource, filterId: PlaceLibraryFilterId, userPlaces: PlaceLibraryItem[], searchText: string) {
@@ -643,34 +716,42 @@ function getPlanCreateStepWarning(stepId: PlanCreateStepId) {
 
 function getPlanCreateStepPolishCopy(stepId: PlanCreateStepId) {
   if (stepId === "mode") {
-    return "Choose the plan world first. The title will be generated later from selected places.";
+    return "Start with the kind of plan you want to create. The public title will be generated from the places unless you add one later.";
   }
 
   if (stepId === "places") {
-    return "Pick reusable places from your library, starter templates, or create a new place on the spot.";
+    return "Choose from My places, starter places, or create a reusable place without leaving the wizard.";
   }
 
   if (stepId === "arrange") {
-    return "Put places in the right order, then translate/polish the note and instruction for each stop.";
+    return "Set the order, start times, visuals, and simple route notes for each stop.";
   }
 
   if (stepId === "rules") {
-    return "Set joining and timing rules. A custom title or plan note is optional, not required.";
+    return "Set the plan-level timing, capacity, and optional cover text shown on the detail page.";
   }
 
-  return "Review the generated summary card and the visual place cards before opening the mock plan.";
+  return "Swipe through the place cards one last time before creating the plan.";
 }
 
 function getPlanCreatePrimaryLabel(stepId: PlanCreateStepId) {
+  if (stepId === "mode") {
+    return "Choose places";
+  }
+
+  if (stepId === "places") {
+    return "Arrange route";
+  }
+
   if (stepId === "arrange") {
-    return "Review deck";
+    return "Set details";
   }
 
-  if (stepId === "preview") {
-    return "Open mock plan";
+  if (stepId === "rules") {
+    return "Preview plan";
   }
 
-  return "Continue";
+  return "Create plan";
 }
 
 function getCanOpenCreateStep(draft: PlanCreateDraft, targetStepId: PlanCreateStepId) {
@@ -723,7 +804,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
         </Pressable>
 
         <View style={styles.headerPill}>
-          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN-LAB19</Text>
+          <Text style={[styles.headerPillText, { color: palette.muted }]}>PLAN LAB</Text>
         </View>
 
         <Pressable
@@ -737,7 +818,7 @@ function LabHeader({ activeTab, isDesktop }: { activeTab: NavLabTabId; isDesktop
 
       <View style={styles.headerTitleRow}>
         <View style={styles.headerTitleBlock}>
-          <Text style={[styles.eyebrow, { color: palette.muted }]}>TITLELESS PLAN WIZARD</Text>
+          <Text style={[styles.eyebrow, { color: palette.muted }]}>PLANS · PLACES · JOIN</Text>
           <Text style={[styles.title, { color: palette.text }]}>{getTabTitle(activeTab)}</Text>
           <Text style={[styles.subtitle, { color: palette.muted }]}>{active.tagline}</Text>
         </View>
@@ -1087,7 +1168,7 @@ function MobileMeHub({
         <View style={styles.mobileHubToolbar}>
           <SectionHeader label="CUSTOMIZE ME" title="Reorder sections for small screens" />
           <Text style={[styles.customizeHint, { color: palette.muted }]}>
-            Section order is local to this lab prototype. Main navigation stays fixed.
+            Section order is local to this preview. Main navigation stays fixed.
           </Text>
           <View style={styles.customizeActions}>
             <Pressable
@@ -1232,7 +1313,7 @@ function MeScreen({ isDesktop }: { isDesktop: boolean }) {
         </View>
         <View style={[styles.profileStatPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
           <Text style={[styles.profileStatValue, { color: palette.text }]}>{totalCount}</Text>
-          <Text style={[styles.profileStatLabel, { color: palette.muted }]}>mock items</Text>
+          <Text style={[styles.profileStatLabel, { color: palette.muted }]}>items</Text>
         </View>
       </View>
 
@@ -1314,6 +1395,24 @@ function PlanModeBadge({ label }: { label: string }) {
   );
 }
 
+type PlanSwipeDeckCard = SquareStackDeckCard & { kind: "place"; plan: PlanPreview; place: PlanPlacePreview; placeIndex: number };
+
+function getPlanSwipeDeckCards(plan: PlanPreview): PlanSwipeDeckCard[] {
+  const visiblePlaces = plan.places.slice(0, 3);
+
+  return visiblePlaces.map((place, index) => ({
+    id: `${plan.id}-place-${place.id}`,
+    kind: "place" as const,
+    plan,
+    place,
+    placeIndex: index,
+  }));
+}
+
+function formatDeckCounter(index: number, total: number) {
+  return `${String(index + 1).padStart(2, "0")}/${String(total).padStart(2, "0")}`;
+}
+
 function getPlaceMediaFallbackLabel(kind: PlanPlaceKind) {
   return kind === "online_place" ? "PLATFORM VISUAL" : "MAP / PHOTO FALLBACK";
 }
@@ -1340,51 +1439,6 @@ function PlanPlaceRoute({ places }: { places: PlanPlacePreview[] }) {
           {index < places.length - 1 ? <Text style={[styles.planDeckRouteArrow, { color: palette.muted }]}>→</Text> : null}
         </React.Fragment>
       ))}
-    </View>
-  );
-}
-
-function PlanSummaryDeckBody({
-  plan,
-  eyebrow,
-  rightLabels,
-}: {
-  plan: PlanPreview;
-  eyebrow: string;
-  rightLabels: string[];
-}) {
-  const { mode, palette } = useTheme();
-  const modeLabel = getPlanModeLabel(plan);
-  const routeLabel = plan.places.map((place) => place.title).join(" → ");
-  const totalCards = plan.places.length + 1;
-  const summarySurface = mode === "dark" ? palette.surfaceAlt : palette.surface;
-
-  return (
-    <View style={[styles.planSummarySurface, { borderColor: palette.border, backgroundColor: summarySurface }]}>
-      <View style={styles.cardTopLine}>
-        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{eyebrow}</Text>
-        <View style={styles.planTopTags}>
-          {rightLabels.map((label) => (
-            <View key={label} style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
-              <Text style={[styles.smallTagText, { color: palette.text }]}>{label}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.planSummaryCenterBlock}>
-        <Text style={[styles.planSummaryModeLabel, { color: palette.muted }]}>{plan.category} · {modeLabel} plan</Text>
-        <Text style={[styles.planSummaryDeckTitle, { color: palette.text }]} numberOfLines={2}>{plan.title}</Text>
-        <Text style={[styles.planSummaryDeckCopy, { color: palette.muted }]} numberOfLines={3}>{plan.summary}</Text>
-        <Text style={[styles.planSummaryRouteLine, { color: palette.text }]} numberOfLines={2}>{routeLabel}</Text>
-      </View>
-
-      <PlanPlaceRoute places={plan.places} />
-
-      <View style={[styles.planSummaryMetaRow, { borderTopColor: palette.border }]}>
-        <Text style={[styles.planSummaryMetaText, { color: palette.muted }]}>{plan.startLabel}{plan.finalEndLabel ? ` → ${plan.finalEndLabel}` : ""} · {plan.durationLabel ?? "Flexible"} · {plan.places.length} places · {plan.joinedCount} joined</Text>
-        <Text style={[styles.planSummaryCardCount, { color: palette.text }]}>01/{String(totalCards).padStart(2, "0")}</Text>
-      </View>
     </View>
   );
 }
@@ -1447,124 +1501,439 @@ function PlanPlacePosterBackdrop({ place }: { place: PlanPlacePreview }) {
   );
 }
 
-function PlanCard({
-  plan,
-  expanded,
+function PlanDeckDots({ activeIndex, total }: { activeIndex: number; total: number }) {
+  const { palette } = useTheme();
+
+  return (
+    <View style={styles.planDeckDotsRow}>
+      <Text style={[styles.planDeckCounterText, { color: palette.text }]}>{formatDeckCounter(activeIndex, total)}</Text>
+      <View style={styles.planDeckDots}>
+        {Array.from({ length: total }, (_, index) => {
+          const active = index === activeIndex;
+          return (
+            <View
+              key={`plan-deck-dot-${index}`}
+              style={[
+                styles.planDeckDot,
+                {
+                  backgroundColor: active ? palette.text : palette.border,
+                  opacity: active ? 1 : 0.72,
+                },
+              ]}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function PlanDeckPlaceSwipeCard({
+  card,
   joined,
-  onToggle,
+  totalCards,
   onOpenDetail,
   onJoinPress,
+  onLeavePress,
+}: {
+  card: PlanSwipeDeckCard;
+  joined: boolean;
+  totalCards: number;
+  onOpenDetail: () => void;
+  onJoinPress?: () => void;
+  onLeavePress?: () => void;
+}) {
+  const { palette } = useTheme();
+  const showLeaveAction = joined && !isCurrentUserPlan(card.plan);
+  const joinDisabled = !showLeaveAction && !canJoinPlan(card.plan, joined);
+  const planActionLabel = showLeaveAction ? "Leave" : getPlanJoinActionLabel(card.plan, joined);
+  const planActionPress = showLeaveAction ? onLeavePress : onJoinPress;
+
+  return (
+    <View style={styles.planDeckPlaceSwipeButton}>
+      <PlanDeckPlacePreviewCard place={card.place} totalPlaces={Math.min(card.plan.places.length, 3)} fill reserveActionArea />
+      <Pressable
+        onPress={onOpenDetail}
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.planDeckOpenOverlay,
+          pressed ? styles.pressed : null,
+          Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+        ]}
+      />
+      <View pointerEvents="none" style={[styles.planDeckPlaceSwipeDots, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+        <PlanDeckDots activeIndex={card.placeIndex} total={totalCards} />
+      </View>
+      <View style={styles.planDeckPlaceActions}>
+        <PlanActionButton label="View plan" onPress={onOpenDetail} />
+        <PlanActionButton label={planActionLabel} primary disabled={joinDisabled} onPress={planActionPress} />
+      </View>
+    </View>
+  );
+}
+
+function PlanCard({
+  plan,
+  joined,
+  isDesktop,
+  onOpenDetail,
+  onJoinPress,
+  onLeavePress,
   onCreateSimilar,
 }: {
   plan: PlanPreview;
-  expanded: boolean;
   joined: boolean;
-  onToggle: () => void;
+  isDesktop: boolean;
   onOpenDetail: () => void;
   onJoinPress?: () => void;
+  onLeavePress?: () => void;
   onCreateSimilar?: () => void;
 }) {
   const { palette } = useTheme();
-  const modeLabel = getPlanModeLabel(plan);
-  const joinActionLabel = getPlanJoinActionLabel(plan, joined);
-  const joinDisabled = !canJoinPlan(plan, joined);
+  const { width } = useWindowDimensions();
+  const cards = useMemo(() => getPlanSwipeDeckCards(plan), [plan]);
+  const [activeDeckIndex, setActiveDeckIndex] = useState(0);
+  const [tapBlockedBySwipe, setTapBlockedBySwipe] = useState(false);
+  const tapBlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deckWidth = isDesktop ? 410 : Math.max(286, Math.min(width - 42, 420));
+  const deckHeight = isDesktop ? 410 : Math.max(286, Math.min(width - 42, 420));
+
+  const clearTapBlockTimer = useCallback(() => {
+    if (tapBlockTimerRef.current) {
+      clearTimeout(tapBlockTimerRef.current);
+      tapBlockTimerRef.current = null;
+    }
+  }, []);
+
+  const blockDeckTapsForSwipe = useCallback(() => {
+    clearTapBlockTimer();
+    setTapBlockedBySwipe(true);
+  }, [clearTapBlockTimer]);
+
+  const releaseDeckTapsAfterSwipe = useCallback(() => {
+    clearTapBlockTimer();
+    tapBlockTimerRef.current = setTimeout(() => {
+      tapBlockTimerRef.current = null;
+      setTapBlockedBySwipe(false);
+    }, 140);
+  }, [clearTapBlockTimer]);
+
+  const openDetailFromTap = useCallback(() => {
+    if (tapBlockedBySwipe) {
+      return;
+    }
+
+    onOpenDetail();
+  }, [onOpenDetail, tapBlockedBySwipe]);
+
+  useEffect(() => {
+    if (activeDeckIndex > cards.length - 1) {
+      setActiveDeckIndex(0);
+    }
+  }, [activeDeckIndex, cards.length]);
+
+  useEffect(() => clearTapBlockTimer, [clearTapBlockTimer]);
+
   return (
-    <View style={[styles.tradeCard, styles.planDeckCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+    <View style={[styles.planSwipeDeckShell, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <ContinuousSquareStackDeck
+        cards={cards}
+        availableWidth={deckWidth}
+        availableHeight={deckHeight}
+        minCardSize={282}
+        maxCardSize={360}
+        showDebugBadge={false}
+        depthEffect="motionOnly"
+        onSwipeStart={blockDeckTapsForSwipe}
+        onSwipeEnd={releaseDeckTapsAfterSwipe}
+        onIndexChange={(index) => setActiveDeckIndex(index)}
+        renderCard={({ card }) => (
+          <PlanDeckPlaceSwipeCard
+            card={card}
+            joined={joined}
+            totalCards={cards.length}
+            onOpenDetail={openDetailFromTap}
+            onJoinPress={onJoinPress}
+            onLeavePress={onLeavePress}
+          />
+        )}
+      />
+    </View>
+  );
+}
+
+function PlanParticipantPreviewChips({ names, highlightCurrentUser }: { names: string[]; highlightCurrentUser?: boolean }) {
+  const { palette } = useTheme();
+
+  if (names.length === 0) {
+    return <Text style={[styles.detailHelpText, { color: palette.muted }]}>No joined people shown yet.</Text>;
+  }
+
+  return (
+    <View style={styles.detailParticipantRow}>
+      {names.map((name) => {
+        const isCurrentUser = name === planCurrentUserName;
+        return (
+          <View
+            key={name}
+            style={[
+              styles.participantChip,
+              {
+                borderColor: isCurrentUser && highlightCurrentUser ? palette.text : palette.border,
+                backgroundColor: isCurrentUser && highlightCurrentUser ? palette.text : palette.surfaceAlt,
+              },
+            ]}
+          >
+            <Text style={[styles.participantChipText, { color: isCurrentUser && highlightCurrentUser ? palette.background : palette.text }]}>
+              {isCurrentUser ? "You" : name}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function PlanParticipantChips({ plan, highlightCurrentUser }: { plan: PlanPreview; highlightCurrentUser?: boolean }) {
+  return <PlanParticipantPreviewChips names={plan.joinedPreview} highlightCurrentUser={highlightCurrentUser} />;
+}
+
+function PlanDetailMetaStrip({ plan, modeLabel }: { plan: PlanPreview; modeLabel: string }) {
+  return (
+    <View style={styles.detailProductMetaStrip}>
+      <PlanMiniStat label="starts" value={plan.startLabel} />
+      <PlanMiniStat label="places" value={plan.places.length} />
+      <PlanMiniStat label="joined" value={plan.joinedCount} />
+      <PlanMiniStat label="mode" value={modeLabel} />
+    </View>
+  );
+}
+
+function PlanDetailPlaceThumbnail({ place }: { place: PlanPlacePreview }) {
+  const { palette } = useTheme();
+
+  return (
+    <View style={[styles.detailPlaceThumbnail, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+      <PlanPlacePosterBackdrop place={place} />
+      <View style={styles.detailPlaceThumbnailShade} />
+      <Text style={styles.detailPlaceThumbnailLabel}>{place.imageLabel || (place.kind === "online_place" ? "Platform" : "Place")}</Text>
+    </View>
+  );
+}
+
+function PlanDetailRouteTimeline({ places }: { places: PlanPlacePreview[] }) {
+  const { palette } = useTheme();
+
+  return (
+    <View style={styles.detailRouteTimeline}>
+      {places.map((place, index) => {
+        const isLast = index === places.length - 1;
+        const kindLabel = place.kind === "online_place" ? "Online" : "Local";
+
+        return (
+          <View key={place.id} style={styles.detailRouteTimelineItem}>
+            <View style={styles.detailRouteMarkerColumn}>
+              <View style={[styles.detailRouteMarker, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+                <Text style={[styles.detailRouteMarkerText, { color: palette.text }]}>{place.order}</Text>
+              </View>
+              {!isLast ? <View style={[styles.detailRouteLine, { backgroundColor: palette.border }]} /> : null}
+            </View>
+
+            <View style={[styles.detailRouteStopPanel, { borderColor: palette.border }]}>
+              <View style={styles.detailRouteStopMainRow}>
+                <View style={styles.detailRouteStopTextBlock}>
+                  <Text style={[styles.cardEyebrow, { color: palette.muted }]}>STOP {place.order} · {kindLabel.toUpperCase()}</Text>
+                  <Text style={[styles.detailRouteStopTitle, { color: palette.text }]}>{place.title}</Text>
+                  <Text style={[styles.detailRouteStopMeta, { color: palette.muted }]}>
+                    {place.timeLabel}{place.endTimeLabel ? ` → ${place.endTimeLabel}` : ""} · {place.durationLabel ?? "Flexible"} · {place.addressOrPlatform}
+                  </Text>
+                  <Text style={[styles.detailRouteStopNote, { color: palette.text }]}>{place.note}</Text>
+                  {place.meetingInstruction ? <Text style={[styles.detailRouteStopInstruction, { color: palette.muted }]}>{place.meetingInstruction}</Text> : null}
+                </View>
+                <PlanDetailPlaceThumbnail place={place} />
+              </View>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function getPlanPublicDiscussionSeed(plan: PlanPreview): PlanDiscussionMessage[] {
+  const firstPlace = plan.places[0];
+  const firstGuestName = plan.joinedPreview.find((name) => !name.startsWith("+") && name !== plan.ownerName) ?? "Mina";
+
+  return [
+    {
+      id: `${plan.id}-host-open`,
+      authorName: plan.ownerName,
+      roleLabel: "Host",
+      timeLabel: "Today",
+      text: `I’m keeping this plan open around ${plan.startLabel}. The route starts with ${firstPlace?.title ?? "the first place"}.`,
+    },
+    {
+      id: `${plan.id}-guest-question`,
+      authorName: firstGuestName,
+      roleLabel: "Interested",
+      timeLabel: "Today",
+      text: "Can people join for only part of the route if they cannot stay until the end?",
+    },
+    {
+      id: `${plan.id}-host-reply`,
+      authorName: plan.ownerName,
+      roleLabel: "Host",
+      timeLabel: "Today",
+      text: "Yes. Join freely, check the ordered places, and follow the parts that fit your time.",
+    },
+  ];
+}
+
+function PlanPublicDiscussionSection({ plan }: { plan: PlanPreview }) {
+  const { palette } = useTheme();
+  const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState<PlanDiscussionMessage[]>(() => getPlanPublicDiscussionSeed(plan));
+
+  useEffect(() => {
+    setDraft("");
+    setMessages(getPlanPublicDiscussionSeed(plan));
+  }, [plan]);
+
+  const draftText = draft.trim();
+
+  const postMessage = () => {
+    if (!draftText) {
+      return;
+    }
+
+    setMessages((current) => [
+      ...current,
+      {
+        id: `${plan.id}-local-${Date.now()}`,
+        authorName: planCurrentUserName,
+        roleLabel: "You",
+        timeLabel: "now",
+        text: draftText,
+        isCurrentUser: true,
+      },
+    ]);
+    setDraft("");
+  };
+
+  return (
+    <View style={[styles.detailProductSection, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <View style={styles.detailSectionHeader}>
+        <View>
+          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PUBLIC DISCUSSION</Text>
+          <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Questions and updates</Text>
+        </View>
+        <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>Visible to everyone on this plan</Text>
+      </View>
+
+      <View style={styles.discussionMessageStack}>
+        {messages.map((message) => (
+          <View key={message.id} style={[styles.discussionMessageRow, message.isCurrentUser ? styles.discussionMessageRowOwn : null]}>
+            <View
+              style={[
+                styles.discussionBubble,
+                {
+                  backgroundColor: message.isCurrentUser ? palette.text : palette.surfaceAlt,
+                  borderColor: message.isCurrentUser ? palette.text : palette.border,
+                },
+              ]}
+            >
+              <View style={styles.discussionBubbleMetaRow}>
+                <Text style={[styles.discussionAuthorText, { color: message.isCurrentUser ? palette.background : palette.text }]}>{message.authorName}</Text>
+                <Text style={[styles.discussionMetaText, { color: message.isCurrentUser ? palette.background : palette.muted }]}>{message.roleLabel} · {message.timeLabel}</Text>
+              </View>
+              <Text style={[styles.discussionMessageText, { color: message.isCurrentUser ? palette.background : palette.text }]}>{message.text}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <View style={[styles.discussionComposer, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder="Ask a public question or share an update..."
+          placeholderTextColor={palette.muted}
+          multiline
+          style={[styles.discussionComposerInput, { color: palette.text }]}
+        />
+        <Pressable
+          onPress={postMessage}
+          disabled={!draftText}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.discussionComposerButton,
+            { backgroundColor: draftText ? palette.text : palette.border },
+            pressed && draftText ? styles.pressed : null,
+            !draftText ? styles.disabled : null,
+            Platform.OS === "web" && draftText ? ({ cursor: "pointer" } as any) : null,
+          ]}
+        >
+          <Text style={[styles.discussionComposerButtonText, { color: palette.background }]}>Send</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function PlanDetailPeopleSection({ plan, joined }: { plan: PlanPreview; joined: boolean }) {
+  const { palette } = useTheme();
+  const peopleTitle = isCurrentUserPlan(plan) ? "Your open plan" : joined ? "You are in this plan" : "People joining";
+  const peopleCopy = isCurrentUserPlan(plan)
+    ? "This preview stays local and shows who could be visible on a public plan."
+    : joined
+      ? "Your name is included in this local joined preview. You can leave from the Join area above."
+      : "Join freely to add yourself to this local preview. No approval, payment, agenda, or trade is created.";
+
+  return (
+    <View style={[styles.detailProductSection, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <View style={styles.detailSectionHeader}>
+        <View>
+          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PEOPLE</Text>
+          <Text style={[styles.detailSectionTitle, { color: palette.text }]}>{peopleTitle}</Text>
+        </View>
+        <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>{plan.joinedCount} joined</Text>
+      </View>
+      <PlanParticipantChips plan={plan} highlightCurrentUser={joined} />
+      <Text style={[styles.detailHelpText, { color: palette.muted }]}>{peopleCopy}</Text>
+    </View>
+  );
+}
+
+function PlanLabNotesPanel() {
+  const { palette } = useTheme();
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <View style={[styles.labNotesPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <Pressable
-        onPress={onToggle}
+        onPress={() => setExpanded((current) => !current)}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         style={({ pressed }) => [
-          styles.planDeckPressable,
+          styles.labNotesToggle,
           pressed ? styles.pressed : null,
           Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
         ]}
       >
-        <PlanSummaryDeckBody
-          plan={plan}
-          eyebrow={`PLAN · ${modeLabel.toUpperCase()}`}
-          rightLabels={[...(joined ? [isCurrentUserPlan(plan) ? "YOURS" : "JOINED"] : []), plan.status.toUpperCase()]}
-        />
+        <View style={styles.heroTextBlock}>
+          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LAB NOTES</Text>
+          <Text style={[styles.labNotesTitle, { color: palette.text }]}>{expanded ? "Hide handoff notes" : "Show handoff notes"}</Text>
+        </View>
+        <Text style={[styles.labNotesChevron, { color: palette.muted }]}>{expanded ? "−" : "+"}</Text>
       </Pressable>
 
       {expanded ? (
-        <>
-          <View style={styles.planStatsRow}>
-            <PlanMiniStat label="places" value={plan.places.length} />
-            <PlanMiniStat label="joined" value={plan.joinedCount} />
-            <PlanMiniStat label="mode" value={modeLabel} />
-            <PlanMiniStat label="status" value={plan.status} />
-          </View>
-
-          <View style={styles.planPlaceCardStack}>
-            {plan.places.map((place) => (
-              <PlanDeckPlacePreviewCard key={place.id} place={place} totalPlaces={plan.places.length} />
-            ))}
-          </View>
-
-          <View style={[styles.nextStepPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
-            <Text style={[styles.nextStepLabel, { color: palette.muted }]}>Plan route</Text>
-            <Text style={[styles.nextStepText, { color: palette.text }]}>{plan.placeSummary}</Text>
-            <Text style={[styles.nextStepMeta, { color: palette.muted }]}>Opened by {plan.ownerName} · {plan.capacityLabel}{plan.joinDeadlineLabel ? ` · ${plan.joinDeadlineLabel}` : ""}</Text>
-          </View>
-        </>
-      ) : null}
-
-      <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
-        <Text style={[styles.footerMeta, { color: palette.muted }]}>{expanded ? "Deck expanded" : "Tap to preview visual place cards"}</Text>
-        <Text style={[styles.footerAction, { color: palette.text }]}>{expanded ? "Collapse" : joinActionLabel}</Text>
-      </View>
-
-      {expanded ? (
-        <View style={styles.planActions}>
-          <PlanActionButton label="View plan" primary onPress={onOpenDetail} />
-          <PlanActionButton label={joinActionLabel} disabled={joinDisabled} onPress={onJoinPress} />
-          <PlanActionButton label="Create similar" onPress={onCreateSimilar} />
+        <View style={[styles.labNotesBody, { borderTopColor: palette.border }]}>
+          <Text style={[styles.detailHelpText, { color: palette.muted }]}>
+            Plans stay independent from Trade, Needs, Offers, Agenda, payments, auth, and backend services in this lab. Production handoff notes live in docs/PLAN_LAB_HANDOFF.md.
+          </Text>
         </View>
       ) : null}
-    </View>
-  );
-}
-
-function PlanParticipantChips({ plan }: { plan: PlanPreview }) {
-  const { palette } = useTheme();
-
-  return (
-    <View style={styles.detailParticipantRow}>
-      {plan.joinedPreview.map((name) => (
-        <View key={name} style={[styles.participantChip, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
-          <Text style={[styles.participantChipText, { color: palette.text }]}>{name}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function PlanDetailPlaceTimeline({ places }: { places: PlanPlacePreview[] }) {
-  const { palette } = useTheme();
-
-  return (
-    <View style={styles.detailVisualPlaceStack}>
-      {places.map((place, index) => (
-        <View key={place.id} style={styles.detailVisualPlaceItem}>
-          <View style={styles.detailVisualPlaceHeader}>
-            <View style={[styles.detailPlaceNumberPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
-              <Text style={[styles.detailPlaceMarkerText, { color: palette.text }]}>{place.order}</Text>
-            </View>
-            <View style={styles.planPlaceTextBlock}>
-              <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ROUTE STOP {place.order}</Text>
-              <Text style={[styles.detailPlaceTitle, { color: palette.text }]}>{place.title}</Text>
-              <Text style={[styles.detailPlaceMeta, { color: palette.muted }]}>
-                {place.timeLabel}{place.endTimeLabel ? ` → ${place.endTimeLabel}` : ""} · {place.durationLabel ?? "Flexible"} · {place.kind === "online_place" ? "Online platform" : "Local place"} · {place.addressOrPlatform}
-              </Text>
-            </View>
-          </View>
-
-          <PlanDeckPlacePreviewCard place={place} totalPlaces={places.length} />
-
-          {index < places.length - 1 ? <View style={[styles.detailPlaceConnectorLine, { backgroundColor: palette.border }]} /> : null}
-        </View>
-      ))}
     </View>
   );
 }
@@ -1572,22 +1941,28 @@ function PlanDetailPlaceTimeline({ places }: { places: PlanPlacePreview[] }) {
 function PlanDetailPage({
   plan,
   joined,
+  isDesktop,
   onBack,
   onJoinPress,
+  onLeavePress,
 }: {
   plan: PlanPreview;
   joined: boolean;
+  isDesktop: boolean;
   onBack: () => void;
   onJoinPress: () => void;
+  onLeavePress: () => void;
 }) {
   const { palette } = useTheme();
   const modeLabel = getPlanModeLabel(plan);
   const joinActionLabel = getPlanJoinActionLabel(plan, joined);
+  const showLeaveAction = joined && !isCurrentUserPlan(plan);
   const joinDisabled = !canJoinPlan(plan, joined);
+  const routeLabel = plan.places.map((place) => place.title).join(" → ");
 
   return (
-    <View style={styles.tabContent}>
-      <View style={[styles.detailHeaderPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+    <View style={[styles.tabContent, isDesktop ? styles.planDetailDesktopContent : null]}>
+      <View style={[styles.detailProductHero, isDesktop ? styles.detailProductHeroDesktop : null, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.detailTopBar}>
           <Pressable
             onPress={onBack}
@@ -1608,68 +1983,53 @@ function PlanDetailPage({
           </View>
         </View>
 
-        <View style={styles.detailSummaryStack}>
-          <PlanSummaryDeckBody
-            plan={plan}
-            eyebrow="PLAN DETAIL · OPEN ACTIVITY"
-            rightLabels={[...(joined ? [isCurrentUserPlan(plan) ? "YOURS" : "JOINED"] : []), modeLabel.toUpperCase(), plan.status.toUpperCase()]}
-          />
+        <View style={styles.detailProductIntro}>
+          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{plan.category.toUpperCase()} PLAN · OPEN ACTIVITY</Text>
+          <Text style={[styles.detailProductTitle, { color: palette.text }]}>{plan.title}</Text>
+          <Text style={[styles.detailProductSummary, { color: palette.muted }]}>{plan.summary}</Text>
+          <Text style={[styles.detailProductRouteLine, { color: palette.text }]}>{routeLabel}</Text>
+        </View>
 
-          <View style={[styles.detailQuickActionPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
-            <View style={styles.heroTextBlock}>
-              <Text style={[styles.cardEyebrow, { color: palette.muted }]}>OPEN PLAN</Text>
-              <Text style={[styles.detailActionTitle, { color: palette.text }]}>
-                {joined ? (isCurrentUserPlan(plan) ? "This is your open plan." : "You joined this open plan.") : "Join freely without owner approval."}
-              </Text>
-              <Text style={[styles.detailMetaLine, { color: palette.muted }]}>
-                Opened by {plan.ownerName} · {plan.startLabel}{plan.finalEndLabel ? ` → ${plan.finalEndLabel}` : ""} · {plan.capacityLabel}
-              </Text>
+        <PlanDetailMetaStrip plan={plan} modeLabel={modeLabel} />
+
+        <View style={[styles.detailJoinPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+          <View style={styles.heroTextBlock}>
+            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>JOIN</Text>
+            <Text style={[styles.detailActionTitle, { color: palette.text }]}>{getPlanJoinPanelTitle(plan, joined)}</Text>
+            <Text style={[styles.detailMetaLine, { color: palette.muted }]}>
+              {getPlanJoinPanelCopy(plan, joined)}
+            </Text>
+            <Text style={[styles.detailMetaLine, { color: palette.muted }]}>
+              Opened by {plan.ownerName} · {plan.startLabel}{plan.finalEndLabel ? ` → ${plan.finalEndLabel}` : ""} · {plan.capacityLabel}
+            </Text>
+          </View>
+          <View style={styles.planActionsInline}>
+            <PlanActionButton label={joinActionLabel} primary disabled={joinDisabled} onPress={onJoinPress} />
+            {showLeaveAction ? <PlanActionButton label="Leave plan" onPress={onLeavePress} /> : null}
+            <PlanActionButton label="Back to feed" onPress={onBack} />
+          </View>
+        </View>
+      </View>
+
+      <View style={isDesktop ? styles.planDetailDesktopGrid : styles.tabContent}>
+        <View style={isDesktop ? styles.planDetailDesktopMain : styles.tabContent}>
+          <View style={[styles.detailProductSection, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={styles.detailSectionHeader}>
+              <View>
+                <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ORDERED ROUTE</Text>
+                <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Places and timing</Text>
+              </View>
+              <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>{plan.placeSummary}</Text>
             </View>
-            <View style={styles.planActionsInline}>
-              <PlanActionButton label={joinActionLabel} primary disabled={joinDisabled} onPress={onJoinPress} />
-              <PlanActionButton label="Back to feed" onPress={onBack} />
-            </View>
+            <PlanDetailRouteTimeline places={plan.places} />
           </View>
+
+          <PlanPublicDiscussionSection plan={plan} />
         </View>
-      </View>
 
-      <View style={styles.planStatsRow}>
-        <PlanMiniStat label="places" value={plan.places.length} />
-        <PlanMiniStat label="joined" value={plan.joinedCount} />
-        <PlanMiniStat label="mode" value={modeLabel} />
-        <PlanMiniStat label="status" value={plan.status} />
-      </View>
-
-      <View style={[styles.detailSectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <View style={styles.detailSectionHeader}>
-          <View>
-            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>VISUAL ROUTE</Text>
-            <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Place cards</Text>
-          </View>
-          <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>Feed-style place cards · {plan.placeSummary}</Text>
-        </View>
-        <PlanDetailPlaceTimeline places={plan.places} />
-      </View>
-
-      <View style={[styles.detailSectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <View style={styles.detailSectionHeader}>
-          <View>
-            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PEOPLE</Text>
-            <Text style={[styles.detailSectionTitle, { color: palette.text }]}>{joined ? "You are in" : "Joined freely"}</Text>
-          </View>
-          <Text style={[styles.detailSectionMeta, { color: palette.muted }]}>{plan.joinedCount} joined</Text>
-        </View>
-        <PlanParticipantChips plan={plan} />
-        <Text style={[styles.detailHelpText, { color: palette.muted }]}>
-          This lab keeps Plans separate from Trade, Needs, Offers, and Agenda. Joining is an open-plan prototype that only changes local mock state.
-        </Text>
-      </View>
-
-      <View style={[styles.detailActionPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <View style={styles.heroTextBlock}>
-          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LAB RULES</Text>
-          <Text style={[styles.detailActionTitle, { color: palette.text }]}>Independent open-plan prototype.</Text>
-          <Text style={[styles.detailHelpText, { color: palette.muted }]}>PLAN-LAB19 keeps Plans independent while separating reusable Place data from Plan-specific timing, joining, and route-stop instructions.</Text>
+        <View style={isDesktop ? styles.planDetailDesktopSide : styles.tabContent}>
+          <PlanDetailPeopleSection plan={plan} joined={joined} />
+          <PlanLabNotesPanel />
         </View>
       </View>
     </View>
@@ -1692,10 +2052,10 @@ function JoinPlanSheet({
     <View style={[styles.joinSheetPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <View style={styles.joinSheetTopRow}>
         <View style={styles.joinSheetTitleBlock}>
-          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>JOIN PLAN · OPEN PROTOTYPE</Text>
+          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>JOIN PLAN</Text>
           <Text style={[styles.joinSheetTitle, { color: palette.text }]}>Join {plan.title}</Text>
           <Text style={[styles.joinSheetCopy, { color: palette.muted }]}>
-            This plan is open. Joining only updates this lab screen: no owner approval, no notification, no backend, and no Trade connection.
+            This plan is open. Join freely, follow the ordered places, and keep the activity separate from trades.
           </Text>
         </View>
         <View style={[styles.joinSheetModePill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
@@ -1711,9 +2071,60 @@ function JoinPlanSheet({
         </Text>
       </View>
 
+      <View style={[styles.joinPreviewPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>AFTER JOINING</Text>
+        <PlanParticipantPreviewChips names={addCurrentUserToJoinedPreview(plan.joinedPreview)} highlightCurrentUser />
+        <Text style={[styles.nextStepMeta, { color: palette.muted }]}>
+          You appear in this local joined preview. No owner approval, trade, agenda item, or payment is created.
+        </Text>
+      </View>
+
       <View style={styles.joinSheetActions}>
-        <PlanActionButton label="Cancel" onPress={onCancel} />
-        <PlanActionButton label="Join freely" primary onPress={onConfirm} />
+        <PlanActionButton label="Not now" onPress={onCancel} />
+        <PlanActionButton label="Join plan" primary onPress={onConfirm} />
+      </View>
+    </View>
+  );
+}
+
+function LeavePlanSheet({
+  plan,
+  onCancel,
+  onConfirm,
+}: {
+  plan: PlanPreview;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { palette } = useTheme();
+  const namesAfterLeaving = removeCurrentUserFromJoinedPreview(plan.joinedPreview);
+
+  return (
+    <View style={[styles.joinSheetPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <View style={styles.joinSheetTopRow}>
+        <View style={styles.joinSheetTitleBlock}>
+          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>LEAVE PLAN</Text>
+          <Text style={[styles.joinSheetTitle, { color: palette.text }]}>Leave {plan.title}?</Text>
+          <Text style={[styles.joinSheetCopy, { color: palette.muted }]}>
+            This only cancels your local interest in the preview. It does not notify the host or change any trade.
+          </Text>
+        </View>
+        <View style={[styles.joinSheetModePill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+          <Text style={[styles.smallTagText, { color: palette.text }]}>JOINED</Text>
+        </View>
+      </View>
+
+      <View style={[styles.joinPreviewPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>AFTER LEAVING</Text>
+        <PlanParticipantPreviewChips names={namesAfterLeaving} />
+        <Text style={[styles.nextStepMeta, { color: palette.muted }]}>
+          You will no longer appear in Joined Plans, but the public discussion messages you typed remain in this local screen state.
+        </Text>
+      </View>
+
+      <View style={styles.joinSheetActions}>
+        <PlanActionButton label="Stay joined" primary onPress={onCancel} />
+        <PlanActionButton label="Leave plan" onPress={onConfirm} />
       </View>
     </View>
   );
@@ -1821,7 +2232,7 @@ function CreateWizardStepNote({
     <View style={[styles.createWizardNoteCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
       <View style={styles.createWizardNoteTopRow}>
         <View style={styles.heroTextBlock}>
-          <Text style={[styles.nextStepLabel, { color: palette.muted }]}>WIZARD CHECKPOINT</Text>
+          <Text style={[styles.nextStepLabel, { color: palette.muted }]}>CREATE PLAN</Text>
           <Text style={[styles.createWizardNoteTitle, { color: palette.text }]}>{activeStep.label}</Text>
           <Text style={[styles.createWizardNoteCopy, { color: palette.muted }]}>{getPlanCreateStepPolishCopy(activeStep.id)}</Text>
         </View>
@@ -2008,34 +2419,167 @@ function PlaceLibraryMediaThumb({ place, sourceLabel }: { place: PlaceLibraryIte
   );
 }
 
-function PlaceLibraryPickerCard({ place, added, onAdd }: { place: PlaceLibraryItem; added: boolean; onAdd: () => void }) {
+function PlaceLibraryPickerCard({
+  place,
+  added,
+  onAdd,
+  onOpenDetails,
+}: {
+  place: PlaceLibraryItem;
+  added: boolean;
+  onAdd: () => void;
+  onOpenDetails: () => void;
+}) {
   const { palette } = useTheme();
+  const addLabel = added ? "Added" : "Use in plan";
+
   return (
     <View style={[styles.placeLibraryCard, { borderColor: added ? palette.text : palette.border, backgroundColor: palette.surface }]}>
       <PlaceLibraryMediaThumb place={place} sourceLabel={place.source === "starter_place" ? "STARTER" : "MINE"} />
       <View style={styles.placeLibraryBody}>
         <View style={styles.placeLibraryHeaderRow}>
           <View style={styles.heroTextBlock}>
-            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{place.categoryLabel}</Text>
+            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{getPlaceKindShortLabel(place.kind)} · {place.categoryLabel}</Text>
             <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>{place.title}</Text>
-            <Text style={[styles.placeLibraryMeta, { color: palette.muted }]}>{place.addressOrPlatform} · {place.accessLabel}</Text>
+            <Text style={[styles.placeLibraryMeta, { color: palette.muted }]}>{place.addressOrPlatform} · {getPlaceDetailAccessLabel(place)}</Text>
           </View>
-          <Pressable
-            onPress={added ? undefined : onAdd}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: added }}
-            style={({ pressed }) => [
-              styles.placeLibraryAddButton,
-              { borderColor: palette.border, backgroundColor: added ? palette.surfaceAlt : palette.text, opacity: added ? 0.78 : 1 },
-              pressed && !added ? styles.pressed : null,
-              Platform.OS === "web" && !added ? ({ cursor: "pointer" } as any) : null,
-            ]}
-          >
-            <Text style={[styles.placeLibraryAddText, { color: added ? palette.muted : palette.background }]}>{added ? "Added" : "Add"}</Text>
-          </Pressable>
+          <View style={styles.placeLibraryPickerActions}>
+            <Pressable
+              onPress={added ? undefined : onAdd}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: added }}
+              style={({ pressed }) => [
+                styles.placeLibraryAddButton,
+                { borderColor: palette.border, backgroundColor: added ? palette.surfaceAlt : palette.text, opacity: added ? 0.78 : 1 },
+                pressed && !added ? styles.pressed : null,
+                Platform.OS === "web" && !added ? ({ cursor: "pointer" } as any) : null,
+              ]}
+            >
+              <Text style={[styles.placeLibraryAddText, { color: added ? palette.muted : palette.background }]}>{addLabel}</Text>
+            </Pressable>
+            <Pressable
+              onPress={onOpenDetails}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.placeLibraryGhostButton,
+                { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
+                pressed ? styles.pressed : null,
+                Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+              ]}
+            >
+              <Text style={[styles.placeLibraryGhostText, { color: palette.text }]}>Details</Text>
+            </Pressable>
+          </View>
         </View>
         <Text numberOfLines={3} style={[styles.placeLibraryDescription, { color: palette.muted }]}>{place.description}</Text>
-        <Text numberOfLines={2} style={[styles.placeLibraryMeta, { color: palette.muted }]}>{place.defaultTimeLabel} · {place.defaultDurationLabel ?? "flexible duration"}{place.safetyLabel ? ` · ${place.safetyLabel}` : ""}</Text>
+        <View style={styles.placeCardChipRow}>
+          <View style={[styles.placeCardChip, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+            <Text style={[styles.placeCardChipText, { color: palette.text }]}>{place.defaultTimeLabel}</Text>
+          </View>
+          <View style={[styles.placeCardChip, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+            <Text style={[styles.placeCardChipText, { color: palette.text }]}>{place.defaultDurationLabel ?? "Flexible"}</Text>
+          </View>
+          <View style={[styles.placeCardChip, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+            <Text style={[styles.placeCardChipText, { color: palette.text }]}>{place.areaLabel}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PlaceLibraryDetailPanel({
+  place,
+  added,
+  mode = "picker",
+  onClose,
+  onUseInPlan,
+  onEdit,
+  onDelete,
+  onCopyStarter,
+}: {
+  place: PlaceLibraryItem;
+  added?: boolean;
+  mode?: "picker" | "library";
+  onClose: () => void;
+  onUseInPlan?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onCopyStarter?: () => void;
+}) {
+  const { palette } = useTheme();
+  const isStarter = place.source === "starter_place";
+  const detailLabels = place.imageLabels.length > 0 ? place.imageLabels : [place.kind === "online_place" ? "Platform visual" : "Place image"];
+  const tagLabels = place.tags?.length ? place.tags : [getPlaceKindShortLabel(place.kind), place.categoryLabel, place.areaLabel];
+
+  return (
+    <View style={[styles.placeDetailPanel, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+      <View style={styles.placeDetailTopRow}>
+        <View style={styles.heroTextBlock}>
+          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{isStarter ? "STARTER PLACE" : "MY PLACE"} · {getPlaceKindLabel(place.kind).toUpperCase()}</Text>
+          <Text style={[styles.placeDetailTitle, { color: palette.text }]}>{place.title}</Text>
+          <Text style={[styles.placeDetailCopy, { color: palette.muted }]}>{place.description}</Text>
+        </View>
+        <PlanActionButton label="Close" onPress={onClose} />
+      </View>
+
+      <View style={styles.placeDetailHeroRow}>
+        <PlaceLibraryMediaThumb place={place} sourceLabel={isStarter ? "STARTER" : "MINE"} />
+        <View style={styles.placeDetailHeroBody}>
+          <View style={styles.standalonePlaceMetaGrid}>
+            <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+              <Text style={[styles.nextStepLabel, { color: palette.muted }]}>WHERE</Text>
+              <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.addressOrPlatform}</Text>
+            </View>
+            <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+              <Text style={[styles.nextStepLabel, { color: palette.muted }]}>ACCESS</Text>
+              <Text style={[styles.nextStepMeta, { color: palette.text }]}>{getPlaceDetailAccessLabel(place)}</Text>
+            </View>
+            <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+              <Text style={[styles.nextStepLabel, { color: palette.muted }]}>DEFAULT</Text>
+              <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.defaultTimeLabel} · {place.defaultDurationLabel ?? "Flexible"}</Text>
+            </View>
+            <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+              <Text style={[styles.nextStepLabel, { color: palette.muted }]}>SAFETY</Text>
+              <Text style={[styles.nextStepMeta, { color: palette.text }]}>{getPlaceDetailSafetyLabel(place)}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.placeDetailSection}>
+        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>VISUALS</Text>
+        <View style={styles.placeDetailChipRow}>
+          {detailLabels.map((label) => (
+            <View key={`${place.id}-visual-${label}`} style={[styles.placeDetailChip, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+              <Text style={[styles.placeDetailChipText, { color: palette.text }]}>{label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.placeDetailSection}>
+        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>TAGS</Text>
+        <View style={styles.placeDetailChipRow}>
+          {tagLabels.map((label) => (
+            <View key={`${place.id}-tag-${label}`} style={[styles.placeDetailChip, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+              <Text style={[styles.placeDetailChipText, { color: palette.text }]}>{label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={[styles.placeDetailNoteCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>DEFAULT PLAN NOTE</Text>
+        <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.defaultNote}</Text>
+        {place.multilingualNote ? <Text style={[styles.placeDetailCopy, { color: palette.muted }]}>{place.multilingualNote}</Text> : null}
+      </View>
+
+      <View style={styles.placeDetailActions}>
+        {onUseInPlan ? <PlanActionButton label={added ? "Already in plan" : "Use in Plan"} primary={!added} disabled={added} onPress={onUseInPlan} /> : null}
+        {mode === "library" && isStarter && onCopyStarter ? <PlanActionButton label="Copy to My places" onPress={onCopyStarter} /> : null}
+        {mode === "library" && !isStarter && onEdit ? <PlanActionButton label="Edit place" onPress={onEdit} /> : null}
+        {mode === "library" && !isStarter && onDelete ? <PlanActionButton label="Delete" onPress={onDelete} /> : null}
       </View>
     </View>
   );
@@ -2087,7 +2631,7 @@ function CreatePlaceFormPrototype({
   onChangeDraft,
   onSave,
   saveLabel = "Save to My places + add",
-  helperText = "Prototype only: this saves to local My places state, not the real database or upload system.",
+  helperText = "Save this as a reusable place so it can be picked quickly in future plans.",
 }: {
   draft: PlaceCreateDraft;
   onChangeDraft: (draft: PlaceCreateDraft) => void;
@@ -2242,9 +2786,11 @@ function PlacePickerPanel({
   onSaveCreatedPlace: () => void;
 }) {
   const { palette } = useTheme();
+  const [detailPlaceId, setDetailPlaceId] = useState<string | null>(null);
   const activeSource = placePickerSourceOptions.find((source) => source.id === sourceId) ?? placePickerSourceOptions[0];
   const activeFilter = placeLibraryFilters.find((filter) => filter.id === filterId) ?? placeLibraryFilters[0];
   const visibleItems = sourceId === "create_new" ? [] : getPlacePickerItems(sourceId, filterId, userPlaces, searchText);
+  const detailPlace = visibleItems.find((place) => place.id === detailPlaceId) ?? null;
 
   return (
     <View style={[styles.placePickerPanel, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
@@ -2278,6 +2824,18 @@ function PlacePickerPanel({
         <Text style={[styles.nextStepMeta, { color: palette.muted }]}>{activeSource.helper}{sourceId !== "create_new" ? ` ${activeFilter.helper}` : ""}</Text>
       </View>
 
+      {detailPlace ? (
+        <PlaceLibraryDetailPanel
+          place={detailPlace}
+          added={selectedLibraryPlaceIds.includes(detailPlace.id)}
+          onClose={() => setDetailPlaceId(null)}
+          onUseInPlan={() => {
+            onAddLibraryPlace(detailPlace);
+            setDetailPlaceId(null);
+          }}
+        />
+      ) : null}
+
       {sourceId === "create_new" ? (
         <CreatePlaceFormPrototype
           draft={createPlaceDraft}
@@ -2294,7 +2852,13 @@ function PlacePickerPanel({
           ) : visibleItems.map((place) => {
             const added = selectedLibraryPlaceIds.includes(place.id);
             return (
-              <PlaceLibraryPickerCard key={place.id} place={place} added={added} onAdd={() => onAddLibraryPlace(place)} />
+              <PlaceLibraryPickerCard
+                key={place.id}
+                place={place}
+                added={added}
+                onAdd={() => onAddLibraryPlace(place)}
+                onOpenDetails={() => setDetailPlaceId(place.id)}
+              />
             );
           })}
         </View>
@@ -2347,26 +2911,40 @@ function StandalonePlaceLibraryCard({
   onEdit,
   onDelete,
   onCopyStarter,
+  onUseInPlan,
+  onOpenDetails,
 }: {
   place: PlaceLibraryItem;
   sourceId: PlaceLibrarySource;
   onEdit: () => void;
   onDelete: () => void;
   onCopyStarter: () => void;
+  onUseInPlan: () => void;
+  onOpenDetails: () => void;
 }) {
   const { palette } = useTheme();
   const isStarter = sourceId === "starter_place";
 
   return (
     <View style={[styles.placeLibraryCard, styles.standalonePlaceCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-      <PlaceLibraryMediaThumb place={place} sourceLabel={isStarter ? "STARTER" : "MINE"} />
+      <Pressable
+        onPress={onOpenDetails}
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.placeLibraryMediaButton,
+          pressed ? styles.pressed : null,
+          Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+        ]}
+      >
+        <PlaceLibraryMediaThumb place={place} sourceLabel={isStarter ? "STARTER" : "MINE"} />
+      </Pressable>
 
       <View style={styles.placeLibraryBody}>
         <View style={styles.placeLibraryHeaderRow}>
           <View style={styles.heroTextBlock}>
-            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{place.categoryLabel}</Text>
+            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{getPlaceKindShortLabel(place.kind)} · {place.categoryLabel}</Text>
             <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>{place.title}</Text>
-            <Text style={[styles.placeLibraryMeta, { color: palette.muted }]}>{place.addressOrPlatform} · {place.accessLabel}</Text>
+            <Text style={[styles.placeLibraryMeta, { color: palette.muted }]}>{place.addressOrPlatform} · {getPlaceDetailAccessLabel(place)}</Text>
           </View>
           <View style={[styles.smallTag, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
             <Text style={[styles.smallTagText, { color: palette.text }]}>{place.visibility.replace("_", " ").toUpperCase()}</Text>
@@ -2384,12 +2962,14 @@ function StandalonePlaceLibraryCard({
           </View>
           <View style={[styles.standalonePlaceMetaPill, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
             <Text style={[styles.nextStepLabel, { color: palette.muted }]}>SAFETY</Text>
-            <Text style={[styles.nextStepMeta, { color: palette.text }]}>{place.safetyLabel ?? (place.kind === "online_place" ? "Check link" : "Map fallback")}</Text>
+            <Text style={[styles.nextStepMeta, { color: palette.text }]}>{getPlaceDetailSafetyLabel(place)}</Text>
           </View>
         </View>
         <View style={styles.standalonePlaceActions}>
+          <PlanActionButton label="Use in Plan" primary onPress={onUseInPlan} />
+          <PlanActionButton label="Details" onPress={onOpenDetails} />
           {isStarter ? (
-            <PlanActionButton label="Copy to My places" primary onPress={onCopyStarter} />
+            <PlanActionButton label="Copy" onPress={onCopyStarter} />
           ) : (
             <>
               <PlanActionButton label="Edit" onPress={onEdit} />
@@ -2409,6 +2989,7 @@ function PlaceLibraryScreen({
   onCreatePlace,
   onUpdatePlace,
   onDeletePlace,
+  onUsePlaceInPlan,
 }: {
   userPlaces: PlaceLibraryItem[];
   isDesktop: boolean;
@@ -2416,6 +2997,7 @@ function PlaceLibraryScreen({
   onCreatePlace: (place: PlaceLibraryItem) => void;
   onUpdatePlace: (place: PlaceLibraryItem) => void;
   onDeletePlace: (placeId: string) => void;
+  onUsePlaceInPlan: (place: PlaceLibraryItem) => void;
 }) {
   const { palette } = useTheme();
   const [sourceId, setSourceId] = useState<PlaceLibrarySource>("my_place");
@@ -2424,11 +3006,13 @@ function PlaceLibraryScreen({
   const [createFormOpen, setCreateFormOpen] = useState(false);
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
   const [draft, setDraft] = useState<PlaceCreateDraft>(() => createInitialPlaceDraft("local"));
+  const [detailPlaceId, setDetailPlaceId] = useState<string | null>(null);
   const visibleItems = useMemo(
     () => getPlaceLibraryVisibleItems(sourceId, filterId, userPlaces, searchText),
     [sourceId, filterId, userPlaces, searchText]
   );
   const activeFilter = placeLibraryFilters.find((filter) => filter.id === filterId) ?? placeLibraryFilters[0];
+  const detailPlace = visibleItems.find((place) => place.id === detailPlaceId) ?? null;
   const myOfflineCount = userPlaces.filter((place) => place.kind === "local_place").length;
   const myOnlineCount = userPlaces.filter((place) => place.kind === "online_place").length;
 
@@ -2442,6 +3026,7 @@ function PlaceLibraryScreen({
     setSourceId("my_place");
     setCreateFormOpen(true);
     setEditingPlaceId(null);
+    setDetailPlaceId(null);
     setDraft(createInitialPlaceDraft(kind === "online_place" ? "online" : "local"));
   };
 
@@ -2449,6 +3034,7 @@ function PlaceLibraryScreen({
     setSourceId("my_place");
     setCreateFormOpen(true);
     setEditingPlaceId(place.id);
+    setDetailPlaceId(null);
     setDraft(createPlaceDraftFromLibraryItem(place));
   };
 
@@ -2479,6 +3065,12 @@ function PlaceLibraryScreen({
     });
     onCreatePlace(copiedPlace);
     setSourceId("my_place");
+    setDetailPlaceId(null);
+  };
+
+  const usePlaceInPlan = (place: PlaceLibraryItem) => {
+    setDetailPlaceId(null);
+    onUsePlaceInPlan(place);
   };
 
   return (
@@ -2507,7 +3099,7 @@ function PlaceLibraryScreen({
           <View style={styles.heroTextBlock}>
             <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLACE LIBRARY</Text>
             <Text style={[styles.detailTitle, { color: palette.text }]}>Reusable places for open plans.</Text>
-            <Text style={[styles.detailSummary, { color: palette.muted }]}>Create offline and online places separately, then choose them inside the Create Plan wizard. This stays local to the lab prototype.</Text>
+            <Text style={[styles.detailSummary, { color: palette.muted }]}>Create offline and online places separately, preview details, then choose them inside the Create Plan wizard.</Text>
           </View>
           <View style={styles.plansHeroActionRow}>
             <PlanActionButton label="Offline place" onPress={() => startCreatePlace("local_place")} />
@@ -2537,7 +3129,7 @@ function PlaceLibraryScreen({
             onChangeDraft={setDraft}
             onSave={savePlace}
             saveLabel={editingPlaceId ? "Update My place" : "Save to My places"}
-            helperText="Standalone library prototype: this changes local My places only. Real uploads, map previews, verification, and database saving come later."
+            helperText="Save this reusable place to My places. Details, notes, and fallback visuals stay ready for future plans."
           />
         </View>
       ) : null}
@@ -2570,6 +3162,21 @@ function PlaceLibraryScreen({
           <Text style={[styles.nextStepMeta, { color: palette.muted }]}>{activeFilter.helper}</Text>
         </View>
 
+        {detailPlace ? (
+          <PlaceLibraryDetailPanel
+            place={detailPlace}
+            mode="library"
+            onClose={() => setDetailPlaceId(null)}
+            onUseInPlan={() => usePlaceInPlan(detailPlace)}
+            onEdit={() => startEditPlace(detailPlace)}
+            onDelete={() => {
+              onDeletePlace(detailPlace.id);
+              setDetailPlaceId(null);
+            }}
+            onCopyStarter={() => copyStarterPlace(detailPlace)}
+          />
+        ) : null}
+
         {visibleItems.length === 0 ? (
           <View style={[styles.placePickerEmptyCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
             <Text style={[styles.placeLibraryTitle, { color: palette.text }]}>No places in this view</Text>
@@ -2586,6 +3193,8 @@ function PlaceLibraryScreen({
                   onEdit={() => startEditPlace(place)}
                   onDelete={() => onDeletePlace(place.id)}
                   onCopyStarter={() => copyStarterPlace(place)}
+                  onUseInPlan={() => usePlaceInPlan(place)}
+                  onOpenDetails={() => setDetailPlaceId(place.id)}
                 />
               </View>
             ))}
@@ -2698,8 +3307,9 @@ function DraftPlaceEditor({
 
       {compact ? (
         <View style={styles.draftFieldGrid}>
-          <DraftTextField label="Image label" value={place.imageLabel} onChangeText={(imageLabel) => onChange({ ...place, imageLabel })} />
           <DraftTextField label="Start time" value={place.timeLabel} onChangeText={(timeLabel) => onChange({ ...place, timeLabel })} />
+          <DraftTextField label="End time optional" value={place.endTimeLabel ?? ""} onChangeText={(endTimeLabel) => onChange({ ...place, endTimeLabel })} />
+          <DraftTextField label="Image label" value={place.imageLabel} onChangeText={(imageLabel) => onChange({ ...place, imageLabel })} />
           <View style={styles.fullWidthField}>
             <DraftTextField label="Plan-specific note" value={place.note} onChangeText={(note) => onChange({ ...place, note })} multiline />
           </View>
@@ -2722,27 +3332,22 @@ function DraftPlaceEditor({
   );
 }
 
-function PlanDeckSummaryPreviewCard({ plan }: { plan: PlanPreview }) {
-  const { palette } = useTheme();
-  const modeLabel = getPlanModeLabel(plan);
-
-  return (
-    <View style={[styles.tradeCard, styles.planDeckCard, styles.planDeckPreviewCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <PlanSummaryDeckBody plan={plan} eyebrow="CARD 1 · PLAN SUMMARY" rightLabels={["PREVIEW", modeLabel.toUpperCase()]} />
-      <View style={[styles.cardFooter, { borderTopColor: palette.border }]}>
-        <Text style={[styles.footerMeta, { color: palette.muted }]}>Theme summary · no background image</Text>
-        <Text style={[styles.footerAction, { color: palette.text }]}>Summary card</Text>
-      </View>
-    </View>
-  );
-}
-
-function PlanDeckPlacePreviewCard({ place, totalPlaces }: { place: PlanPlacePreview; totalPlaces: number }) {
+function PlanDeckPlacePreviewCard({
+  place,
+  totalPlaces,
+  fill = false,
+  reserveActionArea = false,
+}: {
+  place: PlanPlacePreview;
+  totalPlaces: number;
+  fill?: boolean;
+  reserveActionArea?: boolean;
+}) {
   const kindLabel = place.kind === "online_place" ? "ONLINE" : "LOCAL";
   const placeMeta = `${place.timeLabel || "Flexible"}${place.endTimeLabel ? ` → ${place.endTimeLabel}` : ""} · ${place.durationLabel || "flexible duration"} · ${place.addressOrPlatform}`;
 
   return (
-    <View style={[styles.tradeCard, styles.planDeckCard, styles.planDeckPreviewCard, styles.planPosterPlaceCard]}>
+    <View style={[styles.tradeCard, styles.planDeckCard, styles.planDeckPreviewCard, styles.planPosterPlaceCard, fill ? styles.planDeckSwipeFillCard : null]}>
       <PlanPlacePosterBackdrop place={place} />
 
       <View style={styles.planPosterTopBadges}>
@@ -2760,7 +3365,7 @@ function PlanDeckPlacePreviewCard({ place, totalPlaces }: { place: PlanPlacePrev
         <View style={styles.planPosterBlurBandDeep} />
       </View>
 
-      <View style={styles.planPosterBottomContent}>
+      <View style={[styles.planPosterBottomContent, reserveActionArea ? styles.planPosterBottomContentWithActions : null]}>
         <Text style={styles.planPosterEyebrow}>{kindLabel.toLowerCase()} stop · {place.order}</Text>
         <Text style={styles.planPosterTitle}>{place.title}</Text>
         <Text style={styles.planPosterNote}>{place.note}</Text>
@@ -2784,33 +3389,66 @@ function PlanDeckPlacePreviewCard({ place, totalPlaces }: { place: PlanPlacePrev
 
 function PlanCreatePreview({ draft }: { draft: PlanCreateDraft }) {
   const { palette } = useTheme();
+  const { width } = useWindowDimensions();
   const previewPlan = buildPlanPreviewFromDraft(draft);
-  const totalCards = previewPlan.places.length + 1;
+  const cards = useMemo(() => getPlanSwipeDeckCards(previewPlan), [previewPlan]);
+  const totalCards = cards.length;
+  const [activePreviewIndex, setActivePreviewIndex] = useState(0);
+  const deckSize = Math.max(286, Math.min(width - 64, 400));
+
+  useEffect(() => {
+    if (activePreviewIndex > cards.length - 1) {
+      setActivePreviewIndex(0);
+    }
+  }, [activePreviewIndex, cards.length]);
 
   return (
     <View style={styles.planDeckPreviewStack}>
       <View style={[styles.planDeckPreviewIntro, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
         <View style={styles.detailSectionHeader}>
           <View>
-            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PREVIEW · FEED PARITY</Text>
-            <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Plan deck preview</Text>
+            <Text style={[styles.cardEyebrow, { color: palette.muted }]}>FINAL PREVIEW</Text>
+            <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Review the Plan deck</Text>
           </View>
           <View style={styles.detailStatusRow}>
             <PlanModeBadge label={`${totalCards} cards`} />
             <PlanModeBadge label={getPlanEstimatedDurationLabel(draft)} />
           </View>
         </View>
-        <Text style={[styles.detailHelpText, { color: palette.muted }]}>This preview generates the summary from the ordered places. Optional cover text can override it, but each place note remains the main translated content.</Text>
+        <Text style={[styles.detailHelpText, { color: palette.muted }]}>Swipe through the place cards. Go back to edit anything before creating the Plan.</Text>
       </View>
 
-      <PlanDeckSummaryPreviewCard plan={previewPlan} />
+      <View style={[styles.planCreatePreviewDeckShell, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+        <ContinuousSquareStackDeck
+          cards={cards}
+          availableWidth={deckSize}
+          availableHeight={deckSize}
+          minCardSize={282}
+          maxCardSize={360}
+          showDebugBadge={false}
+          depthEffect="motionOnly"
+          onIndexChange={setActivePreviewIndex}
+          renderCard={({ card }) => (
+            <PlanDeckPlacePreviewCard place={card.place} totalPlaces={Math.min(card.plan.places.length, 3)} fill />
+          )}
+        />
+        <View style={[styles.planSwipeDeckFooter, { borderTopColor: palette.border }]}>
+          <View style={styles.heroTextBlock}>
+            <Text style={[styles.footerMeta, { color: palette.muted }]}>Generated title</Text>
+            <Text style={[styles.footerAction, { color: palette.text }]}>{previewPlan.title}</Text>
+          </View>
+          <PlanDeckDots activeIndex={activePreviewIndex} total={totalCards} />
+        </View>
+      </View>
 
-      {previewPlan.places.map((place) => (
-        <PlanDeckPlacePreviewCard key={place.id} place={place} totalPlaces={previewPlan.places.length} />
-      ))}
+      <View style={[styles.placePickerActiveNote, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
+        <Text style={[styles.nextStepLabel, { color: palette.muted }]}>READY TO CREATE</Text>
+        <Text style={[styles.nextStepMeta, { color: palette.muted }]}>{previewPlan.placeSummary} · {previewPlan.startLabel}{previewPlan.finalEndLabel ? ` → ${previewPlan.finalEndLabel}` : ""} · {previewPlan.capacityLabel}</Text>
+      </View>
     </View>
   );
 }
+
 
 function PlanCreateFlow({
   draft,
@@ -2916,14 +3554,14 @@ function PlanCreateFlow({
             <Text style={[styles.detailBackText, { color: palette.text }]}>‹ Plans</Text>
           </Pressable>
           <View style={styles.detailStatusRow}>
-            <PlanModeBadge label="Mock create" />
-            <PlanModeBadge label={`Step ${stepIndex + 1}/5`} />
+            <PlanModeBadge label={getPlanModeDisplay(draft.mode)} />
+            <PlanModeBadge label={`${draft.places.length} places`} />
           </View>
         </View>
         <View style={styles.heroTextBlock}>
-          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLAN-LAB19 · TITLELESS PLAN WIZARD</Text>
-          <Text style={[styles.detailTitle, { color: palette.text }]}>Create an open plan.</Text>
-          <Text style={[styles.detailSummary, { color: palette.muted }]}>This is local lab state only. The wizard is now titleless by default: places carry the real content, and the summary card is generated from the ordered route.</Text>
+          <Text style={[styles.heroEyebrow, { color: palette.muted }]}>CREATE PLAN</Text>
+          <Text style={[styles.detailTitle, { color: palette.text }]}>Build an open Plan from places.</Text>
+          <Text style={[styles.detailSummary, { color: palette.muted }]}>Choose reusable places, arrange their order and time, then preview the deck before opening the Plan.</Text>
         </View>
         <CreateStepIndicator
           activeStepIndex={stepIndex}
@@ -2959,6 +3597,7 @@ function PlanCreateFlow({
 
         {activeStep.id === "places" ? (
           <View style={styles.draftPlacesStack}>
+            <SelectedPlanPlacesSummary places={draft.places} />
             <PlacePickerPanel
               mode={draft.mode}
               sourceId={placePickerSourceId}
@@ -2978,7 +3617,6 @@ function PlanCreateFlow({
               onChangeCreatePlaceDraft={setPlaceCreateDraft}
               onSaveCreatedPlace={saveCreatedPlace}
             />
-            <SelectedPlanPlacesSummary places={draft.places} />
           </View>
         ) : null}
 
@@ -2986,9 +3624,9 @@ function PlanCreateFlow({
           <View style={styles.draftPlacesStack}>
             <View style={styles.draftPlacesHeaderRow}>
               <View style={styles.heroTextBlock}>
-                <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ARRANGE ROUTE</Text>
-                <Text style={[styles.draftPlaceTitle, { color: palette.text }]}>Order places, times, images, and notes</Text>
-                <Text style={[styles.detailHelpText, { color: palette.muted }]}>This is where the Plan becomes an ordered activity. Use Up / Down to change the sequence, then polish each stop.</Text>
+                <Text style={[styles.cardEyebrow, { color: palette.muted }]}>ROUTE</Text>
+                <Text style={[styles.draftPlaceTitle, { color: palette.text }]}>Order stops and timing</Text>
+                <Text style={[styles.detailHelpText, { color: palette.muted }]}>{getPlanTimingMeta(draft)}</Text>
               </View>
               <PlanModeBadge label={`${draft.places.length} stops`} />
             </View>
@@ -3009,6 +3647,7 @@ function PlanCreateFlow({
                 onRemove={() => removePlace(place.id)}
                 onMoveUp={() => movePlace(place.id, -1)}
                 onMoveDown={() => movePlace(place.id, 1)}
+                compact
               />
             ))}
           </View>
@@ -3020,12 +3659,12 @@ function PlanCreateFlow({
             <View style={[styles.planScheduleCard, { borderColor: palette.border, backgroundColor: palette.surfaceAlt }]}>
               <View style={styles.detailSectionHeader}>
                 <View>
-                  <Text style={[styles.cardEyebrow, { color: palette.muted }]}>OPTIONAL COVER TEXT</Text>
-                  <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Auto-generated unless you override it</Text>
+                  <Text style={[styles.cardEyebrow, { color: palette.muted }]}>SUMMARY CARD</Text>
+                  <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Optional cover text</Text>
                 </View>
                 <PlanModeBadge label="Optional" />
               </View>
-              <Text style={[styles.detailHelpText, { color: palette.muted }]}>Leave these empty to use the generated route label. The real details stay inside each place note, so places can be translated one by one.</Text>
+              <Text style={[styles.detailHelpText, { color: palette.muted }]}>Leave these empty to let the Plan summary come from the selected places and route timing.</Text>
               <View style={styles.draftFieldGrid}>
                 <DraftTextField label="Custom plan title optional" value={draft.title} placeholder={getGeneratedPlanTitleFromPlaces(draft.places, draft.mode)} onChangeText={(title) => onChangeDraft({ ...draft, title })} />
                 <DraftTextField label="Plan category label optional" value={draft.category} onChangeText={(category) => onChangeDraft({ ...draft, category })} />
@@ -3154,7 +3793,7 @@ function PlanFeedEmptyState({ filterId, onCreatePlan }: { filterId: PlanFeedFilt
         <Text style={[styles.planFeedEmptyTitle, { color: palette.text }]}>{getPlanFeedEmptyTitle(filterId)}</Text>
         <Text style={[styles.planFeedEmptyCopy, { color: palette.muted }]}>{getPlanFeedEmptyCopy(filterId)}</Text>
       </View>
-      <PlanActionButton label="Create mock plan" primary onPress={onCreatePlan} />
+      <PlanActionButton label="Create plan" primary onPress={onCreatePlan} />
     </View>
   );
 }
@@ -3163,7 +3802,7 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
   const { palette } = useTheme();
   const [plans, setPlans] = useState<PlanPreview[]>(planPreviews);
   const [userPlaces, setUserPlaces] = useState<PlaceLibraryItem[]>(myPlaceLibrary);
-  const [expandedPlanIds, setExpandedPlanIds] = useState<string[]>([planPreviews[0]?.id ?? ""]);
+  const [labNotesOpen, setLabNotesOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [createModeOpen, setCreateModeOpen] = useState(false);
   const [placeLibraryOpen, setPlaceLibraryOpen] = useState(false);
@@ -3172,32 +3811,34 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
   const [joinedPlanIds, setJoinedPlanIds] = useState<string[]>([]);
   const [activePlanFeedFilterId, setActivePlanFeedFilterId] = useState<PlanFeedFilterId>("explore");
   const [joinCandidateId, setJoinCandidateId] = useState<string | null>(null);
+  const [leaveCandidateId, setLeaveCandidateId] = useState<string | null>(null);
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? null;
   const joinCandidate = plans.find((plan) => plan.id === joinCandidateId) ?? null;
+  const leaveCandidate = plans.find((plan) => plan.id === leaveCandidateId) ?? null;
   const visiblePlans = useMemo(
     () => getFilteredPlans(plans, activePlanFeedFilterId, joinedPlanIds),
     [plans, activePlanFeedFilterId, joinedPlanIds]
   );
 
-  const togglePlan = (planId: string) => {
-    setExpandedPlanIds((current) =>
-      current.includes(planId) ? current.filter((id) => id !== planId) : [...current, planId]
-    );
-  };
-
   const planIsJoined = (plan: PlanPreview) => isCurrentUserPlan(plan) || joinedPlanIds.includes(plan.id);
 
-  const openCreateFlow = (draft?: PlanCreateDraft) => {
+  const openCreateFlow = (draft?: PlanCreateDraft, stepIndex = 0) => {
     setJoinCandidateId(null);
+    setLeaveCandidateId(null);
     setCreateDraft(draft ?? createInitialPlanDraft());
-    setCreateStepIndex(0);
+    setCreateStepIndex(stepIndex);
     setSelectedPlanId(null);
     setPlaceLibraryOpen(false);
     setCreateModeOpen(true);
   };
 
+  const openCreateFlowFromPlace = (place: PlaceLibraryItem) => {
+    openCreateFlow(buildPlanDraftFromLibraryPlace(place), 1);
+  };
+
   const openPlaceLibrary = () => {
     setJoinCandidateId(null);
+    setLeaveCandidateId(null);
     setSelectedPlanId(null);
     setCreateModeOpen(false);
     setPlaceLibraryOpen(true);
@@ -3209,6 +3850,7 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
 
   const openPlanDetail = (planId: string) => {
     setJoinCandidateId(null);
+    setLeaveCandidateId(null);
     setSelectedPlanId(planId);
   };
 
@@ -3217,11 +3859,25 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
       return;
     }
 
+    setLeaveCandidateId(null);
     setJoinCandidateId(plan.id);
   };
 
   const cancelJoinFlow = () => {
     setJoinCandidateId(null);
+  };
+
+  const openLeaveFlow = (plan: PlanPreview) => {
+    if (!joinedPlanIds.includes(plan.id) || isCurrentUserPlan(plan)) {
+      return;
+    }
+
+    setJoinCandidateId(null);
+    setLeaveCandidateId(plan.id);
+  };
+
+  const cancelLeaveFlow = () => {
+    setLeaveCandidateId(null);
   };
 
   const confirmJoinPlan = () => {
@@ -3246,6 +3902,34 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
     setJoinedPlanIds((current) => (current.includes(joinCandidate.id) ? current : [...current, joinCandidate.id]));
     setActivePlanFeedFilterId("joined");
     setJoinCandidateId(null);
+    setLeaveCandidateId(null);
+  };
+
+  const confirmLeavePlan = () => {
+    if (!leaveCandidate || !joinedPlanIds.includes(leaveCandidate.id) || isCurrentUserPlan(leaveCandidate)) {
+      setLeaveCandidateId(null);
+      return;
+    }
+
+    setPlans((current) =>
+      current.map((plan) => {
+        if (plan.id !== leaveCandidate.id) {
+          return plan;
+        }
+
+        return {
+          ...plan,
+          joinedCount: Math.max(0, plan.joinedCount - 1),
+          joinedPreview: removeCurrentUserFromJoinedPreview(plan.joinedPreview),
+        };
+      })
+    );
+    setJoinedPlanIds((current) => current.filter((planId) => planId !== leaveCandidate.id));
+    setLeaveCandidateId(null);
+
+    if (activePlanFeedFilterId === "joined") {
+      setActivePlanFeedFilterId("explore");
+    }
   };
 
   const createReusablePlace = (place: PlaceLibraryItem) => {
@@ -3263,10 +3947,10 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
   const createPlan = () => {
     const createdPlan = buildPlanPreviewFromDraft(createDraft);
     setPlans((current) => [createdPlan, ...current]);
-    setExpandedPlanIds((current) => [createdPlan.id, ...current.filter((id) => id !== createdPlan.id)]);
     setActivePlanFeedFilterId("created");
     setCreateModeOpen(false);
     setJoinCandidateId(null);
+    setLeaveCandidateId(null);
     setSelectedPlanId(createdPlan.id);
   };
 
@@ -3279,6 +3963,7 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
         onCreatePlace={createReusablePlace}
         onUpdatePlace={updateReusablePlace}
         onDeletePlace={deleteReusablePlace}
+        onUsePlaceInPlan={openCreateFlowFromPlace}
       />
     );
   }
@@ -3304,14 +3989,20 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
         <PlanDetailPage
           plan={selectedPlan}
           joined={planIsJoined(selectedPlan)}
+          isDesktop={isDesktop}
           onBack={() => {
             setJoinCandidateId(null);
+            setLeaveCandidateId(null);
             setSelectedPlanId(null);
           }}
           onJoinPress={() => openJoinFlow(selectedPlan)}
+          onLeavePress={() => openLeaveFlow(selectedPlan)}
         />
         {joinCandidate ? (
           <JoinPlanSheet plan={joinCandidate} onCancel={cancelJoinFlow} onConfirm={confirmJoinPlan} />
+        ) : null}
+        {leaveCandidate ? (
+          <LeavePlanSheet plan={leaveCandidate} onCancel={cancelLeaveFlow} onConfirm={confirmLeavePlan} />
         ) : null}
       </>
     );
@@ -3322,12 +4013,9 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
       <View style={[styles.heroPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.plansHeroTopRow}>
           <View style={styles.heroTextBlock}>
-            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>FUTURE MAIN AREA</Text>
-            <Text style={[styles.heroTitle, { color: palette.text }]}>Plans are open activities.</Text>
-            <Text style={[styles.heroCopy, { color: palette.muted }]}>
-              A plan is separate from trades: choose local places or online platform places, order them,
-              publish the plan, manage reusable places, filter the feed, open detail pages, and let people join freely with local mock state.
-            </Text>
+            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLANS</Text>
+            <Text style={[styles.heroTitle, { color: palette.text }]}>Build an open route people can join.</Text>
+            <Text style={[styles.heroCopy, { color: palette.muted }]}>Choose reusable offline or online places, order them, publish the plan, and let other users join freely.</Text>
           </View>
           <View style={styles.plansHeroActionRow}>
             <Pressable
@@ -3356,6 +4044,25 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
             </Pressable>
           </View>
         </View>
+
+        <View style={styles.labNotesWrap}>
+          <Pressable
+            onPress={() => setLabNotesOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: labNotesOpen }}
+            style={({ pressed }) => [
+              styles.labNotesButton,
+              { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
+              pressed ? styles.pressed : null,
+              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+            ]}
+          >
+            <Text style={[styles.labNotesButtonText, { color: palette.text }]}>{labNotesOpen ? "Hide lab notes" : "Lab notes"}</Text>
+          </Pressable>
+          {labNotesOpen ? (
+            <Text style={[styles.labNotesCopy, { color: palette.muted }]}>Prototype only: Plans stay independent from Trade, Needs, Offers, Agenda, backend, auth, payments, uploads, and maps.</Text>
+          ) : null}
+        </View>
       </View>
 
       <PlanFeedFilters
@@ -3366,7 +4073,7 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
       />
 
       <SectionHeader
-        label="MOCK PLAN FEED"
+        label="PLAN FEED"
         title={`${getPlanFeedFilterLabel(activePlanFeedFilterId)} Plans · ${visiblePlans.length} visible`}
       />
       {visiblePlans.length > 0 ? (
@@ -3375,11 +4082,11 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
             <View key={plan.id} style={isDesktop ? styles.planFeedDesktopItem : null}>
               <PlanCard
                 plan={plan}
-                expanded={expandedPlanIds.includes(plan.id)}
                 joined={planIsJoined(plan)}
-                onToggle={() => togglePlan(plan.id)}
+                isDesktop={isDesktop}
                 onOpenDetail={() => openPlanDetail(plan.id)}
                 onJoinPress={() => openJoinFlow(plan)}
+                onLeavePress={() => openLeaveFlow(plan)}
                 onCreateSimilar={() => openCreateFlow(createDraftFromPlan(plan))}
               />
             </View>
@@ -3390,6 +4097,9 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
       )}
       {joinCandidate ? (
         <JoinPlanSheet plan={joinCandidate} onCancel={cancelJoinFlow} onConfirm={confirmJoinPlan} />
+      ) : null}
+      {leaveCandidate ? (
+        <LeavePlanSheet plan={leaveCandidate} onCancel={cancelLeaveFlow} onConfirm={confirmLeavePlan} />
       ) : null}
     </View>
   );
@@ -3505,7 +4215,7 @@ function StarterPlacementPreview() {
       </View>
       <Text style={[styles.starterPlacementTitle, { color: palette.text }]}>Starter cards appear only as honest ideas.</Text>
       <Text style={[styles.starterPlacementCopy, { color: palette.muted }]}>
-        In this lab, the All feed shows a starter card after real/mock feed items. Filtered views hide starter ideas so search-style browsing feels clean.
+        In this preview, the All feed shows a starter card after real feed items. Filtered views hide starter ideas so search-style browsing feels clean.
       </Text>
     </View>
   );
@@ -3593,7 +4303,7 @@ function TradeScreen() {
       <View style={[styles.heroPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.plansHeroTopRow}>
           <View style={styles.heroTextBlock}>
-            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>FUTURE TRADE AREA</Text>
+            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>TRADE AREA</Text>
             <Text style={[styles.heroTitle, { color: palette.text }]}>Trade keeps the deck identity.</Text>
             <Text style={[styles.heroCopy, { color: palette.muted }]}>
               Needs and offers move into collapsible filters, create menus, and Me instead of staying in the main nav.
@@ -3623,7 +4333,7 @@ function TradeScreen() {
       {showStarterPlacementPreview ? <StarterPlacementPreview /> : null}
 
       <SectionHeader
-        label="MOCK TRADE FEED"
+        label="TRADE PREVIEW"
         title={activeFilterId === "all" ? "Real items plus starter ideas" : `${visibleItems.length} filtered items`}
       />
       <View style={styles.cardStack}>
@@ -3650,6 +4360,7 @@ export function NavLabScreen() {
   const { width } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<NavLabTabId>("me");
   const isDesktop = Platform.OS === "web" && width >= desktopBreakpoint;
+  const isTabletContent = !isDesktop && width >= tabletContentBreakpoint;
 
   return (
     <View style={[styles.screen, { backgroundColor: palette.background }]}>
@@ -3663,6 +4374,7 @@ export function NavLabScreen() {
             styles.scrollContent,
             isDesktop ? styles.scrollContentDesktop : null,
             !isDesktop ? styles.scrollContentMobile : null,
+            isTabletContent ? styles.scrollContentTablet : null,
           ]}
         >
           <ActiveContent activeTab={activeTab} isDesktop={isDesktop} />
@@ -3682,7 +4394,7 @@ const styles = StyleSheet.create({
   },
   desktopShell: {
     width: "100%",
-    maxWidth: 1120,
+    maxWidth: 1180,
     alignSelf: "center",
   },
   header: {
@@ -3798,7 +4510,13 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   scrollContentDesktop: {
+    paddingHorizontal: 24,
     paddingBottom: 48,
+  },
+  scrollContentTablet: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
   },
   scrollContentMobile: {
     paddingBottom: 28,
@@ -4195,6 +4913,29 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  labNotesWrap: {
+    marginTop: 14,
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  labNotesButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  labNotesButtonText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  labNotesCopy: {
+    maxWidth: 620,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
   standalonePlaceStatsRow: {
     marginTop: 16,
     flexDirection: "row",
@@ -4308,6 +5049,120 @@ const styles = StyleSheet.create({
   },
   planDeckCard: {
     padding: 16,
+  },
+  planSwipeDeckShell: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 462,
+    borderRadius: 30,
+    borderWidth: 1,
+    padding: 12,
+    overflow: "hidden",
+  },
+  planDeckSwipeSummaryCard: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    borderRadius: 26,
+    borderWidth: 1,
+    padding: 10,
+    justifyContent: "space-between",
+    overflow: "hidden",
+  },
+  planDeckSwipePressArea: {
+    flex: 1,
+  },
+  planDeckSwipeActionPanel: {
+    marginTop: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  planDeckSwipeActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 6,
+  },
+  planDeckPlaceSwipeButton: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
+  planDeckOpenOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 3,
+  },
+  planDeckSwipeFillCard: {
+    flex: 1,
+    height: "100%",
+  },
+  planDeckPlaceSwipeCounter: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  planDeckPlaceSwipeCounterText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  planDeckPlaceSwipeDots: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 4,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  planDeckPlaceActions: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    bottom: 14,
+    zIndex: 5,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  planSwipeDeckFooter: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  planDeckDotsRow: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  planDeckCounterText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  planDeckDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  planDeckDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
   },
   planTopTags: {
     flexDirection: "row",
@@ -4433,6 +5288,189 @@ const styles = StyleSheet.create({
   planActionText: {
     fontSize: 12,
     fontWeight: "900",
+  },
+  detailProductHero: {
+    borderRadius: 30,
+    borderWidth: 1,
+    padding: 18,
+    gap: 18,
+  },
+  detailProductHeroDesktop: {
+    padding: 24,
+  },
+  planDetailDesktopContent: {
+    gap: 18,
+  },
+  planDetailDesktopGrid: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 18,
+  },
+  planDetailDesktopMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 16,
+  },
+  planDetailDesktopSide: {
+    width: 336,
+    gap: 16,
+  },
+  detailProductIntro: {
+    gap: 10,
+  },
+  detailProductTitle: {
+    fontSize: 36,
+    lineHeight: 40,
+    fontWeight: "900",
+    letterSpacing: -1.1,
+  },
+  detailProductSummary: {
+    maxWidth: 720,
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: "700",
+  },
+  detailProductRouteLine: {
+    marginTop: 2,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "900",
+  },
+  detailProductMetaStrip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  detailJoinPanel: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  detailProductSection: {
+    borderRadius: 26,
+    borderWidth: 1,
+    padding: 16,
+    gap: 16,
+  },
+  detailRouteTimeline: {
+    gap: 0,
+  },
+  detailRouteTimelineItem: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+  },
+  detailRouteMarkerColumn: {
+    width: 38,
+    alignItems: "center",
+  },
+  detailRouteMarker: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailRouteMarkerText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  detailRouteLine: {
+    width: StyleSheet.hairlineWidth,
+    flex: 1,
+    minHeight: 24,
+  },
+  detailRouteStopPanel: {
+    flex: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 16,
+    marginBottom: 16,
+  },
+  detailRouteStopMainRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 14,
+  },
+  detailRouteStopTextBlock: {
+    flex: 1,
+    gap: 7,
+  },
+  detailRouteStopTitle: {
+    fontSize: 19,
+    lineHeight: 23,
+    fontWeight: "900",
+    letterSpacing: -0.35,
+  },
+  detailRouteStopMeta: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "900",
+  },
+  detailRouteStopNote: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
+  },
+  detailRouteStopInstruction: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
+  detailPlaceThumbnail: {
+    width: 118,
+    minHeight: 122,
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+  },
+  detailPlaceThumbnailShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  detailPlaceThumbnailLabel: {
+    padding: 10,
+    color: "#ffffff",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "900",
+    textShadowColor: "rgba(0,0,0,0.4)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  labNotesPanel: {
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  labNotesToggle: {
+    minHeight: 58,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  labNotesTitle: {
+    marginTop: 3,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  labNotesChevron: {
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: "800",
+  },
+  labNotesBody: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    padding: 16,
   },
   detailHeaderPanel: {
     borderRadius: 28,
@@ -4560,6 +5598,73 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: "800",
   },
+  discussionMessageStack: {
+    gap: 10,
+  },
+  discussionMessageRow: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+  },
+  discussionMessageRowOwn: {
+    justifyContent: "flex-end",
+  },
+  discussionBubble: {
+    maxWidth: "86%",
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    gap: 6,
+  },
+  discussionBubbleMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  discussionAuthorText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  discussionMetaText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  discussionMessageText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
+  },
+  discussionComposer: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+  },
+  discussionComposerInput: {
+    flex: 1,
+    minHeight: 38,
+    maxHeight: 118,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "700",
+    outlineStyle: "none",
+  } as any,
+  discussionComposerButton: {
+    minHeight: 38,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  discussionComposerButtonText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
   detailParticipantRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -4591,6 +5696,9 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   joinSheetPanel: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
     borderRadius: 26,
     borderWidth: 1,
     padding: 16,
@@ -4627,6 +5735,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     padding: 13,
+  },
+  joinPreviewPanel: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 13,
+    gap: 10,
   },
   joinSheetActions: {
     flexDirection: "row",
@@ -5083,6 +6197,103 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
   },
+  placeLibraryPickerActions: {
+    alignItems: "flex-end",
+    gap: 7,
+  },
+  placeLibraryGhostButton: {
+    minHeight: 32,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  placeLibraryGhostText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  placeLibraryMediaButton: {
+    borderRadius: 18,
+  },
+  placeCardChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  placeCardChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  placeCardChipText: {
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  placeDetailPanel: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 14,
+    gap: 14,
+  },
+  placeDetailTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  placeDetailTitle: {
+    marginTop: 5,
+    fontSize: 22,
+    lineHeight: 27,
+    fontWeight: "900",
+    letterSpacing: -0.35,
+  },
+  placeDetailCopy: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700",
+  },
+  placeDetailHeroRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+  },
+  placeDetailHeroBody: {
+    flex: 1,
+  },
+  placeDetailSection: {
+    gap: 8,
+  },
+  placeDetailChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  placeDetailChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  placeDetailChipText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  placeDetailNoteCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+    gap: 6,
+  },
+  placeDetailActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
   placePickerCreateCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -5454,6 +6665,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 5,
   },
+  planPosterBottomContentWithActions: {
+    paddingBottom: 76,
+  },
   planPosterEyebrow: {
     color: "rgba(255,255,255,0.76)",
     fontSize: 11,
@@ -5536,6 +6750,21 @@ const styles = StyleSheet.create({
   },
   planDeckPreviewStack: {
     gap: 14,
+  },
+  planCreatePreviewDeckShell: {
+    alignItems: "center",
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: "hidden",
+    paddingTop: 14,
+  },
+  planCreatePreviewDeckCard: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 28,
+    borderWidth: 1,
+    overflow: "hidden",
+    padding: 14,
   },
   planDeckPreviewIntro: {
     borderRadius: 24,

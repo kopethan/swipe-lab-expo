@@ -7,12 +7,12 @@ type SquareStackPanIntentInput = {
   hasNext: boolean;
 };
 
-const LOCK_DISTANCE = 10;
-const ANGLE_SWIPE_DEG = 40;
-const ANGLE_SCROLL_DEG = 72;
-const VERTICAL_DOMINANCE = 1.6;
-const ANGLE_BACKSLASH_SWIPE_DEG = 86;
-const BACKSLASH_VERTICAL_DOMINANCE = 2.25;
+const LOCK_DISTANCE = 12;
+const ANGLE_SWIPE_DEG = 36;
+const ANGLE_SCROLL_DEG = 63;
+const VERTICAL_DOMINANCE = 1.35;
+const ANGLE_BACKSLASH_SWIPE_DEG = 62;
+const BACKSLASH_VERTICAL_DOMINANCE = 1.85;
 
 export function isBackslashDiagonal(dx: number, dy: number) {
   "worklet";
@@ -53,23 +53,29 @@ export function classifySquareStackPanIntent({
   const angleDeg = Math.atan2(absY, absX) * (180 / Math.PI);
   const backslash = isBackslashDiagonal(dx, dy);
 
-  // Strong vertical movement should always let the parent ScrollView win.
-  if (absY > absX * VERTICAL_DOMINANCE && !backslash) {
+  // Mostly vertical movement should always belong to the parent ScrollView.
+  // This is intentionally stricter than the visual diagonal swipe so that a
+  // user can scroll through the Plan feed by staying close to the vertical line.
+  if (absY > absX * VERTICAL_DOMINANCE) {
     return "SCROLL";
   }
 
-  // Mostly horizontal drags are valid deck swipes in either direction.
+  // Mostly horizontal movement can still advance the deck, but the stronger
+  // product gesture remains the backslash diagonal: bottom-right -> top-left
+  // for next, and top-left -> bottom-right for previous.
   if (angleDeg <= ANGLE_SWIPE_DEG) {
     return intentForHorizontalDirection(dx, hasPrev, hasNext);
   }
 
-  // Only the backslash diagonal family belongs to the deck:
-  // top-left = next, bottom-right = previous.
-  // The opposite diagonal family belongs to vertical page scrolling.
+  // The opposite diagonal family belongs to vertical page scrolling. This keeps
+  // the deck from stealing natural up/down feed scrolls that drift sideways.
   if (!backslash) {
     return "SCROLL";
   }
 
+  // Accept only a 45-ish backslash diagonal for deck movement. Steeper drags
+  // are treated as page scrolls, which matches the Trade feed feel better than
+  // accepting every diagonal-looking gesture.
   if (angleDeg <= ANGLE_BACKSLASH_SWIPE_DEG && absY <= absX * BACKSLASH_VERTICAL_DOMINANCE) {
     return intentForHorizontalDirection(dx, hasPrev, hasNext);
   }
@@ -78,5 +84,5 @@ export function classifySquareStackPanIntent({
     return "SCROLL";
   }
 
-  return intentForHorizontalDirection(dx, hasPrev, hasNext);
+  return "SCROLL";
 }
