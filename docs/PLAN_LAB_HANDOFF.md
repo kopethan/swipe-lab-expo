@@ -4,7 +4,7 @@ This lab explores a standalone Plans product area for Hellowhen. It is intention
 
 ## Current product shape
 
-- **Plan feed** shows one active square deck per plan.
+- **Plan feed** is deck-only: one active square deck per plan, with no visible build guide or summary text block above each deck.
 - **Plan deck order** is ordered Place cards only; the Plan summary lives in the detail hero and final review copy, not inside feed decks.
 - **Diagonal deck gesture** follows the Trade feed direction: bottom-right to top-left moves forward, top-left to bottom-right moves backward.
 - **Vertical scrolling** should win when the gesture is close to the vertical axis.
@@ -12,11 +12,12 @@ This lab explores a standalone Plans product area for Hellowhen. It is intention
 - **Public discussion** is a local mock section at the end of the detail page.
 - **Join flow** is free, local, and does not create approval requests, trades, agenda items, or payments.
 - **Place Library** stores reusable local and online places for plans.
+- **Plans header menu** hides deeper areas such as My plans, Joined plans, My places, Hellowhen Place Library, Create place, and lab notes behind the list/menu icon.
 
 ## Candidates to move toward production later
 
 - `ContinuousSquareStackDeck` gesture intent and active-card behavior.
-- Visual Place-only deck structure with Plan summary kept outside the feed deck.
+- Visual Place-only deck structure with Plan summary kept outside the feed deck and outside per-card feed text.
 - Plan detail route/timeline layout.
 - Local/online Place model shape, with first-launch media guidance of **1 image per Place for free users**.
 - Place Library picker and detail panel patterns.
@@ -30,7 +31,7 @@ This lab explores a standalone Plans product area for Hellowhen. It is intention
 - Local-only public discussion messages and composer.
 - Local-only place creation, edit, copy, and delete actions.
 - Prototype navigation shell around Plans / Me / Trade.
-- Any copy that mentions this as a lab or preview.
+- Any copy that mentions this as a lab or preview, except collapsed handoff notes hidden in the Plan menu.
 
 ## Production integration notes
 
@@ -49,6 +50,7 @@ This lab explores a standalone Plans product area for Hellowhen. It is intention
 - Detail page remains readable on mobile, tablet, and desktop.
 - Join, Joined, and Leave states update local previews consistently.
 - Place detail and Use in Plan actions work from the picker and library.
+- Plans feed header actions open filters, the Plan area menu, and Create Plan without adding guide copy to the feed.
 
 ## Media limit recommendation
 

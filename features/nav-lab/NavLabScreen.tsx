@@ -2985,6 +2985,8 @@ function StandalonePlaceLibraryCard({
 function PlaceLibraryScreen({
   userPlaces,
   isDesktop,
+  initialSourceId = "my_place",
+  initialCreatePlaceKind = null,
   onBack,
   onCreatePlace,
   onUpdatePlace,
@@ -2993,6 +2995,8 @@ function PlaceLibraryScreen({
 }: {
   userPlaces: PlaceLibraryItem[];
   isDesktop: boolean;
+  initialSourceId?: PlaceLibrarySource;
+  initialCreatePlaceKind?: PlanPlaceKind | null;
   onBack: () => void;
   onCreatePlace: (place: PlaceLibraryItem) => void;
   onUpdatePlace: (place: PlaceLibraryItem) => void;
@@ -3000,12 +3004,12 @@ function PlaceLibraryScreen({
   onUsePlaceInPlan: (place: PlaceLibraryItem) => void;
 }) {
   const { palette } = useTheme();
-  const [sourceId, setSourceId] = useState<PlaceLibrarySource>("my_place");
+  const [sourceId, setSourceId] = useState<PlaceLibrarySource>(initialSourceId);
   const [filterId, setFilterId] = useState<PlaceLibraryFilterId>("all");
   const [searchText, setSearchText] = useState("");
-  const [createFormOpen, setCreateFormOpen] = useState(false);
+  const [createFormOpen, setCreateFormOpen] = useState(Boolean(initialCreatePlaceKind));
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<PlaceCreateDraft>(() => createInitialPlaceDraft("local"));
+  const [draft, setDraft] = useState<PlaceCreateDraft>(() => createInitialPlaceDraft(initialCreatePlaceKind === "online_place" ? "online" : "local"));
   const [detailPlaceId, setDetailPlaceId] = useState<string | null>(null);
   const visibleItems = useMemo(
     () => getPlaceLibraryVisibleItems(sourceId, filterId, userPlaces, searchText),
@@ -3720,6 +3724,192 @@ function createDraftFromPlan(plan: PlanPreview): PlanCreateDraft {
   };
 }
 
+function PlanHeaderIconButton({
+  label,
+  icon,
+  active,
+  primary,
+  onPress,
+}: {
+  label: string;
+  icon: string;
+  active?: boolean;
+  primary?: boolean;
+  onPress: () => void;
+}) {
+  const { palette } = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={active === undefined ? undefined : { expanded: active }}
+      style={({ pressed }) => [
+        styles.planHeaderIconButton,
+        {
+          borderColor: primary || active ? palette.text : palette.border,
+          backgroundColor: primary ? palette.text : active ? palette.surfaceAlt : palette.surface,
+        },
+        pressed ? styles.pressed : null,
+        Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+      ]}
+    >
+      <Text style={[styles.planHeaderIconText, { color: primary ? palette.background : palette.text }]}>{icon}</Text>
+    </Pressable>
+  );
+}
+
+function PlanFeedToolbar({
+  activeFilterLabel,
+  visibleCount,
+  filtersOpen,
+  menuOpen,
+  onToggleFilters,
+  onToggleMenu,
+  onCreatePlan,
+}: {
+  activeFilterLabel: string;
+  visibleCount: number;
+  filtersOpen: boolean;
+  menuOpen: boolean;
+  onToggleFilters: () => void;
+  onToggleMenu: () => void;
+  onCreatePlan: () => void;
+}) {
+  const { palette } = useTheme();
+
+  return (
+    <View style={styles.planFeedToolbar}>
+      <View style={styles.heroTextBlock}>
+        <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLANS</Text>
+        <Text style={[styles.planFeedToolbarTitle, { color: palette.text }]}>Plans</Text>
+        <Text style={[styles.planFeedToolbarMeta, { color: palette.muted }]}>Open routes · {activeFilterLabel} · {visibleCount} visible</Text>
+      </View>
+      <View style={styles.planFeedToolbarActions}>
+        <PlanHeaderIconButton label="Plan filters" icon="⌯" active={filtersOpen} onPress={onToggleFilters} />
+        <PlanHeaderIconButton label="Plan menu" icon="☷" active={menuOpen} onPress={onToggleMenu} />
+        <PlanHeaderIconButton label="Create plan" icon="+" primary onPress={onCreatePlan} />
+      </View>
+    </View>
+  );
+}
+
+function PlanAreaMenuRow({
+  eyebrow,
+  title,
+  helper,
+  countLabel,
+  onPress,
+}: {
+  eyebrow: string;
+  title: string;
+  helper: string;
+  countLabel?: string;
+  onPress: () => void;
+}) {
+  const { palette } = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.planAreaMenuRow,
+        { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
+        pressed ? styles.pressed : null,
+        Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+      ]}
+    >
+      <View style={styles.heroTextBlock}>
+        <Text style={[styles.cardEyebrow, { color: palette.muted }]}>{eyebrow}</Text>
+        <Text style={[styles.planAreaMenuRowTitle, { color: palette.text }]}>{title}</Text>
+        <Text style={[styles.planAreaMenuRowHelper, { color: palette.muted }]}>{helper}</Text>
+      </View>
+      {countLabel ? (
+        <View style={[styles.planAreaMenuCountPill, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+          <Text style={[styles.planAreaMenuCountText, { color: palette.text }]}>{countLabel}</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function PlanAreaMenu({
+  plans,
+  userPlaces,
+  joinedPlanIds,
+  labNotesOpen,
+  onToggleLabNotes,
+  onOpenExplore,
+  onOpenMyPlans,
+  onOpenJoinedPlans,
+  onOpenMyPlaces,
+  onOpenHellowhenLibrary,
+  onCreatePlace,
+  onCreatePlan,
+}: {
+  plans: PlanPreview[];
+  userPlaces: PlaceLibraryItem[];
+  joinedPlanIds: string[];
+  labNotesOpen: boolean;
+  onToggleLabNotes: () => void;
+  onOpenExplore: () => void;
+  onOpenMyPlans: () => void;
+  onOpenJoinedPlans: () => void;
+  onOpenMyPlaces: () => void;
+  onOpenHellowhenLibrary: () => void;
+  onCreatePlace: () => void;
+  onCreatePlan: () => void;
+}) {
+  const { palette } = useTheme();
+  const createdCount = plans.filter(isPlanCreatedByCurrentUser).length;
+  const joinedCount = plans.filter((plan) => joinedPlanIds.includes(plan.id)).length;
+  const libraryCount = starterPlaceLibrary.length;
+
+  return (
+    <View style={[styles.planAreaMenuPanel, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+      <View style={styles.detailSectionHeader}>
+        <View>
+          <Text style={[styles.cardEyebrow, { color: palette.muted }]}>PLAN MENU</Text>
+          <Text style={[styles.detailSectionTitle, { color: palette.text }]}>Your Plan areas</Text>
+        </View>
+        <PlanModeBadge label="Lab only" />
+      </View>
+
+      <View style={styles.planAreaMenuGrid}>
+        <PlanAreaMenuRow eyebrow="FEED" title="Explore plans" helper="Return to the deck-only public Plan feed." countLabel={`${plans.length}`} onPress={onOpenExplore} />
+        <PlanAreaMenuRow eyebrow="PLANS" title="My plans" helper="Plans created by you in this lab session." countLabel={`${createdCount}`} onPress={onOpenMyPlans} />
+        <PlanAreaMenuRow eyebrow="PLANS" title="Joined plans" helper="Open plans you joined freely in this local preview." countLabel={`${joinedCount}`} onPress={onOpenJoinedPlans} />
+        <PlanAreaMenuRow eyebrow="PLACES" title="My places" helper="Reusable offline or online places created by you." countLabel={`${userPlaces.length}`} onPress={onOpenMyPlaces} />
+        <PlanAreaMenuRow eyebrow="PLACES" title="Hellowhen Place Library" helper="Starter places you can use while building a Plan." countLabel={`${libraryCount}`} onPress={onOpenHellowhenLibrary} />
+        <PlanAreaMenuRow eyebrow="CREATE" title="Create place" helper="Open Places, then save a reusable place for future Plans." onPress={onCreatePlace} />
+        <PlanAreaMenuRow eyebrow="CREATE" title="Create plan" helper="Choose places, arrange the route, and preview the deck." onPress={onCreatePlan} />
+      </View>
+
+      <View style={styles.planAreaMenuNotesWrap}>
+        <Pressable
+          onPress={onToggleLabNotes}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: labNotesOpen }}
+          style={({ pressed }) => [
+            styles.planAreaMenuNotesButton,
+            { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
+            pressed ? styles.pressed : null,
+            Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
+          ]}
+        >
+          <Text style={[styles.labNotesButtonText, { color: palette.text }]}>{labNotesOpen ? "Hide lab notes" : "Lab notes"}</Text>
+          <Text style={[styles.mockChevron, { color: palette.muted }]}>{labNotesOpen ? "−" : "+"}</Text>
+        </Pressable>
+        {labNotesOpen ? (
+          <Text style={[styles.labNotesCopy, { color: palette.muted }]}>Prototype only: Plans stay independent from Trade, Needs, Offers, Agenda, backend, auth, payments, uploads, and maps. Handoff notes live in docs/PLAN_LAB_HANDOFF.md.</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function PlanFeedFilters({
   plans,
   activeFilterId,
@@ -3802,14 +3992,18 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
   const { palette } = useTheme();
   const [plans, setPlans] = useState<PlanPreview[]>(planPreviews);
   const [userPlaces, setUserPlaces] = useState<PlaceLibraryItem[]>(myPlaceLibrary);
-  const [labNotesOpen, setLabNotesOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [createModeOpen, setCreateModeOpen] = useState(false);
   const [placeLibraryOpen, setPlaceLibraryOpen] = useState(false);
+  const [placeLibrarySourceId, setPlaceLibrarySourceId] = useState<PlaceLibrarySource>("my_place");
+  const [placeLibraryCreateKind, setPlaceLibraryCreateKind] = useState<PlanPlaceKind | null>(null);
   const [createStepIndex, setCreateStepIndex] = useState(0);
   const [createDraft, setCreateDraft] = useState<PlanCreateDraft>(() => createInitialPlanDraft());
   const [joinedPlanIds, setJoinedPlanIds] = useState<string[]>([]);
   const [activePlanFeedFilterId, setActivePlanFeedFilterId] = useState<PlanFeedFilterId>("explore");
+  const [planFeedFiltersOpen, setPlanFeedFiltersOpen] = useState(false);
+  const [planAreaMenuOpen, setPlanAreaMenuOpen] = useState(false);
+  const [planAreaMenuLabNotesOpen, setPlanAreaMenuLabNotesOpen] = useState(false);
   const [joinCandidateId, setJoinCandidateId] = useState<string | null>(null);
   const [leaveCandidateId, setLeaveCandidateId] = useState<string | null>(null);
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? null;
@@ -3823,6 +4017,8 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
   const planIsJoined = (plan: PlanPreview) => isCurrentUserPlan(plan) || joinedPlanIds.includes(plan.id);
 
   const openCreateFlow = (draft?: PlanCreateDraft, stepIndex = 0) => {
+    setPlanAreaMenuOpen(false);
+    setPlanFeedFiltersOpen(false);
     setJoinCandidateId(null);
     setLeaveCandidateId(null);
     setCreateDraft(draft ?? createInitialPlanDraft());
@@ -3836,7 +4032,11 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
     openCreateFlow(buildPlanDraftFromLibraryPlace(place), 1);
   };
 
-  const openPlaceLibrary = () => {
+  const openPlaceLibrary = (sourceId: PlaceLibrarySource = "my_place", createKind: PlanPlaceKind | null = null) => {
+    setPlanAreaMenuOpen(false);
+    setPlanFeedFiltersOpen(false);
+    setPlaceLibrarySourceId(sourceId);
+    setPlaceLibraryCreateKind(createKind);
     setJoinCandidateId(null);
     setLeaveCandidateId(null);
     setSelectedPlanId(null);
@@ -3849,6 +4049,8 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
   };
 
   const openPlanDetail = (planId: string) => {
+    setPlanAreaMenuOpen(false);
+    setPlanFeedFiltersOpen(false);
     setJoinCandidateId(null);
     setLeaveCandidateId(null);
     setSelectedPlanId(planId);
@@ -3948,10 +4150,18 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
     const createdPlan = buildPlanPreviewFromDraft(createDraft);
     setPlans((current) => [createdPlan, ...current]);
     setActivePlanFeedFilterId("created");
+    setPlanAreaMenuOpen(false);
+    setPlanFeedFiltersOpen(false);
     setCreateModeOpen(false);
     setJoinCandidateId(null);
     setLeaveCandidateId(null);
     setSelectedPlanId(createdPlan.id);
+  };
+
+  const openFilteredPlanFeed = (filterId: PlanFeedFilterId) => {
+    setActivePlanFeedFilterId(filterId);
+    setPlanAreaMenuOpen(false);
+    setPlanFeedFiltersOpen(false);
   };
 
   if (placeLibraryOpen) {
@@ -3959,6 +4169,8 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
       <PlaceLibraryScreen
         userPlaces={userPlaces}
         isDesktop={isDesktop}
+        initialSourceId={placeLibrarySourceId}
+        initialCreatePlaceKind={placeLibraryCreateKind}
         onBack={() => setPlaceLibraryOpen(false)}
         onCreatePlace={createReusablePlace}
         onUpdatePlace={updateReusablePlace}
@@ -4010,72 +4222,56 @@ function PlansScreen({ isDesktop }: { isDesktop: boolean }) {
 
   return (
     <View style={styles.tabContent}>
-      <View style={[styles.heroPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <View style={styles.plansHeroTopRow}>
-          <View style={styles.heroTextBlock}>
-            <Text style={[styles.heroEyebrow, { color: palette.muted }]}>PLANS</Text>
-            <Text style={[styles.heroTitle, { color: palette.text }]}>Build an open route people can join.</Text>
-            <Text style={[styles.heroCopy, { color: palette.muted }]}>Choose reusable offline or online places, order them, publish the plan, and let other users join freely.</Text>
-          </View>
-          <View style={styles.plansHeroActionRow}>
-            <Pressable
-              onPress={openPlaceLibrary}
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.createPlanButton,
-                { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
-                pressed ? styles.pressed : null,
-                Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
-              ]}
-            >
-              <Text style={[styles.createPlanButtonText, { color: palette.text }]}>My places</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => openCreateFlow()}
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.createPlanButton,
-                { borderColor: palette.border, backgroundColor: palette.text },
-                pressed ? styles.pressed : null,
-                Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
-              ]}
-            >
-              <Text style={[styles.createPlanButtonText, { color: palette.background }]}>+ Create</Text>
-            </Pressable>
-          </View>
-        </View>
+      <PlanFeedToolbar
+        activeFilterLabel={getPlanFeedFilterLabel(activePlanFeedFilterId)}
+        visibleCount={visiblePlans.length}
+        filtersOpen={planFeedFiltersOpen}
+        menuOpen={planAreaMenuOpen}
+        onToggleFilters={() => {
+          setPlanFeedFiltersOpen((open) => !open);
+          setPlanAreaMenuOpen(false);
+        }}
+        onToggleMenu={() => {
+          setPlanAreaMenuOpen((open) => !open);
+          setPlanFeedFiltersOpen(false);
+        }}
+        onCreatePlan={() => openCreateFlow()}
+      />
 
-        <View style={styles.labNotesWrap}>
-          <Pressable
-            onPress={() => setLabNotesOpen((open) => !open)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: labNotesOpen }}
-            style={({ pressed }) => [
-              styles.labNotesButton,
-              { borderColor: palette.border, backgroundColor: palette.surfaceAlt },
-              pressed ? styles.pressed : null,
-              Platform.OS === "web" ? ({ cursor: "pointer" } as any) : null,
-            ]}
-          >
-            <Text style={[styles.labNotesButtonText, { color: palette.text }]}>{labNotesOpen ? "Hide lab notes" : "Lab notes"}</Text>
-          </Pressable>
-          {labNotesOpen ? (
-            <Text style={[styles.labNotesCopy, { color: palette.muted }]}>Prototype only: Plans stay independent from Trade, Needs, Offers, Agenda, backend, auth, payments, uploads, and maps.</Text>
-          ) : null}
-        </View>
+      {planFeedFiltersOpen ? (
+        <PlanFeedFilters
+          plans={plans}
+          activeFilterId={activePlanFeedFilterId}
+          joinedPlanIds={joinedPlanIds}
+          onChange={(filterId) => {
+            setActivePlanFeedFilterId(filterId);
+            setPlanFeedFiltersOpen(false);
+          }}
+        />
+      ) : null}
+
+      {planAreaMenuOpen ? (
+        <PlanAreaMenu
+          plans={plans}
+          userPlaces={userPlaces}
+          joinedPlanIds={joinedPlanIds}
+          labNotesOpen={planAreaMenuLabNotesOpen}
+          onToggleLabNotes={() => setPlanAreaMenuLabNotesOpen((open) => !open)}
+          onOpenExplore={() => openFilteredPlanFeed("explore")}
+          onOpenMyPlans={() => openFilteredPlanFeed("created")}
+          onOpenJoinedPlans={() => openFilteredPlanFeed("joined")}
+          onOpenMyPlaces={() => openPlaceLibrary("my_place")}
+          onOpenHellowhenLibrary={() => openPlaceLibrary("starter")}
+          onCreatePlace={() => openPlaceLibrary("my_place", "local_place")}
+          onCreatePlan={() => openCreateFlow()}
+        />
+      ) : null}
+
+      <View style={styles.feedMetaRow}>
+        <Text style={[styles.feedMetaText, { color: palette.muted }]}>
+          {visiblePlans.length} {getPlanFeedFilterLabel(activePlanFeedFilterId).toLowerCase()} plan{visiblePlans.length === 1 ? "" : "s"}
+        </Text>
       </View>
-
-      <PlanFeedFilters
-        plans={plans}
-        activeFilterId={activePlanFeedFilterId}
-        joinedPlanIds={joinedPlanIds}
-        onChange={setActivePlanFeedFilterId}
-      />
-
-      <SectionHeader
-        label="PLAN FEED"
-        title={`${getPlanFeedFilterLabel(activePlanFeedFilterId)} Plans · ${visiblePlans.length} visible`}
-      />
       {visiblePlans.length > 0 ? (
         <View style={[styles.cardStack, isDesktop ? styles.planFeedDesktopGrid : null]}>
           {visiblePlans.map((plan) => (
@@ -4861,6 +5057,108 @@ const styles = StyleSheet.create({
   },
   rowChevron: {
     fontSize: 21,
+    fontWeight: "900",
+  },
+  planFeedToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  planFeedToolbarTitle: {
+    marginTop: 6,
+    fontSize: 44,
+    fontWeight: "900",
+    letterSpacing: -1.4,
+  },
+  planFeedToolbarMeta: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  planFeedToolbarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  planHeaderIconButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  planHeaderIconText: {
+    fontSize: 28,
+    fontWeight: "800",
+    lineHeight: 31,
+  },
+  planAreaMenuPanel: {
+    borderRadius: 26,
+    borderWidth: 1,
+    padding: 15,
+    gap: 14,
+  },
+  planAreaMenuGrid: {
+    gap: 10,
+  },
+  planAreaMenuRow: {
+    minHeight: 82,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  planAreaMenuRowTitle: {
+    marginTop: 4,
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  planAreaMenuRowHelper: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
+  },
+  planAreaMenuCountPill: {
+    minWidth: 44,
+    minHeight: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  planAreaMenuCountText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  planAreaMenuNotesWrap: {
+    gap: 8,
+  },
+  planAreaMenuNotesButton: {
+    minHeight: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  feedMetaRow: {
+    minHeight: 20,
+    justifyContent: "center",
+  },
+  feedMetaText: {
+    fontSize: 12,
     fontWeight: "900",
   },
   heroPanel: {
